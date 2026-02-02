@@ -4,25 +4,32 @@ import NotesList from './components/NotesList/NotesList';
 import Editor from './components/Editor/Editor';
 import Settings from './components/Settings/Settings';
 import { parseNote, generateNoteContent, generateFilename } from './utils/noteUtils';
+import type { Note, RawNote, SaveNoteData, EditorNote } from './types';
 import './styles/App.css';
 
+type ViewType = 'main' | 'settings';
+type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
+
 function App() {
-  const [notes, setNotes] = useState([]);
-  const [selectedNoteId, setSelectedNoteId] = useState(null);
-  const [currentNote, setCurrentNote] = useState(null);
-  const [view, setView] = useState('main'); // 'main' | 'settings'
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'favorites' | 'archive' | 'trash' | tag
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [currentNote, setCurrentNote] = useState<EditorNote | null>(null);
+  const [view, setView] = useState<ViewType>('main');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   // 加载所有笔记
   const loadNotes = useCallback(async () => {
     try {
-      const rawNotes = await window.electronAPI.getAllNotes();
-      const parsedNotes = rawNotes.map(note => ({
-        ...note,
-        ...parseNote(note.content),
-      }));
+      const rawNotes: RawNote[] = await window.electronAPI.getAllNotes();
+      const parsedNotes: Note[] = rawNotes.map(note => {
+        const parsed = parseNote(note.content);
+        return {
+          ...note,
+          ...parsed,
+        };
+      });
       setNotes(parsedNotes);
     } catch (err) {
       console.error('Failed to load notes:', err);
@@ -36,7 +43,7 @@ function App() {
   }, [loadNotes]);
 
   // 选择笔记
-  const handleSelectNote = useCallback((noteId) => {
+  const handleSelectNote = useCallback((noteId: string) => {
     setSelectedNoteId(noteId);
     const note = notes.find(n => n.id === noteId);
     if (note) {
@@ -59,7 +66,7 @@ function App() {
     const frontmatter = {
       title: 'Untitled Note',
       date: now.toISOString(),
-      tags: [],
+      tags: [] as string[],
     };
     const content = generateNoteContent(frontmatter, '');
     const filename = generateFilename('Untitled Note', now);
@@ -74,7 +81,7 @@ function App() {
   }, [loadNotes, handleSelectNote]);
 
   // 保存笔记（用于自动保存）
-  const handleSaveNote = useCallback(async (noteData) => {
+  const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
     try {
       const frontmatter = {
         title: noteData.title,

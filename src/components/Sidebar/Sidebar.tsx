@@ -7,23 +7,33 @@ import {
   Plus, 
   Settings, 
   Search,
-  Tag
 } from 'lucide-react';
+import type { FolderItem } from '../../types';
 import './Sidebar.css';
 
-const FOLDERS = [
+const FOLDERS: FolderItem[] = [
   { id: 'all', label: 'All Notes', icon: FileText, count: null },
   { id: 'favorites', label: 'Favorites', icon: Star, count: null },
   { id: 'archive', label: 'Archive', icon: Archive, count: null },
   { id: 'trash', label: 'Trash', icon: Trash2, count: null },
 ];
 
-const TAG_COLORS = {
+const TAG_COLORS: Record<string, string> = {
   'Work': '#FF6B6B',
   'Personal': '#4ECDC4',
   'Ideas': '#9B59B6',
   'Projects': '#F39C12',
 };
+
+interface SidebarProps {
+  activeFilter: string;
+  onFilterChange: (filter: string) => void;
+  onCreateNote: () => void;
+  onOpenSettings: () => void;
+  tags: string[];
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+}
 
 function Sidebar({ 
   activeFilter, 
@@ -33,8 +43,8 @@ function Sidebar({
   tags,
   searchQuery,
   onSearchChange,
-}) {
-  const handleTagClick = (tag) => {
+}: SidebarProps) {
+  const handleTagClick = (tag: string) => {
     onFilterChange(`tag:${tag}`);
   };
 

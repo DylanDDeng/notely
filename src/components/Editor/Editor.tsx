@@ -1,21 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
 import { Pin, Share2, MoreHorizontal, Bold, Italic, Underline, List, CheckSquare, Link, Image } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
+import type { EditorNote, SaveNoteData } from '../../types';
 import './Editor.css';
 
-function Editor({ note, onSave, isLoading }) {
+interface EditorProps {
+  note: EditorNote | null;
+  onSave: (note: SaveNoteData) => Promise<void>;
+  isLoading: boolean;
+}
+
+function Editor({ note, onSave, isLoading }: EditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [tags, setTags] = useState([]);
+  const [tags, setTags] = useState<string[]>([]);
   const [htmlContent, setHtmlContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const autoSaveRef = useRef(null);
-  const contentRef = useRef(null);
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentRef = useRef<HTMLTextAreaElement>(null);
 
   // 加载笔记
   useEffect(() => {
@@ -34,11 +41,11 @@ function Editor({ note, onSave, isLoading }) {
   }, [note?.id]);
 
   // 渲染 Markdown
-  const renderMarkdown = async (text) => {
+  const renderMarkdown = async (text: string) => {
     try {
       const result = await remark()
         .use(remarkGfm)
-        .use(remarkHtml, { sanitize: true })
+        .use(remarkHtml)
         .process(text);
       setHtmlContent(String(result.value));
     } catch (err) {
@@ -74,7 +81,7 @@ function Editor({ note, onSave, isLoading }) {
   }, [hasChanges, autoSave]);
 
   // 处理内容变化
-  const handleContentChange = (e) => {
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value;
     setContent(newContent);
     setHasChanges(true);
@@ -82,32 +89,32 @@ function Editor({ note, onSave, isLoading }) {
   };
 
   // 处理标题变化
-  const handleTitleChange = (e) => {
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTitle(e.target.value);
     setHasChanges(true);
   };
 
   // 处理标签输入
-  const handleTagKeyDown = (e) => {
-    if (e.key === 'Enter' && e.target.value.trim()) {
+  const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
       e.preventDefault();
-      const newTag = e.target.value.trim();
+      const newTag = e.currentTarget.value.trim();
       if (!tags.includes(newTag)) {
         setTags([...tags, newTag]);
         setHasChanges(true);
       }
-      e.target.value = '';
+      e.currentTarget.value = '';
     }
   };
 
   // 删除标签
-  const removeTag = (tagToRemove) => {
+  const removeTag = (tagToRemove: string) => {
     setTags(tags.filter(tag => tag !== tagToRemove));
     setHasChanges(true);
   };
 
   // 工具栏操作
-  const insertMarkdown = (before, after = '') => {
+  const insertMarkdown = (before: string, after: string = '') => {
     const textarea = contentRef.current;
     if (!textarea) return;
     
@@ -241,7 +248,9 @@ function Editor({ note, onSave, isLoading }) {
           <div
             className="editor-preview"
             onClick={() => setIsEditing(true)}
-            dangerouslySetInnerHTML={{ __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' }}
+            dangerouslySetInnerHTML={{ 
+              __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
+            }}
           />
         )}
       </div>

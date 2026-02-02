@@ -1,15 +1,23 @@
+import { ArrowUpDown, LayoutGrid } from 'lucide-react';
 import { formatDate, getTagColor } from '../../utils/noteUtils';
-import { ArrowUpDown, LayoutGrid, LayoutList } from 'lucide-react';
+import type { Note } from '../../types';
 import './NotesList.css';
 
-const FILTER_TITLES = {
+const FILTER_TITLES: Record<string, string> = {
   'all': 'All Notes',
   'favorites': 'Favorites',
   'archive': 'Archive',
   'trash': 'Trash',
 };
 
-function NotesList({ notes, selectedNoteId, onSelectNote, activeFilter }) {
+interface NotesListProps {
+  notes: Note[];
+  selectedNoteId: string | null;
+  onSelectNote: (noteId: string) => void;
+  activeFilter: string;
+}
+
+function NotesList({ notes, selectedNoteId, onSelectNote, activeFilter }: NotesListProps) {
   const title = FILTER_TITLES[activeFilter] || 
     (activeFilter.startsWith('tag:') ? activeFilter.replace('tag:', '') : 'Notes');
 

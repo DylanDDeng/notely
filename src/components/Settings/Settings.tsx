@@ -1,8 +1,18 @@
-import { ArrowLeft, Settings as SettingsIcon, Palette, Cloud, Type, Keyboard, Info } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Settings as SettingsIcon, 
+  Palette, 
+  Cloud, 
+  Type, 
+  Keyboard, 
+  Info,
+  type LucideIcon
+} from 'lucide-react';
 import { useState } from 'react';
+import type { AppSettings, SettingsMenuItem } from '../../types';
 import './Settings.css';
 
-const SETTINGS_MENU = [
+const SETTINGS_MENU: SettingsMenuItem[] = [
   { id: 'general', label: 'General', icon: SettingsIcon },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'sync', label: 'Sync & Backup', icon: Cloud },
@@ -18,20 +28,24 @@ const AUTO_SAVE_OPTIONS = [
   { value: 300000, label: '5 minutes' },
 ];
 
-function Settings({ onBack }) {
+interface SettingsProps {
+  onBack: () => void;
+}
+
+function Settings({ onBack }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
-  const [settings, setSettings] = useState({
+  const [settings, setSettings] = useState<AppSettings>({
     launchAtStartup: true,
     showInMenuBar: false,
     autoSaveInterval: 30000,
     saveLocation: '~/Documents/Notes',
   });
 
-  const handleToggle = (key) => {
+  const handleToggle = (key: keyof AppSettings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleAutoSaveChange = (value) => {
+  const handleAutoSaveChange = (value: string) => {
     setSettings(prev => ({ ...prev, autoSaveInterval: parseInt(value) }));
   };
 
@@ -122,19 +136,7 @@ function Settings({ onBack }) {
     </>
   );
 
-  const renderAppearanceSettings = () => (
-    <>
-      <h1 className="settings-page-title">Appearance</h1>
-      <p className="settings-page-description">
-        Customize the look and feel of the application
-      </p>
-      <div className="settings-placeholder">
-        <p>Appearance settings coming soon...</p>
-      </div>
-    </>
-  );
-
-  const renderOtherSettings = (title, description) => (
+  const renderPlaceholder = (title: string, description: string) => (
     <>
       <h1 className="settings-page-title">{title}</h1>
       <p className="settings-page-description">{description}</p>
@@ -149,15 +151,15 @@ function Settings({ onBack }) {
       case 'general':
         return renderGeneralSettings();
       case 'appearance':
-        return renderAppearanceSettings();
+        return renderPlaceholder('Appearance', 'Customize the look and feel of the application');
       case 'sync':
-        return renderOtherSettings('Sync & Backup', 'Manage your sync and backup preferences');
+        return renderPlaceholder('Sync & Backup', 'Manage your sync and backup preferences');
       case 'editor':
-        return renderOtherSettings('Editor', 'Customize your editing experience');
+        return renderPlaceholder('Editor', 'Customize your editing experience');
       case 'shortcuts':
-        return renderOtherSettings('Keyboard Shortcuts', 'View and customize keyboard shortcuts');
+        return renderPlaceholder('Keyboard Shortcuts', 'View and customize keyboard shortcuts');
       case 'about':
-        return renderOtherSettings('About', 'Information about Notes');
+        return renderPlaceholder('About', 'Information about Notes');
       default:
         return renderGeneralSettings();
     }
@@ -176,7 +178,7 @@ function Settings({ onBack }) {
 
         <nav className="settings-nav">
           {SETTINGS_MENU.map((item) => {
-            const Icon = item.icon;
+            const Icon = item.icon as LucideIcon;
             const isActive = activeTab === item.id;
             return (
               <button
