@@ -56,7 +56,7 @@ function App() {
     try {
       const rawNotes: RawNote[] = await window.electronAPI.getAllNotes();
       const parsedNotes: Note[] = rawNotes.map(note => {
-        const parsed = parseNote(note.content);
+        const parsed = parseNote(note.content, note.filename);
         return {
           ...note,
           ...parsed,

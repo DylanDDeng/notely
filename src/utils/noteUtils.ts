@@ -1,12 +1,17 @@
 import matter from 'gray-matter';
 import type { NoteFrontmatter } from '../types';
 
+function filenameToTitle(filename: string): string {
+  return filename.replace(/\.md$/i, '').trim();
+}
+
 /**
  * 解析笔记内容，提取 frontmatter 和正文
  */
-export function parseNote(content: string): ParsedNote {
+export function parseNote(content: string, filename?: string): ParsedNote {
   const parsed = matter(content);
-  const title = (parsed.data.title as string) || 'Untitled';
+  const titleFromFilename = filename ? filenameToTitle(filename) : '';
+  const title = titleFromFilename || 'Untitled';
   const date = (parsed.data.date as string) || new Date().toISOString();
   const tags = (parsed.data.tags as string[]) || [];
   
