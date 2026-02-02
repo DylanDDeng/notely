@@ -11,6 +11,16 @@ import './styles/App.css';
 type ViewType = 'welcome' | 'main' | 'settings';
 type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
 
+// 检查是否是首次启动
+const hasCompletedWelcome = (): boolean => {
+  return localStorage.getItem('notes:hasCompletedWelcome') === 'true';
+};
+
+// 标记已完成欢迎页
+const markWelcomeCompleted = () => {
+  localStorage.setItem('notes:hasCompletedWelcome', 'true');
+};
+
 function App() {
   const [view, setView] = useState<ViewType>('welcome');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -20,18 +30,24 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [, setStoragePath] = useState<string>('');
+  const [isFirstLaunch, setIsFirstLaunch] = useState<boolean>(true);
 
-  // 检查是否有存储路径
+  // 初始化：检查是否是首次启动
   useEffect(() => {
-    const checkStorage = async () => {
-      const path = await window.electronAPI.getStoragePath();
-      setStoragePath(path);
-      if (path) {
+    const init = async () => {
+      const completed = hasCompletedWelcome();
+      setIsFirstLaunch(!completed);
+      
+      if (completed) {
+        // 非首次启动，直接加载主界面
+        const path = await window.electronAPI.getStoragePath();
+        setStoragePath(path);
         setView('main');
         loadNotes();
       }
+      // 首次启动保持 welcome 页面
     };
-    checkStorage();
+    init();
   }, []);
 
   // 加载所有笔记
@@ -115,6 +131,8 @@ function App() {
     const result = await window.electronAPI.setStoragePath('');
     if (result.success) {
       setStoragePath(result.path || '');
+      markWelcomeCompleted();
+      setIsFirstLaunch(false);
       setView('main');
       loadNotes();
     }
@@ -127,6 +145,8 @@ function App() {
       const result = await window.electronAPI.setStoragePath(selectedPath);
       if (result.success) {
         setStoragePath(result.path || selectedPath);
+        markWelcomeCompleted();
+        setIsFirstLaunch(false);
         setView('main');
         loadNotes();
       }
@@ -168,7 +188,7 @@ function App() {
     .filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
 
   // 欢迎页
-  if (view === 'welcome') {
+  if (view === 'welcome' || isFirstLaunch) {
     return (
       <div className="app">
         <Welcome 
