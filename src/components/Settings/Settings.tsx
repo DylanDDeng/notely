@@ -8,7 +8,7 @@ import {
   Info,
   type LucideIcon
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AppSettings, SettingsMenuItem } from '../../types';
 import './Settings.css';
 
@@ -30,16 +30,23 @@ const AUTO_SAVE_OPTIONS = [
 
 interface SettingsProps {
   onBack: () => void;
+  storagePath: string;
+  onChangeStoragePath: (path: string) => Promise<void>;
 }
 
-function Settings({ onBack }: SettingsProps) {
+function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<AppSettings>({
     launchAtStartup: true,
     showInMenuBar: false,
     autoSaveInterval: 30000,
-    saveLocation: '~/Documents/Notes',
+    saveLocation: storagePath || '~/Documents/Notes',
   });
+
+  useEffect(() => {
+    if (!storagePath) return;
+    setSettings(prev => ({ ...prev, saveLocation: storagePath }));
+  }, [storagePath]);
 
   const handleToggle = (key: keyof AppSettings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -47,6 +54,12 @@ function Settings({ onBack }: SettingsProps) {
 
   const handleAutoSaveChange = (value: string) => {
     setSettings(prev => ({ ...prev, autoSaveInterval: parseInt(value) }));
+  };
+
+  const handleChangeSaveLocation = async () => {
+    const selectedPath = await window.electronAPI.selectDirectory();
+    if (!selectedPath) return;
+    await onChangeStoragePath(selectedPath);
   };
 
   const renderGeneralSettings = () => (
@@ -112,7 +125,7 @@ function Settings({ onBack }: SettingsProps) {
             <span className="settings-item-label">Default save location</span>
             <span className="settings-item-description">{settings.saveLocation}</span>
           </div>
-          <button className="settings-btn">Change</button>
+          <button className="settings-btn" onClick={handleChangeSaveLocation}>Change</button>
         </div>
 
         <div className="settings-item">

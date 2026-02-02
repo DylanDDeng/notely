@@ -11,6 +11,8 @@ import './styles/App.css';
 type ViewType = 'welcome' | 'main' | 'settings';
 type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
 
+const STORAGE_PATH_KEY = 'notes:storagePath';
+
 // 检查是否是首次启动
 const hasCompletedWelcome = (): boolean => {
   return localStorage.getItem('notes:hasCompletedWelcome') === 'true';
@@ -21,6 +23,14 @@ const markWelcomeCompleted = () => {
   localStorage.setItem('notes:hasCompletedWelcome', 'true');
 };
 
+const getSavedStoragePath = (): string => {
+  return localStorage.getItem(STORAGE_PATH_KEY) || '';
+};
+
+const saveStoragePath = (path: string) => {
+  localStorage.setItem(STORAGE_PATH_KEY, path);
+};
+
 function App() {
   const [view, setView] = useState<ViewType>('welcome');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -29,7 +39,7 @@ function App() {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [, setStoragePath] = useState<string>('');
+  const [storagePath, setStoragePath] = useState<string>('');
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean>(true);
 
   // 初始化：检查是否是首次启动
@@ -40,10 +50,19 @@ function App() {
       
       if (completed) {
         // 非首次启动，直接加载主界面
-        const path = await window.electronAPI.getStoragePath();
-        setStoragePath(path);
-        setView('main');
-        loadNotes();
+        const savedPath = getSavedStoragePath();
+        const result = await window.electronAPI.setStoragePath(savedPath);
+        if (result.success) {
+          const path = result.path || savedPath;
+          setStoragePath(path);
+          saveStoragePath(path);
+          setView('main');
+          loadNotes();
+        } else {
+          console.error('Failed to restore storage path:', result.error);
+          setView('welcome');
+          setIsFirstLaunch(true);
+        }
       }
       // 首次启动保持 welcome 页面
     };
@@ -131,6 +150,7 @@ function App() {
     const result = await window.electronAPI.setStoragePath('');
     if (result.success) {
       setStoragePath(result.path || '');
+      saveStoragePath(result.path || '');
       markWelcomeCompleted();
       setIsFirstLaunch(false);
       setView('main');
@@ -145,12 +165,30 @@ function App() {
       const result = await window.electronAPI.setStoragePath(selectedPath);
       if (result.success) {
         setStoragePath(result.path || selectedPath);
+        saveStoragePath(result.path || selectedPath);
         markWelcomeCompleted();
         setIsFirstLaunch(false);
         setView('main');
         loadNotes();
       }
     }
+  }, [loadNotes]);
+
+  const handleChangeStoragePath = useCallback(async (newPath: string) => {
+    const result = await window.electronAPI.setStoragePath(newPath);
+    if (!result.success) {
+      console.error('Failed to change storage path:', result.error);
+      return;
+    }
+
+    const nextPath = result.path || newPath;
+    setStoragePath(nextPath);
+    saveStoragePath(nextPath);
+    setSelectedNoteId(null);
+    setCurrentNote(null);
+    setActiveFilter('all');
+    setSearchQuery('');
+    await loadNotes();
   }, [loadNotes]);
 
   // 过滤笔记
@@ -203,7 +241,11 @@ function App() {
   if (view === 'settings') {
     return (
       <div className="app">
-        <Settings onBack={() => setView('main')} />
+        <Settings
+          onBack={() => setView('main')}
+          storagePath={storagePath}
+          onChangeStoragePath={handleChangeStoragePath}
+        />
       </div>
     );
   }
