@@ -4,8 +4,11 @@ const fs = require('fs').promises;
 const os = require('os');
 const http = require('http');
 
-// 存储路径
-const NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
+// 默认存储路径
+const DEFAULT_NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
+
+// 当前存储路径（可以被修改）
+let currentNotesDir = DEFAULT_NOTES_DIR;
 
 // 判断是否在开发模式
 const isDev = !app.isPackaged;
@@ -13,7 +16,7 @@ const isDev = !app.isPackaged;
 // 确保笔记目录存在
 async function ensureNotesDir() {
   try {
-    await fs.mkdir(NOTES_DIR, { recursive: true });
+    await fs.mkdir(currentNotesDir, { recursive: true });
   } catch (err) {
     console.error('Failed to create notes directory:', err);
   }
@@ -77,7 +80,6 @@ async function createWindow() {
     
     if (!loaded) {
       console.error('Could not connect to any Vite dev server port');
-      // 显示错误页面
       mainWindow.loadURL('data:text/html,<h1>Development server not found</h1><p>Please ensure vite is running on ports 5173-5180</p>');
     }
   } else {
@@ -86,16 +88,39 @@ async function createWindow() {
   }
 }
 
+// IPC 处理：获取当前存储目录
+ipcMain.handle('notes:getStoragePath', async () => {
+  return currentNotesDir;
+});
+
+// IPC 处理：设置存储目录
+ipcMain.handle('notes:setStoragePath', async (event, newPath) => {
+  try {
+    if (newPath && newPath.trim() !== '') {
+      // 验证路径是否存在或可创建
+      await fs.mkdir(newPath, { recursive: true });
+      currentNotesDir = newPath;
+    } else {
+      // 使用默认路径
+      currentNotesDir = DEFAULT_NOTES_DIR;
+      await fs.mkdir(currentNotesDir, { recursive: true });
+    }
+    return { success: true, path: currentNotesDir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 // IPC 处理：获取所有笔记
 ipcMain.handle('notes:getAll', async () => {
   try {
     await ensureNotesDir();
-    const files = await fs.readdir(NOTES_DIR);
+    const files = await fs.readdir(currentNotesDir);
     const mdFiles = files.filter(f => f.endsWith('.md'));
     
     const notes = await Promise.all(
       mdFiles.map(async (filename) => {
-        const filepath = path.join(NOTES_DIR, filename);
+        const filepath = path.join(currentNotesDir, filename);
         const stat = await fs.stat(filepath);
         const content = await fs.readFile(filepath, 'utf-8');
         return {
@@ -119,7 +144,7 @@ ipcMain.handle('notes:getAll', async () => {
 // IPC 处理：读取笔记
 ipcMain.handle('notes:read', async (event, filename) => {
   try {
-    const filepath = path.join(NOTES_DIR, filename);
+    const filepath = path.join(currentNotesDir, filename);
     const content = await fs.readFile(filepath, 'utf-8');
     return { success: true, content };
   } catch (err) {
@@ -131,7 +156,7 @@ ipcMain.handle('notes:read', async (event, filename) => {
 ipcMain.handle('notes:save', async (event, { filename, content }) => {
   try {
     await ensureNotesDir();
-    const filepath = path.join(NOTES_DIR, filename);
+    const filepath = path.join(currentNotesDir, filename);
     await fs.writeFile(filepath, content, 'utf-8');
     return { success: true };
   } catch (err) {
@@ -143,7 +168,7 @@ ipcMain.handle('notes:save', async (event, { filename, content }) => {
 ipcMain.handle('notes:create', async (event, { filename, content }) => {
   try {
     await ensureNotesDir();
-    const filepath = path.join(NOTES_DIR, filename);
+    const filepath = path.join(currentNotesDir, filename);
     await fs.writeFile(filepath, content, 'utf-8');
     return { success: true };
   } catch (err) {
@@ -154,7 +179,7 @@ ipcMain.handle('notes:create', async (event, { filename, content }) => {
 // IPC 处理：删除笔记
 ipcMain.handle('notes:delete', async (event, filename) => {
   try {
-    const filepath = path.join(NOTES_DIR, filename);
+    const filepath = path.join(currentNotesDir, filename);
     await fs.unlink(filepath);
     return { success: true };
   } catch (err) {
@@ -165,7 +190,7 @@ ipcMain.handle('notes:delete', async (event, filename) => {
 // IPC 处理：选择存储目录
 ipcMain.handle('settings:selectDirectory', async () => {
   const result = await dialog.showOpenDialog({
-    properties: ['openDirectory'],
+    properties: ['openDirectory', 'createDirectory'],
   });
   return result.filePaths[0] || null;
 });
@@ -176,7 +201,6 @@ ipcMain.handle('shell:openExternal', async (event, url) => {
 });
 
 app.whenReady().then(() => {
-  ensureNotesDir();
   createWindow();
   
   app.on('activate', () => {

@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // 暴露安全的 API 给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
+  // 存储路径相关
+  getStoragePath: () => ipcRenderer.invoke('notes:getStoragePath'),
+  setStoragePath: (path) => ipcRenderer.invoke('notes:setStoragePath', path),
+  
   // 笔记相关
   getAllNotes: () => ipcRenderer.invoke('notes:getAll'),
   readNote: (filename) => ipcRenderer.invoke('notes:read', filename),

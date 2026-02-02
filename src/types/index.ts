@@ -85,12 +85,21 @@ export interface SettingsMenuItem {
  * Electron API 接口
  */
 export interface ElectronAPI {
+  // 存储路径相关
+  getStoragePath: () => Promise<string>;
+  setStoragePath: (path: string) => Promise<{ success: boolean; path?: string; error?: string }>;
+  
+  // 笔记相关
   getAllNotes: () => Promise<RawNote[]>;
   readNote: (filename: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   saveNote: (data: { filename: string; content: string }) => Promise<{ success: boolean; error?: string }>;
   createNote: (data: { filename: string; content: string }) => Promise<{ success: boolean; error?: string }>;
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
+  
+  // 设置相关
   selectDirectory: () => Promise<string | null>;
+  
+  // Shell
   openExternal: (url: string) => Promise<void>;
 }
 

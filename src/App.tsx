@@ -3,24 +3,40 @@ import Sidebar from './components/Sidebar/Sidebar';
 import NotesList from './components/NotesList/NotesList';
 import Editor from './components/Editor/Editor';
 import Settings from './components/Settings/Settings';
+import Welcome from './components/Welcome/Welcome';
 import { parseNote, generateNoteContent, generateFilename } from './utils/noteUtils';
 import type { Note, RawNote, SaveNoteData, EditorNote } from './types';
 import './styles/App.css';
 
-type ViewType = 'main' | 'settings';
+type ViewType = 'welcome' | 'main' | 'settings';
 type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
 
 function App() {
+  const [view, setView] = useState<ViewType>('welcome');
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [currentNote, setCurrentNote] = useState<EditorNote | null>(null);
-  const [view, setView] = useState<ViewType>('main');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [, setStoragePath] = useState<string>('');
+
+  // 检查是否有存储路径
+  useEffect(() => {
+    const checkStorage = async () => {
+      const path = await window.electronAPI.getStoragePath();
+      setStoragePath(path);
+      if (path) {
+        setView('main');
+        loadNotes();
+      }
+    };
+    checkStorage();
+  }, []);
 
   // 加载所有笔记
   const loadNotes = useCallback(async () => {
+    setIsLoading(true);
     try {
       const rawNotes: RawNote[] = await window.electronAPI.getAllNotes();
       const parsedNotes: Note[] = rawNotes.map(note => {
@@ -37,10 +53,6 @@ function App() {
       setIsLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    loadNotes();
-  }, [loadNotes]);
 
   // 选择笔记
   const handleSelectNote = useCallback((noteId: string) => {
@@ -98,6 +110,29 @@ function App() {
     }
   }, [loadNotes]);
 
+  // 开始使用 - 使用默认路径
+  const handleGetStarted = useCallback(async () => {
+    const result = await window.electronAPI.setStoragePath('');
+    if (result.success) {
+      setStoragePath(result.path || '');
+      setView('main');
+      loadNotes();
+    }
+  }, [loadNotes]);
+
+  // 打开已有文件夹
+  const handleOpenFolder = useCallback(async () => {
+    const selectedPath = await window.electronAPI.selectDirectory();
+    if (selectedPath) {
+      const result = await window.electronAPI.setStoragePath(selectedPath);
+      if (result.success) {
+        setStoragePath(result.path || selectedPath);
+        setView('main');
+        loadNotes();
+      }
+    }
+  }, [loadNotes]);
+
   // 过滤笔记
   const filteredNotes = notes.filter(note => {
     // 搜索过滤
@@ -132,6 +167,19 @@ function App() {
   const allTags = [...new Set(notes.flatMap(n => n.tags || []))]
     .filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
 
+  // 欢迎页
+  if (view === 'welcome') {
+    return (
+      <div className="app">
+        <Welcome 
+          onGetStarted={handleGetStarted}
+          onOpenFolder={handleOpenFolder}
+        />
+      </div>
+    );
+  }
+
+  // 设置页
   if (view === 'settings') {
     return (
       <div className="app">
@@ -140,6 +188,7 @@ function App() {
     );
   }
 
+  // 主界面
   return (
     <div className="app">
       <Sidebar
