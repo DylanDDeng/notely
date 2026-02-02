@@ -1,0 +1,22 @@
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Drag region for macOS */
+.app::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  -webkit-app-region: drag;
+  pointer-events: none;
+}
+
+/* Ensure interactive elements are not draggable */
+button, input, textarea, select, .nav-item, .note-card {
+  -webkit-app-region: no-drag;
+}

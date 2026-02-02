@@ -1,0 +1,243 @@
+.settings {
+  display: flex;
+  height: 100vh;
+  background: #FFFFFF;
+}
+
+/* Sidebar */
+.settings-sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: #FAFAFA;
+  border-right: 1px solid #E5E5E5;
+  padding: 16px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 8px 0;
+}
+
+.settings-back-btn {
+  background: none;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #6B7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.settings-back-btn:hover {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+.settings-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1F2937;
+  margin: 0;
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  color: #6B7280;
+  font-size: 14px;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.settings-nav-item:hover {
+  background: #F3F4F6;
+  color: #374151;
+}
+
+.settings-nav-item.active {
+  background: #EFF6FF;
+  color: #2563EB;
+}
+
+/* Content */
+.settings-content {
+  flex: 1;
+  padding: 48px 64px;
+  overflow-y: auto;
+}
+
+.settings-page-title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #1F2937;
+  margin: 0 0 8px 0;
+}
+
+.settings-page-description {
+  font-size: 14px;
+  color: #6B7280;
+  margin: 0 0 32px 0;
+}
+
+.settings-section {
+  margin-bottom: 40px;
+}
+
+.settings-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #FAFAFA;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.settings-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-item-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1F2937;
+}
+
+.settings-item-description {
+  font-size: 13px;
+  color: #9CA3AF;
+}
+
+.keyboard-shortcut {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6B7280;
+  font-family: 'SF Mono', Monaco, monospace;
+  background: #F3F4F6;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
+/* Toggle Switch */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+}
+
+.toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #E5E7EB;
+  transition: 0.2s;
+  border-radius: 26px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle input:checked + .toggle-slider {
+  background-color: #2563EB;
+}
+
+.toggle input:checked + .toggle-slider:before {
+  transform: translateX(22px);
+}
+
+/* Button & Select */
+.settings-btn {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-btn:hover {
+  background: #F3F4F6;
+  border-color: #9CA3AF;
+}
+
+.settings-select {
+  padding: 6px 32px 6px 14px;
+  background: white;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: #2563EB;
+}
+
+/* Placeholder */
+.settings-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #9CA3AF;
+  background: #FAFAFA;
+  border-radius: 10px;
+}
