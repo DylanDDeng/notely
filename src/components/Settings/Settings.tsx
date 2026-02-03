@@ -8,7 +8,7 @@ import {
   Info,
   type LucideIcon
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AppSettings, SettingsMenuItem } from '../../types';
 import './Settings.css';
 
@@ -32,9 +32,11 @@ interface SettingsProps {
   onBack: () => void;
   storagePath: string;
   onChangeStoragePath: (path: string) => Promise<void>;
+  fontFamily: string;
+  onChangeFontFamily: (fontFamily: string) => void;
 }
 
-function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
+function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChangeFontFamily }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<AppSettings>({
     launchAtStartup: true,
@@ -42,11 +44,19 @@ function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
     autoSaveInterval: 30000,
     saveLocation: storagePath || '~/Documents/Notes',
   });
+  const [fontInput, setFontInput] = useState(fontFamily || '');
+  const [localFonts, setLocalFonts] = useState<string[]>([]);
+  const [localFontsStatus, setLocalFontsStatus] = useState<'idle' | 'loading' | 'loaded' | 'unsupported' | 'error'>('idle');
+  const [localFontsError, setLocalFontsError] = useState('');
 
   useEffect(() => {
     if (!storagePath) return;
     setSettings(prev => ({ ...prev, saveLocation: storagePath }));
   }, [storagePath]);
+
+  useEffect(() => {
+    setFontInput(fontFamily || '');
+  }, [fontFamily]);
 
   const handleToggle = (key: keyof AppSettings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -61,6 +71,38 @@ function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
     if (!selectedPath) return;
     await onChangeStoragePath(selectedPath);
   };
+
+  const loadLocalFonts = useCallback(async () => {
+    const queryLocalFonts = (window as any).queryLocalFonts as undefined | (() => Promise<Array<{ family?: string }>>);
+    if (!queryLocalFonts) {
+      setLocalFontsStatus('unsupported');
+      return;
+    }
+
+    setLocalFontsStatus('loading');
+    setLocalFontsError('');
+
+    try {
+      const fonts = await queryLocalFonts();
+      const families = [...new Set(fonts.map(font => font.family).filter((family): family is string => Boolean(family && family.trim())))]
+        .map(family => family.trim())
+        .sort((a, b) => a.localeCompare(b));
+      setLocalFonts(families);
+      setLocalFontsStatus('loaded');
+    } catch (err) {
+      setLocalFontsStatus('error');
+      setLocalFontsError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const fontSuggestions = useMemo(() => {
+    if (localFontsStatus !== 'loaded' || localFonts.length === 0) return [];
+    const query = fontInput.trim().toLowerCase();
+    if (!query) return localFonts.slice(0, 12);
+    return localFonts
+      .filter(font => font.toLowerCase().includes(query))
+      .slice(0, 12);
+  }, [fontInput, localFonts, localFontsStatus]);
 
   const renderGeneralSettings = () => (
     <>
@@ -149,6 +191,113 @@ function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
     </>
   );
 
+  const renderAppearanceSettings = () => (
+    <>
+      <h1 className="settings-page-title">Appearance</h1>
+      <p className="settings-page-description">
+        Customize the look and feel of the application
+      </p>
+
+      <section className="settings-section">
+        <h3 className="settings-section-title">Typography</h3>
+
+        <div className="settings-item settings-item-column">
+          <div className="settings-item-info">
+            <span className="settings-item-label">Application font</span>
+            <span className="settings-item-description">
+              Applies to the entire app (including editor and code blocks)
+            </span>
+          </div>
+
+          <div className="settings-font-controls">
+            <input
+              className="settings-input"
+              type="text"
+              placeholder="Search or enter a font family name..."
+              value={fontInput}
+              onChange={(e) => setFontInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                onChangeFontFamily(fontInput.trim());
+              }}
+            />
+            <button
+              className="settings-btn"
+              onClick={() => onChangeFontFamily(fontInput.trim())}
+            >
+              Apply
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={() => {
+                setFontInput('');
+                onChangeFontFamily('');
+              }}
+              disabled={!fontFamily}
+            >
+              Reset
+            </button>
+          </div>
+
+          <div className="settings-font-meta">
+            <span>
+              Current: {fontFamily ? fontFamily : 'System default'}
+            </span>
+            {localFontsStatus === 'loaded' && (
+              <span>• {localFonts.length} fonts</span>
+            )}
+            {localFontsStatus === 'loading' && (
+              <span>• Loading system fonts…</span>
+            )}
+            {localFontsStatus === 'unsupported' && (
+              <span>• System font list unavailable</span>
+            )}
+            {localFontsStatus === 'error' && (
+              <span>• Failed to load fonts</span>
+            )}
+          </div>
+
+          {localFontsStatus === 'error' && localFontsError && (
+            <div className="settings-font-error">
+              {localFontsError}
+            </div>
+          )}
+
+          {(localFontsStatus === 'idle' || localFontsStatus === 'error' || localFontsStatus === 'unsupported') && (
+            <div className="settings-font-actions">
+              <button
+                className="settings-btn"
+                onClick={() => loadLocalFonts()}
+              >
+                Load system fonts
+              </button>
+            </div>
+          )}
+
+          {localFontsStatus === 'loaded' && fontSuggestions.length > 0 && (
+            <div className="settings-font-suggestions">
+              {fontSuggestions.map((font) => (
+                <button
+                  key={font}
+                  type="button"
+                  className={`settings-font-suggestion ${fontFamily === font ? 'active' : ''}`}
+                  onClick={() => {
+                    setFontInput(font);
+                    onChangeFontFamily(font);
+                  }}
+                  title={font}
+                >
+                  {font}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  );
+
   const renderPlaceholder = (title: string, description: string) => (
     <>
       <h1 className="settings-page-title">{title}</h1>
@@ -164,7 +313,7 @@ function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
       case 'general':
         return renderGeneralSettings();
       case 'appearance':
-        return renderPlaceholder('Appearance', 'Customize the look and feel of the application');
+        return renderAppearanceSettings();
       case 'sync':
         return renderPlaceholder('Sync & Backup', 'Manage your sync and backup preferences');
       case 'editor':
@@ -197,7 +346,12 @@ function Settings({ onBack, storagePath, onChangeStoragePath }: SettingsProps) {
               <button
                 key={item.id}
                 className={`settings-nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (item.id === 'appearance' && localFontsStatus === 'idle') {
+                    void loadLocalFonts();
+                  }
+                }}
               >
                 <Icon size={18} />
                 <span>{item.label}</span>

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const os = require('os');
@@ -201,6 +201,14 @@ ipcMain.handle('shell:openExternal', async (event, url) => {
 });
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'local-fonts') {
+      callback(true);
+      return;
+    }
+    callback(false);
+  });
+
   createWindow();
   
   app.on('activate', () => {

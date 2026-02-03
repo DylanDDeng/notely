@@ -14,6 +14,9 @@ type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
 type NotesView = 'list' | 'grid';
 
 const STORAGE_PATH_KEY = 'notes:storagePath';
+const FONT_FAMILY_KEY = 'notes:fontFamily';
+const DEFAULT_FONT_STACK =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 // 检查是否是首次启动
 const hasCompletedWelcome = (): boolean => {
@@ -33,6 +36,19 @@ const saveStoragePath = (path: string) => {
   localStorage.setItem(STORAGE_PATH_KEY, path);
 };
 
+const getSavedFontFamily = (): string => {
+  return localStorage.getItem(FONT_FAMILY_KEY) || '';
+};
+
+const saveFontFamily = (fontFamily: string) => {
+  const trimmed = fontFamily.trim();
+  if (!trimmed) {
+    localStorage.removeItem(FONT_FAMILY_KEY);
+    return;
+  }
+  localStorage.setItem(FONT_FAMILY_KEY, trimmed);
+};
+
 function App() {
   const [view, setView] = useState<ViewType>('welcome');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -46,6 +62,17 @@ function App() {
   const [notesView, setNotesView] = useState<NotesView>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModalFullScreen, setIsModalFullScreen] = useState(false);
+  const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
+
+  useEffect(() => {
+    const trimmed = appFontFamily.trim();
+    if (!trimmed) {
+      document.documentElement.style.removeProperty('--app-font-family');
+      return;
+    }
+
+    document.documentElement.style.setProperty('--app-font-family', `${trimmed}, ${DEFAULT_FONT_STACK}`);
+  }, [appFontFamily]);
 
   // 初始化：检查是否是首次启动
   useEffect(() => {
@@ -217,6 +244,12 @@ function App() {
     await loadNotes();
   }, [loadNotes]);
 
+  const handleChangeFontFamily = useCallback((nextFontFamily: string) => {
+    const trimmed = nextFontFamily.trim();
+    setAppFontFamily(trimmed);
+    saveFontFamily(trimmed);
+  }, []);
+
   // 过滤笔记
   const filteredNotes = notes.filter(note => {
     // 搜索过滤
@@ -278,6 +311,8 @@ function App() {
           onBack={() => setView('main')}
           storagePath={storagePath}
           onChangeStoragePath={handleChangeStoragePath}
+          fontFamily={appFontFamily}
+          onChangeFontFamily={handleChangeFontFamily}
         />
       </div>
     );
