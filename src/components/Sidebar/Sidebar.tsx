@@ -9,6 +9,7 @@ import {
   Search,
 } from 'lucide-react';
 import type { FolderItem } from '../../types';
+import { getTagColor } from '../../utils/noteUtils';
 import './Sidebar.css';
 
 const FOLDERS: FolderItem[] = [
@@ -18,19 +19,13 @@ const FOLDERS: FolderItem[] = [
   { id: 'trash', label: 'Trash', icon: Trash2, count: null },
 ];
 
-const TAG_COLORS: Record<string, string> = {
-  'Work': '#FF6B6B',
-  'Personal': '#4ECDC4',
-  'Ideas': '#9B59B6',
-  'Projects': '#F39C12',
-};
-
 interface SidebarProps {
   activeFilter: string;
   onFilterChange: (filter: string) => void;
   onCreateNote: () => void;
   onOpenSettings: () => void;
   tags: string[];
+  tagCounts?: Record<string, number>;
   searchQuery: string;
   onSearchChange: (query: string) => void;
 }
@@ -41,6 +36,7 @@ function Sidebar({
   onCreateNote, 
   onOpenSettings,
   tags,
+  tagCounts = {},
   searchQuery,
   onSearchChange,
 }: SidebarProps) {
@@ -104,7 +100,8 @@ function Sidebar({
         <ul className="nav-list">
           {tags.map((tag) => {
             const isActive = activeFilter === `tag:${tag}`;
-            const color = TAG_COLORS[tag] || '#6C757D';
+            const color = getTagColor(tag);
+            const count = tagCounts[tag] ?? 0;
             return (
               <li key={tag}>
                 <button
@@ -116,6 +113,7 @@ function Sidebar({
                     style={{ backgroundColor: color }}
                   />
                   <span className="nav-label">{tag}</span>
+                  <span className="nav-count">{count}</span>
                 </button>
               </li>
             );

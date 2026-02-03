@@ -250,6 +250,13 @@ function App() {
   // 获取所有标签
   const allTags = [...new Set(notes.flatMap(n => n.tags || []))]
     .filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
+  const tagCounts = notes.reduce<Record<string, number>>((acc, note) => {
+    (note.tags || []).forEach(tag => {
+      if (['favorite', 'archive', 'trash'].includes(tag)) return;
+      acc[tag] = (acc[tag] ?? 0) + 1;
+    });
+    return acc;
+  }, {});
 
   // 欢迎页
   if (view === 'welcome' || isFirstLaunch) {
@@ -285,6 +292,7 @@ function App() {
         onCreateNote={handleCreateNote}
         onOpenSettings={() => setView('settings')}
         tags={allTags}
+        tagCounts={tagCounts}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />

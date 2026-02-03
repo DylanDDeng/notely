@@ -107,5 +107,32 @@ export function getTagColor(tag: string): string {
     'archive': '#95A5A6',
     'trash': '#E74C3C',
   };
-  return colors[tag] || '#6C757D';
+
+  const direct = colors[tag];
+  if (direct) return direct;
+
+  const trimmed = tag.trim();
+  if (!trimmed) return '#6C757D';
+
+  const palette = [
+    '#2563EB', // blue
+    '#7C3AED', // purple
+    '#DB2777', // pink
+    '#EA580C', // orange
+    '#16A34A', // green
+    '#0EA5E9', // sky
+    '#F59E0B', // amber
+    '#10B981', // emerald
+    '#EF4444', // red
+    '#6366F1', // indigo
+    '#14B8A6', // teal
+    '#A855F7', // violet
+  ];
+
+  let hash = 0;
+  for (let i = 0; i < trimmed.length; i += 1) {
+    hash = (hash * 31 + trimmed.charCodeAt(i)) | 0;
+  }
+  const index = Math.abs(hash) % palette.length;
+  return palette[index] || '#6C757D';
 }
