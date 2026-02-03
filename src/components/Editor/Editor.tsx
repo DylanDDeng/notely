@@ -24,6 +24,10 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const editorContentRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const textOffsetMapRef = useRef<number[]>([]);
+  const pendingSelectionRef = useRef<{ index: number; scrollTop: number } | null>(null);
 
   // 加载笔记
   useEffect(() => {
@@ -58,6 +62,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   // 渲染 Markdown
   const renderMarkdown = async (text: string) => {
     try {
+      updateTextOffsetMap(text);
       const result = await remark()
         .use(remarkGfm)
         .use(remarkHtml)
@@ -65,6 +70,50 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       setHtmlContent(String(result.value));
     } catch (err) {
       console.error('Failed to render markdown:', err);
+    }
+  };
+
+  const updateTextOffsetMap = (markdown: string) => {
+    try {
+      const tree = remark().use(remarkGfm).parse(markdown) as any;
+      const offsets: number[] = [];
+
+      const addOffsets = (value: string, startOffset: number | null | undefined) => {
+        if (!value || typeof startOffset !== 'number') return;
+        for (let i = 0; i < value.length; i += 1) {
+          offsets.push(startOffset + i);
+        }
+      };
+
+      const findValueStart = (node: any) => {
+        const start = node?.position?.start?.offset;
+        const end = node?.position?.end?.offset;
+        if (typeof start !== 'number' || typeof end !== 'number') return null;
+        const slice = markdown.slice(start, end);
+        const idx = typeof node.value === 'string' ? slice.indexOf(node.value) : -1;
+        if (idx >= 0) return start + idx;
+        return start;
+      };
+
+      const visit = (node: any) => {
+        if (!node) return;
+        if (node.type === 'text') {
+          addOffsets(node.value, node.position?.start?.offset);
+          return;
+        }
+        if (node.type === 'inlineCode' || node.type === 'code') {
+          addOffsets(node.value || '', findValueStart(node));
+          return;
+        }
+        if (Array.isArray(node.children)) {
+          node.children.forEach(visit);
+        }
+      };
+
+      visit(tree);
+      textOffsetMapRef.current = offsets;
+    } catch (err) {
+      textOffsetMapRef.current = [];
     }
   };
 
@@ -128,6 +177,21 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     setHasChanges(true);
   };
 
+  useEffect(() => {
+    if (!isEditing) return;
+    const pending = pendingSelectionRef.current;
+    if (!pending) return;
+    const textarea = contentRef.current;
+    if (!textarea) return;
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(pending.index, pending.index);
+      textarea.scrollTop = pending.scrollTop;
+      pendingSelectionRef.current = null;
+    });
+  }, [isEditing, content]);
+
   // 工具栏操作
   const insertMarkdown = (before: string, after: string = '') => {
     const textarea = contentRef.current;
@@ -148,6 +212,41 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       const newCursorPos = start + before.length + selectedText.length;
       textarea.setSelectionRange(newCursorPos, newCursorPos);
     }, 0);
+  };
+
+  const getPlainTextOffsetFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
+    const previewEl = previewRef.current;
+    if (!previewEl) return null;
+
+    const caretRange =
+      (document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null })
+        .caretRangeFromPoint?.(e.clientX, e.clientY) ?? null;
+
+    if (!caretRange || caretRange.startContainer.nodeType !== Node.TEXT_NODE) return null;
+
+    const targetNode = caretRange.startContainer as Text;
+    const targetOffset = caretRange.startOffset;
+
+    const walker = document.createTreeWalker(previewEl, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        if (!node.textContent) return NodeFilter.FILTER_REJECT;
+        if (node.textContent.trim() === '' && node.parentElement === previewEl) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    let offset = 0;
+    let current = walker.nextNode();
+    while (current) {
+      if (current === targetNode) {
+        return offset + Math.min(targetOffset, current.textContent?.length ?? 0);
+      }
+      offset += current.textContent?.length ?? 0;
+      current = walker.nextNode();
+    }
+    return offset;
   };
 
   const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -173,6 +272,15 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       window.electronAPI.openExternal(link.href);
       return;
     }
+
+    const scrollTop = editorContentRef.current?.scrollTop ?? 0;
+    const plainTextOffset = getPlainTextOffsetFromEvent(e);
+    const map = textOffsetMapRef.current;
+    const mappedIndex =
+      plainTextOffset !== null && map.length > 0
+        ? map[Math.min(plainTextOffset, map.length - 1)] ?? 0
+        : 0;
+    pendingSelectionRef.current = { index: Math.max(0, Math.min(mappedIndex, content.length)), scrollTop };
 
     // Otherwise, start editing
     setIsEditing(true);
@@ -280,7 +388,11 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       </div>
 
       {/* Content */}
-      <div className="editor-content" onClick={isEditing ? undefined : handlePreviewClick}>
+      <div
+        className="editor-content"
+        ref={editorContentRef}
+        onClick={isEditing ? undefined : handlePreviewClick}
+      >
         <div className="editor-container editor-content-inner">
           {isEditing ? (
             <textarea
@@ -295,6 +407,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
           ) : (
             <div
               className="editor-preview"
+              ref={previewRef}
               dangerouslySetInnerHTML={{ 
                 __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
               }}
