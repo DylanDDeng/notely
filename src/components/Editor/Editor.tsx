@@ -27,7 +27,8 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const editorContentRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const textOffsetMapRef = useRef<number[]>([]);
-  const pendingSelectionRef = useRef<{ index: number; scrollTop: number } | null>(null);
+  const pendingSelectionRef = useRef<{ index?: number; scrollTop: number } | null>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
 
   // 加载笔记
   useEffect(() => {
@@ -58,6 +59,13 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [lightboxSrc]);
+
+  const resizeTextarea = useCallback(() => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
 
   // 渲染 Markdown
   const renderMarkdown = async (text: string) => {
@@ -180,17 +188,60 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   useEffect(() => {
     if (!isEditing) return;
     const pending = pendingSelectionRef.current;
-    if (!pending) return;
+    if (!pending) {
+      resizeTextarea();
+      return;
+    }
     const textarea = contentRef.current;
-    if (!textarea) return;
+    const container = editorContentRef.current;
+    if (!textarea || !container) return;
 
     requestAnimationFrame(() => {
       textarea.focus();
-      textarea.setSelectionRange(pending.index, pending.index);
-      textarea.scrollTop = pending.scrollTop;
+      if (typeof pending.index === 'number') {
+        textarea.setSelectionRange(pending.index, pending.index);
+      }
+      container.scrollTop = pending.scrollTop;
       pendingSelectionRef.current = null;
+      resizeTextarea();
     });
-  }, [isEditing, content]);
+  }, [isEditing, content, resizeTextarea]);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    resizeTextarea();
+  }, [isEditing, content, resizeTextarea]);
+
+  useEffect(() => {
+    if (isEditing) return;
+    const pendingScroll = pendingScrollRestoreRef.current;
+    if (pendingScroll === null) return;
+    requestAnimationFrame(() => {
+      if (editorContentRef.current) {
+        editorContentRef.current.scrollTop = pendingScroll;
+      }
+      pendingScrollRestoreRef.current = null;
+    });
+  }, [isEditing, htmlContent]);
+
+  const exitEditing = useCallback(() => {
+    pendingScrollRestoreRef.current = editorContentRef.current?.scrollTop ?? 0;
+    setIsEditing(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        exitEditing();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isEditing, exitEditing]);
 
   // 工具栏操作
   const insertMarkdown = (before: string, after: string = '') => {
@@ -252,6 +303,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement | null;
     if (!target) {
+      pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
       setIsEditing(true);
       return;
     }
@@ -276,11 +328,12 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     const scrollTop = editorContentRef.current?.scrollTop ?? 0;
     const plainTextOffset = getPlainTextOffsetFromEvent(e);
     const map = textOffsetMapRef.current;
-    const mappedIndex =
-      plainTextOffset !== null && map.length > 0
-        ? map[Math.min(plainTextOffset, map.length - 1)] ?? 0
-        : 0;
-    pendingSelectionRef.current = { index: Math.max(0, Math.min(mappedIndex, content.length)), scrollTop };
+    let index: number | undefined;
+    if (plainTextOffset !== null && map.length > 0) {
+      const mappedIndex = map[Math.min(plainTextOffset, map.length - 1)] ?? 0;
+      index = Math.max(0, Math.min(mappedIndex, content.length));
+    }
+    pendingSelectionRef.current = { index, scrollTop };
 
     // Otherwise, start editing
     setIsEditing(true);
@@ -340,6 +393,15 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             )}
           </div>
           <div className="editor-actions">
+            <button
+              className="editor-mode-btn"
+              onClick={isEditing ? exitEditing : () => {
+                pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
+                setIsEditing(true);
+              }}
+            >
+              {isEditing ? 'Preview' : 'Edit'}
+            </button>
             <button className="editor-action-btn">
               <Pin size={18} />
             </button>
@@ -400,7 +462,6 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               className="editor-textarea"
               value={content}
               onChange={handleContentChange}
-              onBlur={() => setIsEditing(false)}
               placeholder="Start writing..."
               autoFocus
             />
