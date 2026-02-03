@@ -176,21 +176,50 @@ function App() {
 
   // 保存笔记（用于自动保存）
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
-    try {
-      const frontmatter = {
-        title: noteData.title,
-        date: noteData.date || new Date().toISOString(),
-        tags: noteData.tags,
-      };
-      const content = generateNoteContent(frontmatter, noteData.content);
-      const filename = noteData.filename || generateFilename(noteData.title, new Date());
-      
-      await window.electronAPI.saveNote({ filename, content });
-      await loadNotes();
-    } catch (err) {
-      console.error('Failed to save note:', err);
+    const now = new Date();
+    const frontmatter = {
+      title: noteData.title,
+      date: noteData.date || now.toISOString(),
+      tags: noteData.tags,
+    };
+    const fileContent = generateNoteContent(frontmatter, noteData.content);
+    const filename = noteData.filename || generateFilename(noteData.title, now);
+
+    const result = await window.electronAPI.saveNote({ filename, content: fileContent });
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to save note');
     }
-  }, [loadNotes]);
+
+    const noteId = noteData.id || filename.replace(/\.md$/i, '');
+    const parsed = parseNote(fileContent, filename);
+    setNotes(prevNotes => {
+      const updatedNotes = prevNotes
+        .map(note => {
+          if (note.id !== noteId) return note;
+          return {
+            ...note,
+            filename,
+            content: fileContent,
+            modifiedAt: now,
+            ...parsed,
+          };
+        })
+        .sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
+      return updatedNotes;
+    });
+
+    setCurrentNote(prev => {
+      if (!prev || prev.id !== noteId) return prev;
+      return {
+        ...prev,
+        filename,
+        content: noteData.content,
+        tags: noteData.tags,
+        date: frontmatter.date,
+        modifiedAt: now,
+      };
+    });
+  }, []);
 
   // 开始使用 - 使用默认路径
   const handleGetStarted = useCallback(async () => {

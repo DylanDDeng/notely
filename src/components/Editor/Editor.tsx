@@ -22,31 +22,23 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRef = useRef<{ id: string; filename: string } | null>(null);
+  const draftChangeTokenRef = useRef(0);
+  const draftCacheRef = useRef<
+    Record<
+      string,
+      { title: string; content: string; tags: string[]; date?: string; token: number; filename: string }
+    >
+  >({});
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const editorContentRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const textOffsetMapRef = useRef<number[]>([]);
   const pendingSelectionRef = useRef<{ index?: number; scrollTop: number } | null>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
-
-  // 加载笔记
-  useEffect(() => {
-    if (note) {
-      setTitle(note.title || 'Untitled');
-      setContent(note.content || '');
-      setTags(note.tags || []);
-      setHasChanges(false);
-      setLightboxSrc(null);
-      renderMarkdown(note.content || '');
-    } else {
-      setTitle('');
-      setContent('');
-      setTags([]);
-      setHtmlContent('');
-      setLightboxSrc(null);
-    }
-  }, [note?.id]);
+  const SAVE_DEBOUNCE_MS = 800;
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -59,6 +51,97 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [lightboxSrc]);
+
+  const clearSaveDebounce = useCallback(() => {
+    if (!saveDebounceRef.current) return;
+    clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = null;
+  }, []);
+
+  const flushSaveForNote = useCallback(async (noteId: string, filename: string) => {
+    clearSaveDebounce();
+
+    if (saveInFlightRef.current) {
+      pendingSaveRef.current = { id: noteId, filename };
+      return;
+    }
+
+    const entry = draftCacheRef.current[noteId];
+    if (!entry) return;
+
+    saveInFlightRef.current = true;
+    const token = entry.token;
+
+    try {
+      await onSave({
+        id: noteId,
+        filename,
+        title: entry.title,
+        content: entry.content,
+        tags: entry.tags,
+        date: entry.date,
+      });
+
+      const stillSame = draftCacheRef.current[noteId]?.token === token;
+      if (stillSame) {
+        delete draftCacheRef.current[noteId];
+        if (note?.id === noteId) {
+          setHasChanges(false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to save note:', err);
+    } finally {
+      saveInFlightRef.current = false;
+      const pending = pendingSaveRef.current;
+      pendingSaveRef.current = null;
+      if (pending) {
+        await flushSaveForNote(pending.id, pending.filename);
+      }
+    }
+  }, [clearSaveDebounce, onSave, note?.id]);
+
+  const scheduleSave = useCallback(() => {
+    if (!note) return;
+    clearSaveDebounce();
+    saveDebounceRef.current = setTimeout(() => {
+      void flushSaveForNote(note.id, note.filename);
+    }, SAVE_DEBOUNCE_MS);
+  }, [clearSaveDebounce, flushSaveForNote, note]);
+
+  // 加载笔记（并在切换时 flush 未保存的草稿）
+  useEffect(() => {
+    if (note) {
+      const cached = draftCacheRef.current[note.id];
+      if (cached) {
+        setTitle(cached.title || 'Untitled');
+        setContent(cached.content || '');
+        setTags(cached.tags || []);
+        setHasChanges(true);
+        setLightboxSrc(null);
+        renderMarkdown(cached.content || '');
+      } else {
+        setTitle(note.title || 'Untitled');
+        setContent(note.content || '');
+        setTags(note.tags || []);
+        setHasChanges(false);
+        setLightboxSrc(null);
+        renderMarkdown(note.content || '');
+      }
+    } else {
+      setTitle('');
+      setContent('');
+      setTags([]);
+      setHtmlContent('');
+      setHasChanges(false);
+      setLightboxSrc(null);
+    }
+
+    return () => {
+      if (!note) return;
+      void flushSaveForNote(note.id, note.filename);
+    };
+  }, [note?.id]);
 
   const resizeTextarea = useCallback(() => {
     const textarea = contentRef.current;
@@ -198,44 +281,43 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   };
 
   // 自动保存
-  const autoSave = useCallback(() => {
-    if (note && hasChanges) {
-      onSave({
-        id: note.id,
-        filename: note.filename,
-        title,
-        content,
-        tags,
-        date: note.date,
-      });
-      setHasChanges(false);
-    }
-  }, [note, title, content, tags, hasChanges, onSave]);
-
-  // 设置自动保存定时器
-  useEffect(() => {
-    if (hasChanges) {
-      autoSaveRef.current = setTimeout(autoSave, 30000); // 30秒自动保存
-    }
-    return () => {
-      if (autoSaveRef.current) {
-        clearTimeout(autoSaveRef.current);
-      }
-    };
-  }, [hasChanges, autoSave]);
-
   // 处理内容变化
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newContent = e.target.value;
     setContent(newContent);
     setHasChanges(true);
     renderMarkdown(newContent);
+    if (note) {
+      draftChangeTokenRef.current += 1;
+      draftCacheRef.current[note.id] = {
+        title,
+        content: newContent,
+        tags,
+        date: note.date,
+        token: draftChangeTokenRef.current,
+        filename: note.filename,
+      };
+      scheduleSave();
+    }
   };
 
   // 处理标题变化
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTitle(e.target.value);
+    const newTitle = e.target.value;
+    setTitle(newTitle);
     setHasChanges(true);
+    if (note) {
+      draftChangeTokenRef.current += 1;
+      draftCacheRef.current[note.id] = {
+        title: newTitle,
+        content,
+        tags,
+        date: note.date,
+        token: draftChangeTokenRef.current,
+        filename: note.filename,
+      };
+      scheduleSave();
+    }
   };
 
   // 处理标签输入
@@ -244,8 +326,21 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       e.preventDefault();
       const newTag = e.currentTarget.value.trim();
       if (!tags.includes(newTag)) {
-        setTags([...tags, newTag]);
+        const nextTags = [...tags, newTag];
+        setTags(nextTags);
         setHasChanges(true);
+        if (note) {
+          draftChangeTokenRef.current += 1;
+          draftCacheRef.current[note.id] = {
+            title,
+            content,
+            tags: nextTags,
+            date: note.date,
+            token: draftChangeTokenRef.current,
+            filename: note.filename,
+          };
+          scheduleSave();
+        }
       }
       e.currentTarget.value = '';
     }
@@ -253,8 +348,21 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
 
   // 删除标签
   const removeTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
+    const nextTags = tags.filter(tag => tag !== tagToRemove);
+    setTags(nextTags);
     setHasChanges(true);
+    if (note) {
+      draftChangeTokenRef.current += 1;
+      draftCacheRef.current[note.id] = {
+        title,
+        content,
+        tags: nextTags,
+        date: note.date,
+        token: draftChangeTokenRef.current,
+        filename: note.filename,
+      };
+      scheduleSave();
+    }
   };
 
   useEffect(() => {
@@ -380,6 +488,18 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     setContent(newText);
     setHasChanges(true);
     renderMarkdown(newText);
+    if (note) {
+      draftChangeTokenRef.current += 1;
+      draftCacheRef.current[note.id] = {
+        title,
+        content: newText,
+        tags,
+        date: note.date,
+        token: draftChangeTokenRef.current,
+        filename: note.filename,
+      };
+      scheduleSave();
+    }
     
     // 恢复光标位置
     setTimeout(() => {
