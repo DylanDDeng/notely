@@ -67,6 +67,78 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, []);
 
+  const getCaretTopInTextarea = (textarea: HTMLTextAreaElement, caretIndex: number): number => {
+    const marker = document.createElement('span');
+    marker.textContent = '\u200b';
+
+    const mirror = document.createElement('div');
+    const style = window.getComputedStyle(textarea);
+    const rect = textarea.getBoundingClientRect();
+
+    mirror.style.position = 'absolute';
+    mirror.style.visibility = 'hidden';
+    mirror.style.pointerEvents = 'none';
+    mirror.style.left = '-9999px';
+    mirror.style.top = '0';
+    mirror.style.width = `${rect.width}px`;
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.wordBreak = 'break-word';
+    mirror.style.overflowWrap = 'break-word';
+    mirror.style.fontFamily = style.fontFamily;
+    mirror.style.fontSize = style.fontSize;
+    mirror.style.fontWeight = style.fontWeight;
+    mirror.style.fontStyle = style.fontStyle;
+    mirror.style.letterSpacing = style.letterSpacing;
+    mirror.style.wordSpacing = style.wordSpacing;
+    mirror.style.lineHeight = style.lineHeight;
+    mirror.style.paddingTop = style.paddingTop;
+    mirror.style.paddingRight = style.paddingRight;
+    mirror.style.paddingBottom = style.paddingBottom;
+    mirror.style.paddingLeft = style.paddingLeft;
+    mirror.style.borderTopWidth = style.borderTopWidth;
+    mirror.style.borderRightWidth = style.borderRightWidth;
+    mirror.style.borderBottomWidth = style.borderBottomWidth;
+    mirror.style.borderLeftWidth = style.borderLeftWidth;
+    mirror.style.boxSizing = style.boxSizing;
+
+    mirror.textContent = textarea.value.slice(0, Math.max(0, caretIndex));
+    mirror.appendChild(marker);
+    document.body.appendChild(mirror);
+
+    const markerRect = marker.getBoundingClientRect();
+    const mirrorRect = mirror.getBoundingClientRect();
+    const top = markerRect.top - mirrorRect.top;
+
+    document.body.removeChild(mirror);
+    return top;
+  };
+
+  const getLineHeightPx = (textarea: HTMLTextAreaElement): number => {
+    const style = window.getComputedStyle(textarea);
+    const parsed = parseFloat(style.lineHeight);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+    const fontSize = parseFloat(style.fontSize);
+    return (Number.isNaN(fontSize) ? 16 : fontSize) * 1.2;
+  };
+
+  const scrollEditorToCaretCenter = (caretIndex: number) => {
+    const textarea = contentRef.current;
+    const container = editorContentRef.current;
+    if (!textarea || !container) return;
+
+    const caretTopInTextarea = getCaretTopInTextarea(textarea, caretIndex);
+    const lineHeight = getLineHeightPx(textarea);
+
+    const containerRect = container.getBoundingClientRect();
+    const textareaRect = textarea.getBoundingClientRect();
+    const textareaTopInContainer = textareaRect.top - containerRect.top + container.scrollTop;
+    const caretTopInContainer = textareaTopInContainer + caretTopInTextarea;
+
+    const desired = caretTopInContainer - container.clientHeight / 2 + lineHeight / 2;
+    const maxScrollTop = container.scrollHeight - container.clientHeight;
+    container.scrollTop = Math.min(maxScrollTop, Math.max(0, desired));
+  };
+
   // 渲染 Markdown
   const renderMarkdown = async (text: string) => {
     try {
@@ -197,13 +269,17 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     if (!textarea || !container) return;
 
     requestAnimationFrame(() => {
-      textarea.focus();
-      if (typeof pending.index === 'number') {
-        textarea.setSelectionRange(pending.index, pending.index);
-      }
-      container.scrollTop = pending.scrollTop;
-      pendingSelectionRef.current = null;
       resizeTextarea();
+      requestAnimationFrame(() => {
+        textarea.focus();
+        if (typeof pending.index === 'number') {
+          textarea.setSelectionRange(pending.index, pending.index);
+          scrollEditorToCaretCenter(pending.index);
+        } else {
+          container.scrollTop = pending.scrollTop;
+        }
+        pendingSelectionRef.current = null;
+      });
     });
   }, [isEditing, content, resizeTextarea]);
 
@@ -216,12 +292,60 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     if (isEditing) return;
     const pendingScroll = pendingScrollRestoreRef.current;
     if (pendingScroll === null) return;
-    requestAnimationFrame(() => {
-      if (editorContentRef.current) {
-        editorContentRef.current.scrollTop = pendingScroll;
+    const container = editorContentRef.current;
+    if (!container) return;
+
+    let rafId = 0;
+    let cancelled = false;
+    let programmaticScroll = false;
+
+    const apply = () => {
+      if (cancelled) return;
+      const maxScrollTop = container.scrollHeight - container.clientHeight;
+      const next = Math.min(maxScrollTop, Math.max(0, pendingScroll));
+      programmaticScroll = true;
+      container.scrollTop = next;
+    };
+
+    const stop = (clearPending: boolean) => {
+      if (cancelled) return;
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+      container.removeEventListener('scroll', onScroll);
+      if (clearPending) {
+        pendingScrollRestoreRef.current = null;
       }
-      pendingScrollRestoreRef.current = null;
-    });
+    };
+
+    const onScroll = () => {
+      if (programmaticScroll) {
+        programmaticScroll = false;
+        return;
+      }
+      stop(true);
+    };
+
+    const resizeObserver = new ResizeObserver(() => apply());
+    const previewEl = previewRef.current;
+    if (previewEl) resizeObserver.observe(previewEl);
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+
+    const start = performance.now();
+    const tick = () => {
+      apply();
+
+      if (cancelled) return;
+      if (performance.now() - start >= 4000) {
+        stop(true);
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => stop(false);
   }, [isEditing, htmlContent]);
 
   const exitEditing = useCallback(() => {
