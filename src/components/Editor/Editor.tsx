@@ -214,115 +214,122 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     <div className="editor">
       {/* Header */}
       <div className="editor-header">
-        <div className="editor-meta">
-          <span className="editor-date">
-            {note.modifiedAt && format(new Date(note.modifiedAt), "MMM d, yyyy 'at' h:mm a")}
-          </span>
-          {mainTag && (
-            <span 
-              className="editor-tag"
-              style={{ 
-                backgroundColor: `${getTagColor(mainTag)}20`,
-                color: getTagColor(mainTag)
-              }}
-            >
-              {mainTag}
+        <div className="editor-container editor-header-inner">
+          <div className="editor-meta">
+            <span className="editor-date">
+              {note.modifiedAt && format(new Date(note.modifiedAt), "MMM d, yyyy 'at' h:mm a")}
             </span>
-          )}
-        </div>
-        <div className="editor-actions">
-          <button className="editor-action-btn">
-            <Pin size={18} />
-          </button>
-          <button className="editor-action-btn">
-            <Share2 size={18} />
-          </button>
-          <button className="editor-action-btn">
-            <MoreHorizontal size={18} />
-          </button>
+            {mainTag && (
+              <span 
+                className="editor-tag"
+                style={{ 
+                  backgroundColor: `${getTagColor(mainTag)}20`,
+                  color: getTagColor(mainTag)
+                }}
+              >
+                {mainTag}
+              </span>
+            )}
+          </div>
+          <div className="editor-actions">
+            <button className="editor-action-btn">
+              <Pin size={18} />
+            </button>
+            <button className="editor-action-btn">
+              <Share2 size={18} />
+            </button>
+            <button className="editor-action-btn">
+              <MoreHorizontal size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Title */}
-      <input
-        type="text"
-        className="editor-title-input"
-        value={title}
-        onChange={handleTitleChange}
-        placeholder="Note title"
-      />
-
-      {/* Tags Input */}
-      <div className="editor-tags">
-        {displayTags.map(tag => (
-          <span 
-            key={tag} 
-            className="editor-tag-chip"
-            style={{ 
-              backgroundColor: `${getTagColor(tag)}20`,
-              color: getTagColor(tag)
-            }}
-          >
-            {tag}
-            <button onClick={() => removeTag(tag)}>×</button>
-          </span>
-        ))}
+      <div className="editor-container">
+        {/* Title */}
         <input
           type="text"
-          className="editor-tag-input"
-          placeholder={displayTags.length === 0 ? "Add tags..." : ""}
-          onKeyDown={handleTagKeyDown}
+          className="editor-title-input"
+          value={title}
+          onChange={handleTitleChange}
+          placeholder="Note title"
         />
+
+        {/* Tags Input */}
+        <div className="editor-tags">
+          {displayTags.map(tag => (
+            <span 
+              key={tag} 
+              className="editor-tag-chip"
+              style={{ 
+                backgroundColor: `${getTagColor(tag)}20`,
+                color: getTagColor(tag)
+              }}
+            >
+              {tag}
+              <button onClick={() => removeTag(tag)}>×</button>
+            </span>
+          ))}
+          <input
+            type="text"
+            className="editor-tag-input"
+            placeholder={displayTags.length === 0 ? "Add tags..." : ""}
+            onKeyDown={handleTagKeyDown}
+          />
+        </div>
       </div>
 
       {/* Content */}
-      <div className="editor-content">
-        {isEditing ? (
-          <textarea
-            ref={contentRef}
-            className="editor-textarea"
-            value={content}
-            onChange={handleContentChange}
-            onBlur={() => setIsEditing(false)}
-            placeholder="Start writing..."
-            autoFocus
-          />
-        ) : (
-          <div
-            className="editor-preview"
-            onClick={handlePreviewClick}
-            dangerouslySetInnerHTML={{ 
-              __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
-            }}
-          />
-        )}
+      <div className="editor-content" onClick={isEditing ? undefined : handlePreviewClick}>
+        <div className="editor-container editor-content-inner">
+          {isEditing ? (
+            <textarea
+              ref={contentRef}
+              className="editor-textarea"
+              value={content}
+              onChange={handleContentChange}
+              onBlur={() => setIsEditing(false)}
+              placeholder="Start writing..."
+              autoFocus
+            />
+          ) : (
+            <div
+              className="editor-preview"
+              dangerouslySetInnerHTML={{ 
+                __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Toolbar */}
       <div className="editor-toolbar">
-        <button className="toolbar-btn" onClick={toolbarActions.bold} title="Bold">
-          <Bold size={18} />
-        </button>
-        <button className="toolbar-btn" onClick={toolbarActions.italic} title="Italic">
-          <Italic size={18} />
-        </button>
-        <button className="toolbar-btn" onClick={toolbarActions.underline} title="Underline">
-          <Underline size={18} />
-        </button>
-        <div className="toolbar-divider" />
-        <button className="toolbar-btn" onClick={toolbarActions.bulletList} title="Bullet list">
-          <List size={18} />
-        </button>
-        <button className="toolbar-btn" onClick={toolbarActions.checkList} title="Check list">
-          <CheckSquare size={18} />
-        </button>
-        <div className="toolbar-divider" />
-        <button className="toolbar-btn" onClick={toolbarActions.link} title="Link">
-          <Link size={18} />
-        </button>
-        <button className="toolbar-btn" title="Image">
-          <Image size={18} />
-        </button>
+        <div className="editor-container editor-toolbar-inner">
+          <button className="toolbar-btn" onClick={toolbarActions.bold} title="Bold">
+            <Bold size={18} />
+          </button>
+          <button className="toolbar-btn" onClick={toolbarActions.italic} title="Italic">
+            <Italic size={18} />
+          </button>
+          <button className="toolbar-btn" onClick={toolbarActions.underline} title="Underline">
+            <Underline size={18} />
+          </button>
+          <div className="toolbar-divider" />
+          <button className="toolbar-btn" onClick={toolbarActions.bulletList} title="Bullet list">
+            <List size={18} />
+          </button>
+          <button className="toolbar-btn" onClick={toolbarActions.checkList} title="Check list">
+            <CheckSquare size={18} />
+          </button>
+          <div className="toolbar-divider" />
+          <button className="toolbar-btn" onClick={toolbarActions.link} title="Link">
+            <Link size={18} />
+          </button>
+          <button className="toolbar-btn" title="Image">
+            <Image size={18} />
+          </button>
+        </div>
       </div>
 
       {lightboxSrc && (

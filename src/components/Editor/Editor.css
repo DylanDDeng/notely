@@ -4,6 +4,16 @@
   flex-direction: column;
   background: #FFFFFF;
   overflow: hidden;
+  --editor-prose-max-width: 860px;
+  --editor-prose-padding: 32px;
+}
+
+.editor-container {
+  width: 100%;
+  max-width: var(--editor-prose-max-width);
+  margin: 0 auto;
+  padding: 0 var(--editor-prose-padding);
+  box-sizing: border-box;
 }
 
 .editor-loading,
@@ -30,11 +40,15 @@
 
 /* Header */
 .editor-header {
+  padding: 16px 0;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.editor-header-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 32px;
-  border-bottom: 1px solid #F3F4F6;
+  gap: 12px;
 }
 
 .editor-meta {
@@ -85,7 +99,7 @@
   color: #1F2937;
   border: none;
   outline: none;
-  padding: 24px 32px 12px;
+  padding: 24px 0 12px;
   background: transparent;
   width: 100%;
 }
@@ -100,7 +114,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 0 32px 16px;
+  padding: 0 0 16px;
 }
 
 .editor-tag-chip {
@@ -147,12 +161,23 @@
 .editor-content {
   flex: 1;
   overflow-y: auto;
-  padding: 0 32px;
+  padding: 0;
+  display: flex;
+}
+
+.editor-content-inner {
+  flex: 1;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-textarea {
+  display: block;
   width: 100%;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   border: none;
   outline: none;
   font-size: 15px;
@@ -348,12 +373,15 @@
 
 /* Toolbar */
 .editor-toolbar {
+  padding: 12px 0;
+  border-top: 1px solid #F3F4F6;
+  background: #FAFAFA;
+}
+
+.editor-toolbar-inner {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 32px;
-  border-top: 1px solid #F3F4F6;
-  background: #FAFAFA;
 }
 
 .toolbar-btn {
