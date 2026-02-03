@@ -21,6 +21,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const [htmlContent, setHtmlContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
@@ -31,14 +32,28 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       setContent(note.content || '');
       setTags(note.tags || []);
       setHasChanges(false);
+      setLightboxSrc(null);
       renderMarkdown(note.content || '');
     } else {
       setTitle('');
       setContent('');
       setTags([]);
       setHtmlContent('');
+      setLightboxSrc(null);
     }
   }, [note?.id]);
+
+  // Lightbox keyboard controls
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [lightboxSrc]);
 
   // 渲染 Markdown
   const renderMarkdown = async (text: string) => {
@@ -133,6 +148,34 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       const newCursorPos = start + before.length + selectedText.length;
       textarea.setSelectionRange(newCursorPos, newCursorPos);
     }, 0);
+  };
+
+  const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) {
+      setIsEditing(true);
+      return;
+    }
+
+    // Images: open lightbox
+    if (target.tagName === 'IMG') {
+      const img = target as HTMLImageElement;
+      if (img.src) {
+        setLightboxSrc(img.src);
+        return;
+      }
+    }
+
+    // Links: open in default browser
+    const link = target.closest('a') as HTMLAnchorElement | null;
+    if (link?.href) {
+      e.preventDefault();
+      window.electronAPI.openExternal(link.href);
+      return;
+    }
+
+    // Otherwise, start editing
+    setIsEditing(true);
   };
 
   const toolbarActions = {
@@ -247,7 +290,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         ) : (
           <div
             className="editor-preview"
-            onClick={() => setIsEditing(true)}
+            onClick={handlePreviewClick}
             dangerouslySetInnerHTML={{ 
               __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
             }}
@@ -281,6 +324,28 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
           <Image size={18} />
         </button>
       </div>
+
+      {lightboxSrc && (
+        <div className="image-lightbox" onClick={() => setLightboxSrc(null)}>
+          <button
+            type="button"
+            className="image-lightbox-close"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxSrc(null);
+            }}
+            aria-label="Close image preview"
+          >
+            ×
+          </button>
+          <img
+            className="image-lightbox-img"
+            src={lightboxSrc}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
