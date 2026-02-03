@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar/Sidebar';
 import NotesList from './components/NotesList/NotesList';
 import Editor from './components/Editor/Editor';
+import NoteModal from './components/NoteModal/NoteModal';
 import Settings from './components/Settings/Settings';
 import Welcome from './components/Welcome/Welcome';
 import { parseNote, generateNoteContent, generateFilename } from './utils/noteUtils';
@@ -10,6 +11,7 @@ import './styles/App.css';
 
 type ViewType = 'welcome' | 'main' | 'settings';
 type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
+type NotesView = 'list' | 'grid';
 
 const STORAGE_PATH_KEY = 'notes:storagePath';
 
@@ -41,6 +43,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [storagePath, setStoragePath] = useState<string>('');
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean>(true);
+  const [notesView, setNotesView] = useState<NotesView>('list');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalFullScreen, setIsModalFullScreen] = useState(false);
 
   // 初始化：检查是否是首次启动
   useEffect(() => {
@@ -107,6 +112,21 @@ function App() {
     }
   }, [notes]);
 
+  const handleOpenNote = useCallback((noteId: string) => {
+    handleSelectNote(noteId);
+    if (notesView === 'grid') {
+      setIsModalOpen(true);
+    }
+  }, [handleSelectNote, notesView]);
+
+  const handleNotesViewChange = useCallback((nextView: NotesView) => {
+    setNotesView(nextView);
+    if (nextView === 'list') {
+      setIsModalOpen(false);
+      setIsModalFullScreen(false);
+    }
+  }, []);
+
   // 创建新笔记
   const handleCreateNote = useCallback(async () => {
     const now = new Date();
@@ -121,11 +141,11 @@ function App() {
     try {
       await window.electronAPI.createNote({ filename, content });
       await loadNotes();
-      handleSelectNote(filename.replace('.md', ''));
+      handleOpenNote(filename.replace('.md', ''));
     } catch (err) {
       console.error('Failed to create note:', err);
     }
-  }, [loadNotes, handleSelectNote]);
+  }, [loadNotes, handleOpenNote]);
 
   // 保存笔记（用于自动保存）
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
@@ -173,6 +193,12 @@ function App() {
       }
     }
   }, [loadNotes]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      setIsModalFullScreen(false);
+    }
+  }, [isModalOpen]);
 
   const handleChangeStoragePath = useCallback(async (newPath: string) => {
     const result = await window.electronAPI.setStoragePath(newPath);
@@ -265,13 +291,26 @@ function App() {
       <NotesList
         notes={filteredNotes}
         selectedNoteId={selectedNoteId}
-        onSelectNote={handleSelectNote}
+        onOpenNote={handleOpenNote}
         activeFilter={activeFilter}
+        notesView={notesView}
+        onViewChange={handleNotesViewChange}
       />
-      <Editor
+      {notesView === 'list' && (
+        <Editor
+          note={currentNote}
+          onSave={handleSaveNote}
+          isLoading={isLoading && !currentNote}
+        />
+      )}
+      <NoteModal
+        isOpen={notesView === 'grid' && isModalOpen}
         note={currentNote}
         onSave={handleSaveNote}
         isLoading={isLoading && !currentNote}
+        isFullScreen={isModalFullScreen}
+        onToggleFullScreen={() => setIsModalFullScreen(prev => !prev)}
+        onClose={() => setIsModalOpen(false)}
       />
     </div>
   );

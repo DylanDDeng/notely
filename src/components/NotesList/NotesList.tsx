@@ -1,4 +1,4 @@
-import { ArrowUpDown, LayoutGrid } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid, LayoutList } from 'lucide-react';
 import { formatDate, getTagColor } from '../../utils/noteUtils';
 import type { Note } from '../../types';
 import './NotesList.css';
@@ -13,16 +13,25 @@ const FILTER_TITLES: Record<string, string> = {
 interface NotesListProps {
   notes: Note[];
   selectedNoteId: string | null;
-  onSelectNote: (noteId: string) => void;
+  onOpenNote: (noteId: string) => void;
   activeFilter: string;
+  notesView: 'list' | 'grid';
+  onViewChange: (view: 'list' | 'grid') => void;
 }
 
-function NotesList({ notes, selectedNoteId, onSelectNote, activeFilter }: NotesListProps) {
+function NotesList({
+  notes,
+  selectedNoteId,
+  onOpenNote,
+  activeFilter,
+  notesView,
+  onViewChange,
+}: NotesListProps) {
   const title = FILTER_TITLES[activeFilter] || 
     (activeFilter.startsWith('tag:') ? activeFilter.replace('tag:', '') : 'Notes');
 
   return (
-    <div className="notes-list">
+    <div className={`notes-list ${notesView === 'grid' ? 'grid-view' : ''}`}>
       {/* Header */}
       <div className="notes-list-header">
         <h2 className="notes-list-title">{title}</h2>
@@ -30,14 +39,25 @@ function NotesList({ notes, selectedNoteId, onSelectNote, activeFilter }: NotesL
           <button className="action-btn" title="Sort">
             <ArrowUpDown size={16} />
           </button>
-          <button className="action-btn" title="Grid view">
+          <button
+            className={`action-btn ${notesView === 'list' ? 'active' : ''}`}
+            title="List view"
+            onClick={() => onViewChange('list')}
+          >
+            <LayoutList size={16} />
+          </button>
+          <button
+            className={`action-btn ${notesView === 'grid' ? 'active' : ''}`}
+            title="Grid view"
+            onClick={() => onViewChange('grid')}
+          >
             <LayoutGrid size={16} />
           </button>
         </div>
       </div>
 
       {/* Notes */}
-      <div className="notes-container">
+      <div className={`notes-container ${notesView === 'grid' ? 'grid' : ''}`}>
         {notes.length === 0 ? (
           <div className="empty-state">
             <p>No notes found</p>
@@ -54,7 +74,7 @@ function NotesList({ notes, selectedNoteId, onSelectNote, activeFilter }: NotesL
               <div
                 key={note.id}
                 className={`note-card ${isSelected ? 'selected' : ''}`}
-                onClick={() => onSelectNote(note.id)}
+                onClick={() => onOpenNote(note.id)}
               >
                 <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
                 <p className="note-card-preview">
