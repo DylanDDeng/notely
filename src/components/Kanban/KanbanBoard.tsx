@@ -653,6 +653,8 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
                   e.preventDefault();
                 }}
                 onDrop={(e) => {
+                  const targetEl = e.target as HTMLElement | null;
+                  if (targetEl?.closest('.kanban-card')) return;
                   const payload =
                     dragPayloadRef.current ??
                     parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
@@ -701,6 +703,7 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
                           parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                         if (payload?.type !== 'card') return;
                         e.preventDefault();
+                        e.stopPropagation();
                         const index = column.cards.findIndex((c) => c.id === card.id);
                         if (index < 0) return;
                         const insertIndex = dragOverCard?.before ? index : index + 1;
