@@ -17,5 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),
   
   // Shell
-  openExternal: (url) => ipcRenderer.invoke('shell:openExternal'),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Export
+  exportNotePdf: (data) => ipcRenderer.invoke('notes:exportPdf', data),
 });

@@ -44,6 +44,31 @@ export interface KanbanFrontmatter {
   doneColumns?: string[];
 }
 
+export interface ExportPdfOptions {
+  pageSize: 'A4' | 'Letter';
+  orientation: 'portrait' | 'landscape';
+  includeHeader: boolean;
+  includeTitle: boolean;
+  includeDate: boolean;
+  includePageNumbers: boolean;
+  dateText?: string;
+  fontFamily?: string;
+}
+
+export interface ExportNotePdfRequest {
+  title: string;
+  html: string;
+  options: ExportPdfOptions;
+  suggestedFileName: string;
+}
+
+export interface ExportNotePdfResult {
+  success: boolean;
+  canceled?: boolean;
+  filePath?: string;
+  error?: string;
+}
+
 /**
  * 编辑器中的笔记数据
  */
@@ -109,6 +134,9 @@ export interface ElectronAPI {
   
   // Shell
   openExternal: (url: string) => Promise<void>;
+
+  // Export
+  exportNotePdf: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
 }
 
 /**

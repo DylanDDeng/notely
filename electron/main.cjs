@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const os = require('os');
 const http = require('http');
+const { pathToFileURL } = require('url');
 
 // 默认存储路径
 const DEFAULT_NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
@@ -34,6 +35,209 @@ function checkPort(port) {
       resolve(false);
     });
   });
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeCssFontFamily(value) {
+  return String(value || '')
+    .replace(/[\r\n]/g, ' ')
+    .replace(/[<>"]/g, '')
+    .trim();
+}
+
+function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeDate, includeHeader, fontFamily, baseHref }) {
+  const safeTitle = escapeHtml(title || 'Untitled');
+  const safeDate = escapeHtml(dateText || '');
+  const safeBaseHref = baseHref ? escapeHtml(baseHref) : '';
+  const family = sanitizeCssFontFamily(fontFamily);
+  const defaultFontStack = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+
+  const titleBlock = includeTitle ? `<h1 class="note-title">${safeTitle}</h1>` : '';
+  const dateBlock = includeDate && safeDate ? `<div class="note-date">${safeDate}</div>` : '';
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    ${safeBaseHref ? `<base href="${safeBaseHref}" />` : ''}
+    <title>${safeTitle}</title>
+    <style>
+      :root {
+        --app-font-family: ${family || defaultFontStack};
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background: #FFFFFF;
+        color: #374151;
+        font-family: var(--app-font-family);
+      }
+
+      .container {
+        width: 100%;
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 32px;
+      }
+
+      .note-title {
+        font-size: 32px;
+        font-weight: 700;
+        color: #1F2937;
+        margin: 0 0 6px 0;
+        line-height: 1.2;
+      }
+
+      .note-date {
+        font-size: 13px;
+        color: #9CA3AF;
+        margin: 0 0 24px 0;
+      }
+
+      .note-content {
+        font-size: 15px;
+        line-height: 1.8;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .note-content h1,
+      .note-content h2,
+      .note-content h3,
+      .note-content h4,
+      .note-content h5,
+      .note-content h6 {
+        margin-top: 24px;
+        margin-bottom: 12px;
+        font-weight: 600;
+        color: #1F2937;
+      }
+
+      .note-content h1 { font-size: 28px; }
+      .note-content h2 { font-size: 24px; }
+      .note-content h3 { font-size: 20px; }
+      .note-content h4 { font-size: 18px; }
+      .note-content h5 { font-size: 16px; }
+      .note-content h6 { font-size: 14px; }
+
+      .note-content p { margin-bottom: 16px; }
+
+      .note-content img {
+        max-width: min(100%, 720px);
+        height: auto;
+        display: block;
+        margin: 16px auto;
+        border-radius: 12px;
+        border: 1px solid #E5E7EB;
+        background: #F9FAFB;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+      }
+
+      .note-content ul,
+      .note-content ol {
+        margin-bottom: 16px;
+        padding-left: 24px;
+      }
+
+      .note-content li { margin-bottom: 8px; }
+
+      .note-content li > ul,
+      .note-content li > ol { margin-top: 8px; }
+
+      .note-content a {
+        color: #2563EB;
+        text-decoration: none;
+      }
+
+      .note-content a:hover { text-decoration: underline; }
+
+      .note-content code {
+        background: #F3F4F6;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 14px;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .note-content pre {
+        background: #F3F4F6;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin-bottom: 16px;
+        overflow-wrap: normal;
+        word-break: normal;
+      }
+
+      .note-content pre code {
+        background: none;
+        padding: 0;
+      }
+
+      .note-content blockquote {
+        border-left: 4px solid #E5E7EB;
+        padding-left: 16px;
+        margin-left: 0;
+        color: #6B7280;
+        margin-bottom: 16px;
+      }
+
+      .note-content hr {
+        border: none;
+        border-top: 1px solid #E5E7EB;
+        margin: 24px 0;
+      }
+
+      .note-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 16px;
+      }
+
+      .note-content th,
+      .note-content td {
+        border: 1px solid #E5E7EB;
+        padding: 8px 12px;
+        text-align: left;
+      }
+
+      .note-content th {
+        background: #F9FAFB;
+        font-weight: 600;
+      }
+
+      .note-content input[type="checkbox"] {
+        margin-right: 8px;
+      }
+
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      ${includeHeader ? '' : `${titleBlock}${dateBlock}`}
+      <div class="note-content">
+        ${bodyHtml || ''}
+      </div>
+    </div>
+  </body>
+</html>`;
 }
 
 // 创建窗口
@@ -184,6 +388,121 @@ ipcMain.handle('notes:delete', async (event, filename) => {
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+// IPC 处理：导出 PDF
+ipcMain.handle('notes:exportPdf', async (event, data) => {
+  try {
+    await ensureNotesDir();
+
+    const title = data?.title || 'Untitled';
+    const html = data?.html || '';
+    const options = data?.options || {};
+    const suggestedFileName = typeof data?.suggestedFileName === 'string' ? data.suggestedFileName.trim() : 'note.pdf';
+
+    const saveResult = await dialog.showSaveDialog({
+      title: 'Export as PDF',
+      defaultPath: path.join(currentNotesDir, suggestedFileName || 'note.pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const outPath = saveResult.filePath.toLowerCase().endsWith('.pdf')
+      ? saveResult.filePath
+      : `${saveResult.filePath}.pdf`;
+
+    const pageSize = options.pageSize === 'Letter' ? 'Letter' : 'A4';
+    const landscape = options.orientation === 'landscape';
+    const includeHeader = Boolean(options.includeHeader);
+    const includeTitle = Boolean(options.includeTitle);
+    const includeDate = Boolean(options.includeDate);
+    const includePageNumbers = Boolean(options.includePageNumbers);
+    const dateText = typeof options.dateText === 'string' ? options.dateText : '';
+    const fontFamily = typeof options.fontFamily === 'string' ? options.fontFamily : '';
+
+    const baseHref = pathToFileURL(`${currentNotesDir}${path.sep}`).toString();
+    const exportHtml = buildNoteExportHtml({
+      title,
+      dateText,
+      bodyHtml: html,
+      includeTitle,
+      includeDate,
+      includeHeader,
+      fontFamily,
+      baseHref,
+    });
+
+    const exportWindow = new BrowserWindow({
+      show: false,
+      width: 900,
+      height: 1100,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        devTools: false,
+      },
+    });
+
+    try {
+      await exportWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(exportHtml)}`);
+
+      // Wait for images (best effort, with timeout)
+      await exportWindow.webContents.executeJavaScript(
+        `Promise.race([
+          Promise.all(Array.from(document.images || []).map(img => img && img.complete ? Promise.resolve() : new Promise(resolve => { if (!img) return resolve(); img.addEventListener('load', resolve, { once: true }); img.addEventListener('error', resolve, { once: true }); }))),
+          new Promise(resolve => setTimeout(resolve, 15000)),
+        ])`,
+        true
+      );
+
+      const displayHeaderFooter = includeHeader || includePageNumbers;
+
+      const headerFont = sanitizeCssFontFamily(fontFamily) || 'system-ui';
+      const headerTemplate = displayHeaderFooter && includeHeader && (includeTitle || includeDate)
+        ? `<div style="width:100%; padding: 0 16px; font-size: 9px; color: #9CA3AF; font-family: ${headerFont};">
+            <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+              <div style="max-width: 70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                ${includeTitle ? escapeHtml(title) : ''}
+              </div>
+              <div style="max-width: 30%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;">
+                ${includeDate ? escapeHtml(dateText) : ''}
+              </div>
+            </div>
+          </div>`
+        : '<div></div>';
+
+      const footerTemplate = displayHeaderFooter && includePageNumbers
+        ? `<div style="width:100%; padding: 0 16px; font-size: 9px; color: #9CA3AF; font-family: ${headerFont};">
+            <div style="display:flex; justify-content:flex-end; width:100%;">
+              <span class="pageNumber"></span>/<span class="totalPages"></span>
+            </div>
+          </div>`
+        : '<div></div>';
+
+      const pdfBuffer = await exportWindow.webContents.printToPDF({
+        pageSize,
+        landscape,
+        printBackground: true,
+        displayHeaderFooter,
+        headerTemplate,
+        footerTemplate,
+      });
+
+      await fs.writeFile(outPath, pdfBuffer);
+    } finally {
+      exportWindow.destroy();
+    }
+
+    return { success: true, filePath: outPath };
+  } catch (err) {
+    console.error('Failed to export PDF:', err);
+    return { success: false, error: err?.message || String(err) };
   }
 });
 

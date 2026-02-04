@@ -3,9 +3,9 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { Pin, Share2, MoreHorizontal } from 'lucide-react';
+import { FileDown, MoreHorizontal, Pin, Share2, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
-import type { EditorNote, SaveNoteData } from '../../types';
+import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import './Editor.css';
 
 interface EditorProps {
@@ -38,7 +38,22 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const textOffsetMapRef = useRef<number[]>([]);
   const pendingSelectionRef = useRef<{ index?: number; scrollTop: number } | null>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const SAVE_DEBOUNCE_MS = 800;
+
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportOptions, setExportOptions] = useState<ExportPdfOptions>({
+    pageSize: 'A4',
+    orientation: 'portrait',
+    includeHeader: false,
+    includeTitle: true,
+    includeDate: true,
+    includePageNumbers: true,
+  });
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -51,6 +66,36 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [lightboxSrc]);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (target && moreMenuRef.current?.contains(target)) return;
+      setIsMoreMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [isMoreMenuOpen]);
+
+  useEffect(() => {
+    setIsMoreMenuOpen(false);
+    setIsExportOpen(false);
+  }, [note?.id]);
+
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const clearSaveDebounce = useCallback(() => {
     if (!saveDebounceRef.current) return;
@@ -475,6 +520,68 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     };
   }, [isEditing, exitEditing]);
 
+  const sanitizePdfFileName = useCallback((value: string): string => {
+    const trimmed = value.trim();
+    const base = trimmed || 'Untitled';
+    return base
+      .replace(/[\\/:*?"<>|]/g, '-')
+      .replace(/\s+/g, ' ')
+      .slice(0, 80)
+      .trim();
+  }, []);
+
+  const exportCurrentNoteToPdf = useCallback(async () => {
+    if (!note) return;
+    if (isExporting) return;
+
+    setIsExporting(true);
+    try {
+      await flushSaveForNote(note.id, note.filename);
+
+      const result = await remark()
+        .use(remarkGfm)
+        .use(remarkHtml)
+        .process(content);
+      const bodyHtml = String(result.value);
+
+      const now = new Date();
+      const dateText = note?.modifiedAt
+        ? format(new Date(note.modifiedAt), "MMM d, yyyy 'at' h:mm a")
+        : format(now, "MMM d, yyyy 'at' h:mm a");
+      const fontFamily = window.getComputedStyle(document.documentElement).getPropertyValue('--app-font-family').trim();
+
+      const safeTitle = title.trim() || 'Untitled';
+      const fileDate = note?.modifiedAt ? new Date(note.modifiedAt) : now;
+      const suggestedFileName = `${sanitizePdfFileName(safeTitle)}-${fileDate.toISOString().slice(0, 10)}.pdf`;
+
+      const request: ExportNotePdfRequest = {
+        title: safeTitle,
+        html: bodyHtml,
+        options: {
+          ...exportOptions,
+          dateText,
+          fontFamily,
+        },
+        suggestedFileName,
+      };
+
+      const exportResult = await window.electronAPI.exportNotePdf(request);
+      if (exportResult.canceled) return;
+
+      if (!exportResult.success) {
+        throw new Error(exportResult.error || 'Failed to export PDF');
+      }
+
+      showToast('success', 'PDF exported');
+      setIsExportOpen(false);
+      setIsMoreMenuOpen(false);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsExporting(false);
+    }
+  }, [content, exportOptions, flushSaveForNote, isExporting, note, sanitizePdfFileName, showToast, title]);
+
   const getPlainTextOffsetFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
     const previewEl = previewRef.current;
     if (!previewEl) return null;
@@ -609,9 +716,34 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             <button className="editor-action-btn">
               <Share2 size={18} />
             </button>
-            <button className="editor-action-btn">
-              <MoreHorizontal size={18} />
-            </button>
+            <div className="editor-more" ref={moreMenuRef}>
+              <button
+                type="button"
+                className="editor-action-btn"
+                onClick={() => setIsMoreMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={isMoreMenuOpen}
+                title="More"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {isMoreMenuOpen && (
+                <div className="editor-more-menu" role="menu">
+                  <button
+                    type="button"
+                    className="editor-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsExportOpen(true);
+                      setIsMoreMenuOpen(false);
+                    }}
+                  >
+                    <FileDown size={16} />
+                    <span>Export PDF</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -697,6 +829,165 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             alt=""
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {isExportOpen && (
+        <div
+          className="editor-export-overlay"
+          onClick={() => {
+            if (isExporting) return;
+            setIsExportOpen(false);
+          }}
+        >
+          <div
+            className="editor-export-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Export PDF"
+          >
+            <div className="editor-export-header">
+              <div className="editor-export-header-text">
+                <h2>Export PDF</h2>
+                <p>Choose your PDF settings</p>
+              </div>
+              <button
+                type="button"
+                className="editor-export-close"
+                onClick={() => setIsExportOpen(false)}
+                disabled={isExporting}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="editor-export-body">
+              <div className="editor-export-grid">
+                <label className="editor-export-field">
+                  <span>Page size</span>
+                  <select
+                    value={exportOptions.pageSize}
+                    onChange={(e) =>
+                      setExportOptions((prev) => ({
+                        ...prev,
+                        pageSize: e.target.value as ExportPdfOptions['pageSize'],
+                      }))
+                    }
+                    disabled={isExporting}
+                  >
+                    <option value="A4">A4</option>
+                    <option value="Letter">Letter</option>
+                  </select>
+                </label>
+
+                <label className="editor-export-field">
+                  <span>Orientation</span>
+                  <select
+                    value={exportOptions.orientation}
+                    onChange={(e) =>
+                      setExportOptions((prev) => ({
+                        ...prev,
+                        orientation: e.target.value as ExportPdfOptions['orientation'],
+                      }))
+                    }
+                    disabled={isExporting}
+                  >
+                    <option value="portrait">Portrait</option>
+                    <option value="landscape">Landscape</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="editor-export-options">
+                <label className="editor-export-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={exportOptions.includeHeader}
+                    onChange={(e) =>
+                      setExportOptions((prev) => ({
+                        ...prev,
+                        includeHeader: e.target.checked,
+                      }))
+                    }
+                    disabled={isExporting}
+                  />
+                  <span>Header (repeat each page)</span>
+                </label>
+
+                <label className="editor-export-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={exportOptions.includeTitle}
+                    onChange={(e) =>
+                      setExportOptions((prev) => ({
+                        ...prev,
+                        includeTitle: e.target.checked,
+                      }))
+                    }
+                    disabled={isExporting}
+                  />
+                  <span>Title</span>
+                </label>
+
+                <label className="editor-export-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={exportOptions.includeDate}
+                    onChange={(e) =>
+                      setExportOptions((prev) => ({
+                        ...prev,
+                        includeDate: e.target.checked,
+                      }))
+                    }
+                    disabled={isExporting}
+                  />
+                  <span>Date</span>
+                </label>
+
+                <label className="editor-export-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={exportOptions.includePageNumbers}
+                    onChange={(e) =>
+                      setExportOptions((prev) => ({
+                        ...prev,
+                        includePageNumbers: e.target.checked,
+                      }))
+                    }
+                    disabled={isExporting}
+                  />
+                  <span>Page numbers</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="editor-export-footer">
+              <button
+                type="button"
+                className="editor-export-btn secondary"
+                onClick={() => setIsExportOpen(false)}
+                disabled={isExporting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="editor-export-btn primary"
+                onClick={exportCurrentNoteToPdf}
+                disabled={isExporting}
+              >
+                {isExporting ? 'Exporting…' : 'Export'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`editor-toast ${toast.type}`} role="status">
+          {toast.message}
         </div>
       )}
     </div>
