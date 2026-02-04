@@ -3,7 +3,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { Pin, Share2, MoreHorizontal, Bold, Italic, Underline, List, CheckSquare, Link, Image } from 'lucide-react';
+import { Pin, Share2, MoreHorizontal } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
 import type { EditorNote, SaveNoteData } from '../../types';
 import './Editor.css';
@@ -475,40 +475,6 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     };
   }, [isEditing, exitEditing]);
 
-  // 工具栏操作
-  const insertMarkdown = (before: string, after: string = '') => {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end);
-    const newText = content.substring(0, start) + before + selectedText + after + content.substring(end);
-    
-    setContent(newText);
-    setHasChanges(true);
-    renderMarkdown(newText);
-    if (note) {
-      draftChangeTokenRef.current += 1;
-      draftCacheRef.current[note.id] = {
-        title,
-        content: newText,
-        tags,
-        date: note.date,
-        token: draftChangeTokenRef.current,
-        filename: note.filename,
-      };
-      scheduleSave();
-    }
-    
-    // 恢复光标位置
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + before.length + selectedText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
-
   const getPlainTextOffsetFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
     const previewEl = previewRef.current;
     if (!previewEl) return null;
@@ -581,15 +547,6 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
 
     // Otherwise, start editing
     setIsEditing(true);
-  };
-
-  const toolbarActions = {
-    bold: () => insertMarkdown('**', '**'),
-    italic: () => insertMarkdown('*', '*'),
-    underline: () => insertMarkdown('<u>', '</u>'),
-    bulletList: () => insertMarkdown('- '),
-    checkList: () => insertMarkdown('- [ ] '),
-    link: () => insertMarkdown('[', '](url)'),
   };
 
   if (isLoading) {
@@ -718,35 +675,6 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               }}
             />
           )}
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="editor-toolbar">
-        <div className="editor-container editor-toolbar-inner">
-          <button className="toolbar-btn" onClick={toolbarActions.bold} title="Bold">
-            <Bold size={18} />
-          </button>
-          <button className="toolbar-btn" onClick={toolbarActions.italic} title="Italic">
-            <Italic size={18} />
-          </button>
-          <button className="toolbar-btn" onClick={toolbarActions.underline} title="Underline">
-            <Underline size={18} />
-          </button>
-          <div className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={toolbarActions.bulletList} title="Bullet list">
-            <List size={18} />
-          </button>
-          <button className="toolbar-btn" onClick={toolbarActions.checkList} title="Check list">
-            <CheckSquare size={18} />
-          </button>
-          <div className="toolbar-divider" />
-          <button className="toolbar-btn" onClick={toolbarActions.link} title="Link">
-            <Link size={18} />
-          </button>
-          <button className="toolbar-btn" title="Image">
-            <Image size={18} />
-          </button>
         </div>
       </div>
 
