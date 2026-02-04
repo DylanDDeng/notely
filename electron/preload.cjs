@@ -21,4 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Export
   exportNotePdf: (data) => ipcRenderer.invoke('notes:exportPdf', data),
+  // Backward-compatible alias (older builds may call exportNotePDF)
+  exportNotePDF: (data) => ipcRenderer.invoke('notes:exportPdf', data),
 });
