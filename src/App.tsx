@@ -355,6 +355,7 @@ function App() {
         onFilterChange={setActiveFilter}
         onCreateNote={handleCreateNote}
         onOpenSettings={() => setView('settings')}
+        storagePath={storagePath}
         tags={allTags}
         tagCounts={tagCounts}
         searchQuery={searchQuery}

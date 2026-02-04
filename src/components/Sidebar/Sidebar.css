@@ -95,6 +95,89 @@
   padding: 0 8px;
 }
 
+.section-title-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.section-title-btn:hover .section-title-text {
+  color: #6B7280;
+}
+
+.section-title-btn:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.section-title-left,
+.section-title-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.section-title-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9CA3AF;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.section-chevron {
+  color: #9CA3AF;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.section-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.selected-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 160px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  overflow: hidden;
+}
+
+.selected-tag-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.selected-tag-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-tag-pill-count {
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 /* Nav List */
 .nav-list {
   list-style: none;

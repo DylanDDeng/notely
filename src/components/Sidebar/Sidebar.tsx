@@ -3,11 +3,13 @@ import {
   FileText,
   Star, 
   Archive, 
-  Trash2, 
-  Plus, 
-  Settings, 
-  Search,
+	Trash2, 
+	Plus, 
+	Settings, 
+	Search,
+	ChevronDown,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FolderItem } from '../../types';
 import { getTagColor } from '../../utils/noteUtils';
 import './Sidebar.css';
@@ -20,31 +22,95 @@ const FOLDERS: FolderItem[] = [
 ];
 
 interface SidebarProps {
-  activeFilter: string;
-  onFilterChange: (filter: string) => void;
-  onCreateNote: () => void;
-  onOpenSettings: () => void;
-  tags: string[];
-  tagCounts?: Record<string, number>;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
+	activeFilter: string;
+	onFilterChange: (filter: string) => void;
+	onCreateNote: () => void;
+	onOpenSettings: () => void;
+	storagePath: string;
+	tags: string[];
+	tagCounts?: Record<string, number>;
+	searchQuery: string;
+	onSearchChange: (query: string) => void;
 }
 
-function Sidebar({ 
-  activeFilter, 
-  onFilterChange, 
-  onCreateNote, 
-  onOpenSettings,
-  tags,
-  tagCounts = {},
-  searchQuery,
-  onSearchChange,
-}: SidebarProps) {
-  const handleTagClick = (tag: string) => {
-    onFilterChange(`tag:${tag}`);
-  };
+const TAGS_COLLAPSED_BY_VAULT_KEY = 'notes:sidebar:tagsCollapsedByVault';
 
-  return (
+const readTagsCollapsedByVault = (): Record<string, boolean> => {
+	try {
+		const raw = localStorage.getItem(TAGS_COLLAPSED_BY_VAULT_KEY);
+		if (!raw) return {};
+		const parsed = JSON.parse(raw) as unknown;
+		if (!parsed || typeof parsed !== 'object') return {};
+		return parsed as Record<string, boolean>;
+	} catch {
+		return {};
+	}
+};
+
+const writeTagsCollapsedByVault = (value: Record<string, boolean>) => {
+	try {
+		localStorage.setItem(TAGS_COLLAPSED_BY_VAULT_KEY, JSON.stringify(value));
+	} catch {
+		// ignore
+	}
+};
+
+function Sidebar({ 
+	activeFilter, 
+	onFilterChange, 
+	onCreateNote, 
+	onOpenSettings,
+	storagePath,
+	tags,
+	tagCounts = {},
+	searchQuery,
+	onSearchChange,
+}: SidebarProps) {
+	const [isTagsCollapsed, setIsTagsCollapsed] = useState<boolean>(() => {
+		const map = readTagsCollapsedByVault();
+		return Boolean(map[storagePath]);
+	});
+
+	useEffect(() => {
+		const map = readTagsCollapsedByVault();
+		setIsTagsCollapsed(Boolean(map[storagePath]));
+	}, [storagePath]);
+
+	const selectedTag = useMemo(() => {
+		if (!activeFilter.startsWith('tag:')) return null;
+		return activeFilter.slice('tag:'.length);
+	}, [activeFilter]);
+
+	const selectedTagColor = useMemo(() => {
+		if (!selectedTag) return null;
+		return getTagColor(selectedTag);
+	}, [selectedTag]);
+
+	const selectedTagCount = useMemo(() => {
+		if (!selectedTag) return 0;
+		return tagCounts[selectedTag] ?? 0;
+	}, [selectedTag, tagCounts]);
+
+	const persistTagsCollapsed = useCallback((nextCollapsed: boolean) => {
+		setIsTagsCollapsed(nextCollapsed);
+		const map = readTagsCollapsedByVault();
+		if (nextCollapsed) {
+			map[storagePath] = true;
+		} else {
+			delete map[storagePath];
+		}
+		writeTagsCollapsedByVault(map);
+	}, [storagePath]);
+
+	const toggleTagsCollapsed = useCallback(() => {
+		persistTagsCollapsed(!isTagsCollapsed);
+	}, [isTagsCollapsed, persistTagsCollapsed]);
+
+	const handleTagClick = (tag: string) => {
+		onFilterChange(`tag:${tag}`);
+	};
+
+	return (
     <aside className="sidebar">
       {/* Header */}
       <div className="sidebar-header">
@@ -96,29 +162,59 @@ function Sidebar({
 
       {/* Tags */}
       <nav className="sidebar-section">
-        <h3 className="section-title">TAGS</h3>
-        <ul className="nav-list">
-          {tags.map((tag) => {
-            const isActive = activeFilter === `tag:${tag}`;
-            const color = getTagColor(tag);
-            const count = tagCounts[tag] ?? 0;
-            return (
-              <li key={tag}>
-                <button
-                  className={`nav-item ${isActive ? 'active' : ''}`}
-                  onClick={() => handleTagClick(tag)}
-                >
-                  <span 
-                    className="tag-dot" 
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="nav-label">{tag}</span>
-                  <span className="nav-count">{count}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        <button
+          type="button"
+          className="section-title-btn"
+          onClick={toggleTagsCollapsed}
+        >
+          <span className="section-title-left">
+            <span className="section-title-text">TAGS · {tags.length}</span>
+          </span>
+          <span className="section-title-right">
+            {isTagsCollapsed && selectedTag && selectedTagColor && (
+              <span
+                className="selected-tag-pill"
+                style={{
+                  backgroundColor: `${selectedTagColor}14`,
+                  borderColor: `${selectedTagColor}2A`,
+                  color: selectedTagColor,
+                }}
+              >
+                <span className="selected-tag-pill-dot" style={{ backgroundColor: selectedTagColor }} />
+                <span className="selected-tag-pill-label">{selectedTag}</span>
+                <span className="selected-tag-pill-count">{selectedTagCount}</span>
+              </span>
+            )}
+            <ChevronDown
+              size={14}
+              className={`section-chevron ${isTagsCollapsed ? 'collapsed' : ''}`}
+            />
+          </span>
+        </button>
+        {!isTagsCollapsed && (
+          <ul className="nav-list">
+            {tags.map((tag) => {
+              const isActive = activeFilter === `tag:${tag}`;
+              const color = getTagColor(tag);
+              const count = tagCounts[tag] ?? 0;
+              return (
+                <li key={tag}>
+                  <button
+                    className={`nav-item ${isActive ? 'active' : ''}`}
+                    onClick={() => handleTagClick(tag)}
+                  >
+                    <span
+                      className="tag-dot"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="nav-label">{tag}</span>
+                    <span className="nav-count">{count}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </nav>
 
       {/* New Note Button */}
