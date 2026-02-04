@@ -1,6 +1,7 @@
 import { 
   Feather, 
   FileText,
+  KanbanSquare,
   Star, 
   Archive, 
 	Trash2, 
@@ -16,6 +17,7 @@ import './Sidebar.css';
 
 const FOLDERS: FolderItem[] = [
   { id: 'all', label: 'All Notes', icon: FileText, count: null },
+  { id: 'kanban', label: 'Kanban Board', icon: KanbanSquare, count: null },
   { id: 'favorites', label: 'Favorites', icon: Star, count: null },
   { id: 'archive', label: 'Archive', icon: Archive, count: null },
   { id: 'trash', label: 'Trash', icon: Trash2, count: null },

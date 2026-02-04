@@ -1,5 +1,5 @@
 import matter from 'gray-matter';
-import type { NoteFrontmatter } from '../types';
+import type { KanbanFrontmatter, NoteFrontmatter } from '../types';
 
 function filenameToTitle(filename: string): string {
   return filename.replace(/\.md$/i, '').trim();
@@ -11,9 +11,12 @@ function filenameToTitle(filename: string): string {
 export function parseNote(content: string, filename?: string): ParsedNote {
   const parsed = matter(content);
   const titleFromFilename = filename ? filenameToTitle(filename) : '';
-  const title = titleFromFilename || 'Untitled';
+  const titleFromFrontmatter = typeof parsed.data.title === 'string' ? parsed.data.title.trim() : '';
+  const title = titleFromFrontmatter || titleFromFilename || 'Untitled';
   const date = (parsed.data.date as string) || new Date().toISOString();
   const tags = (parsed.data.tags as string[]) || [];
+  const type = typeof parsed.data.type === 'string' ? parsed.data.type.trim() : undefined;
+  const kanban = normalizeKanbanFrontmatter(parsed.data.kanban);
   
   return {
     title,
@@ -21,8 +24,20 @@ export function parseNote(content: string, filename?: string): ParsedNote {
     tags,
     contentBody: parsed.content.trim(),
     rawContent: content,
+    type,
+    kanban,
   };
 }
+
+const normalizeKanbanFrontmatter = (value: unknown): KanbanFrontmatter | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const doneColumns = (value as { doneColumns?: unknown }).doneColumns;
+  if (!Array.isArray(doneColumns)) return undefined;
+  const sanitized = doneColumns
+    .map((col) => (typeof col === 'string' ? col.trim() : ''))
+    .filter(Boolean);
+  return sanitized.length > 0 ? { doneColumns: sanitized } : undefined;
+};
 
 /**
  * 解析后的笔记数据
@@ -33,6 +48,8 @@ export interface ParsedNote {
   tags: string[];
   contentBody: string;
   rawContent: string;
+  type?: string;
+  kanban?: KanbanFrontmatter;
 }
 
 /**

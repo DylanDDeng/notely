@@ -6,6 +6,9 @@ import NoteModal from './components/NoteModal/NoteModal';
 import Settings from './components/Settings/Settings';
 import Welcome from './components/Welcome/Welcome';
 import { parseNote, generateNoteContent, generateFilename } from './utils/noteUtils';
+import KanbanBoardsList from './components/Kanban/KanbanBoardsList';
+import KanbanBoard from './components/Kanban/KanbanBoard';
+import { DEFAULT_DONE_COLUMNS, DEFAULT_KANBAN_COLUMNS, createId, serializeKanbanMarkdown } from './utils/kanbanUtils';
 import type { Note, RawNote, SaveNoteData, EditorNote } from './types';
 import './styles/App.css';
 
@@ -63,6 +66,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModalFullScreen, setIsModalFullScreen] = useState(false);
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
+  const [selectedKanbanId, setSelectedKanbanId] = useState<string | null>(null);
 
   useEffect(() => {
     const trimmed = appFontFamily.trim();
@@ -124,7 +128,7 @@ function App() {
   // 选择笔记
   const handleSelectNote = useCallback((noteId: string) => {
     setSelectedNoteId(noteId);
-    const note = notes.find(n => n.id === noteId);
+    const note = notes.find(n => n.id === noteId && n.type !== 'kanban');
     if (note) {
       setCurrentNote({
         id: note.id,
@@ -169,10 +173,13 @@ function App() {
       await window.electronAPI.createNote({ filename, content });
       await loadNotes();
       handleOpenNote(filename.replace('.md', ''));
+      if (activeFilter === 'kanban') {
+        setActiveFilter('all');
+      }
     } catch (err) {
       console.error('Failed to create note:', err);
     }
-  }, [loadNotes, handleOpenNote]);
+  }, [activeFilter, handleOpenNote, loadNotes]);
 
   // 保存笔记（用于自动保存）
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
@@ -280,7 +287,11 @@ function App() {
   }, []);
 
   // 过滤笔记
-  const filteredNotes = notes.filter(note => {
+  const visibleNotes = notes.filter(note => note.type !== 'kanban');
+  const kanbanNotes = notes.filter(note => note.type === 'kanban');
+  const selectedKanbanNote = selectedKanbanId ? kanbanNotes.find((n) => n.id === selectedKanbanId) ?? null : null;
+
+  const filteredNotes = visibleNotes.filter(note => {
     // 搜索过滤
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -310,15 +321,96 @@ function App() {
   });
 
   // 获取所有标签
-  const allTags = [...new Set(notes.flatMap(n => n.tags || []))]
+  const allTags = [...new Set(visibleNotes.flatMap(n => n.tags || []))]
     .filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
-  const tagCounts = notes.reduce<Record<string, number>>((acc, note) => {
+  const tagCounts = visibleNotes.reduce<Record<string, number>>((acc, note) => {
     (note.tags || []).forEach(tag => {
       if (['favorite', 'archive', 'trash'].includes(tag)) return;
       acc[tag] = (acc[tag] ?? 0) + 1;
     });
     return acc;
   }, {});
+
+  useEffect(() => {
+    if (activeFilter !== 'kanban') return;
+    if (selectedKanbanId && kanbanNotes.some((b) => b.id === selectedKanbanId)) return;
+    setSelectedKanbanId(kanbanNotes[0]?.id ?? null);
+  }, [activeFilter, kanbanNotes, selectedKanbanId]);
+
+  const handleCreateKanbanBoard = useCallback(
+    async (title: string) => {
+      const now = new Date();
+      const baseFilename = generateFilename(title, now).replace(/\.md$/i, '');
+      const filename = `${baseFilename}-${now.getTime()}.md`;
+      const frontmatter = {
+        title,
+        date: now.toISOString(),
+        tags: [] as string[],
+        type: 'kanban',
+        kanban: { doneColumns: [...DEFAULT_DONE_COLUMNS] },
+      };
+      const body = serializeKanbanMarkdown({
+        preamble: '',
+        columns: DEFAULT_KANBAN_COLUMNS.map((colTitle) => ({
+          id: createId(),
+          title: colTitle,
+          cards: [],
+        })),
+      });
+      const content = generateNoteContent(frontmatter, body);
+
+      await window.electronAPI.createNote({ filename, content });
+      await loadNotes();
+      setActiveFilter('kanban');
+      setSelectedKanbanId(filename.replace(/\.md$/i, ''));
+    },
+    [loadNotes]
+  );
+
+  const handleDeleteKanbanBoard = useCallback(
+    async (boardId: string) => {
+      const board = kanbanNotes.find((b) => b.id === boardId);
+      if (!board) return;
+      if (!window.confirm(`Delete board "${board.title || 'Untitled'}"?`)) return;
+
+      const result = await window.electronAPI.deleteNote(board.filename);
+      if (!result.success) {
+        console.error('Failed to delete board:', result.error);
+        return;
+      }
+
+      setNotes((prev) => prev.filter((n) => n.id !== boardId));
+      if (selectedKanbanId === boardId) {
+        setSelectedKanbanId(null);
+      }
+    },
+    [kanbanNotes, selectedKanbanId]
+  );
+
+  const handleSaveKanbanBoard = useCallback(async (noteId: string, filename: string, content: string) => {
+    const now = new Date();
+    const result = await window.electronAPI.saveNote({ filename, content });
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to save kanban board');
+    }
+
+    const parsed = parseNote(content, filename);
+    setNotes((prevNotes) => {
+      const updated = prevNotes
+        .map((note) => {
+          if (note.id !== noteId) return note;
+          return {
+            ...note,
+            filename,
+            content,
+            modifiedAt: now,
+            ...parsed,
+          };
+        })
+        .sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
+      return updated;
+    });
+  }, []);
 
   // 欢迎页
   if (view === 'welcome' || isFirstLaunch) {
@@ -361,30 +453,45 @@ function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
-      <NotesList
-        notes={filteredNotes}
-        selectedNoteId={selectedNoteId}
-        onOpenNote={handleOpenNote}
-        activeFilter={activeFilter}
-        notesView={notesView}
-        onViewChange={handleNotesViewChange}
-      />
-      {notesView === 'list' && (
-        <Editor
-          note={currentNote}
-          onSave={handleSaveNote}
-          isLoading={isLoading && !currentNote}
-        />
+      {activeFilter === 'kanban' ? (
+        <>
+          <KanbanBoardsList
+            boards={kanbanNotes}
+            selectedBoardId={selectedKanbanId}
+            onSelectBoard={setSelectedKanbanId}
+            onCreateBoard={handleCreateKanbanBoard}
+            onDeleteBoard={handleDeleteKanbanBoard}
+          />
+          <KanbanBoard boardNote={selectedKanbanNote} onSaveBoard={handleSaveKanbanBoard} />
+        </>
+      ) : (
+        <>
+          <NotesList
+            notes={filteredNotes}
+            selectedNoteId={selectedNoteId}
+            onOpenNote={handleOpenNote}
+            activeFilter={activeFilter}
+            notesView={notesView}
+            onViewChange={handleNotesViewChange}
+          />
+          {notesView === 'list' && (
+            <Editor
+              note={currentNote}
+              onSave={handleSaveNote}
+              isLoading={isLoading && !currentNote}
+            />
+          )}
+          <NoteModal
+            isOpen={notesView === 'grid' && isModalOpen}
+            note={currentNote}
+            onSave={handleSaveNote}
+            isLoading={isLoading && !currentNote}
+            isFullScreen={isModalFullScreen}
+            onToggleFullScreen={() => setIsModalFullScreen(prev => !prev)}
+            onClose={() => setIsModalOpen(false)}
+          />
+        </>
       )}
-      <NoteModal
-        isOpen={notesView === 'grid' && isModalOpen}
-        note={currentNote}
-        onSave={handleSaveNote}
-        isLoading={isLoading && !currentNote}
-        isFullScreen={isModalFullScreen}
-        onToggleFullScreen={() => setIsModalFullScreen(prev => !prev)}
-        onClose={() => setIsModalOpen(false)}
-      />
     </div>
   );
 }

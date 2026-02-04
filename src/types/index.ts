@@ -11,6 +11,8 @@ export interface Note {
   tags: string[];
   contentBody: string;
   rawContent: string;
+  type?: string;
+  kanban?: KanbanFrontmatter;
   modifiedAt: Date;
   createdAt: Date;
 }
@@ -34,6 +36,12 @@ export interface NoteFrontmatter {
   title: string;
   date: string;
   tags: string[];
+  type?: string;
+  kanban?: KanbanFrontmatter;
+}
+
+export interface KanbanFrontmatter {
+  doneColumns?: string[];
 }
 
 /**
