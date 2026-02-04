@@ -708,6 +708,7 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
                           <button
                             type="button"
                             className="kanban-card-title-btn"
+                            draggable={!isEditing}
                             onClick={() => setEditingCardId(card.id)}
                           >
                             {card.title}
