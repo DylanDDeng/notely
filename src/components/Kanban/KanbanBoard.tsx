@@ -93,6 +93,7 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
   const pendingSaveRef = useRef(false);
+  const dragPayloadRef = useRef<DragPayload | null>(null);
   const dataRef = useRef<KanbanBoardData>(data);
   const titleRef = useRef(boardTitle);
   const doneColumnsRef = useRef(doneColumns);
@@ -523,16 +524,21 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
       <div
         className="kanban-canvas"
         onDragOver={(e) => {
-          const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+          const payload =
+            dragPayloadRef.current ??
+            parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
           if (payload?.type === 'column') {
             e.preventDefault();
           }
         }}
         onDrop={(e) => {
-          const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+          const payload =
+            dragPayloadRef.current ??
+            parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
           if (payload?.type !== 'column') return;
           e.preventDefault();
           setDragOverColumnId(null);
+          dragPayloadRef.current = null;
         }}
       >
         {data.columns.map((column) => {
@@ -551,26 +557,38 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
               key={column.id}
               className={`kanban-column ${dragOverColumnId === column.id ? 'drag-over' : ''}`}
               onDragOver={(e) => {
-                const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+                const payload =
+                  dragPayloadRef.current ??
+                  parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                 if (payload?.type === 'column') {
                   e.preventDefault();
                   setDragOverColumnId(column.id);
                 }
               }}
               onDrop={(e) => {
-                const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+                const payload =
+                  dragPayloadRef.current ??
+                  parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                 if (payload?.type !== 'column') return;
                 e.preventDefault();
                 moveColumnById(payload.columnId, column.id);
                 setDragOverColumnId(null);
+                dragPayloadRef.current = null;
               }}
             >
               <div
                 className="kanban-column-header"
                 draggable={editingColumnId !== column.id}
                 onDragStart={(e) => {
-                  e.dataTransfer.setData(DND_MIME, JSON.stringify({ type: 'column', columnId: column.id }));
+                  const payload: DragPayload = { type: 'column', columnId: column.id };
+                  dragPayloadRef.current = payload;
+                  e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
+                  e.dataTransfer.setData('text/plain', JSON.stringify(payload));
                   e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => {
+                  dragPayloadRef.current = null;
+                  setDragOverColumnId(null);
                 }}
               >
                 <div className="kanban-column-title-wrap">
@@ -628,17 +646,22 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
               <div
                 className="kanban-cards"
                 onDragOver={(e) => {
-                  const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+                  const payload =
+                    dragPayloadRef.current ??
+                    parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                   if (payload?.type !== 'card') return;
                   e.preventDefault();
                 }}
                 onDrop={(e) => {
-                  const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+                  const payload =
+                    dragPayloadRef.current ??
+                    parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                   if (payload?.type !== 'card') return;
                   e.preventDefault();
                   const toIndex = column.cards.length;
                   moveCard({ cardId: payload.cardId, fromColumnId: payload.fromColumnId }, { columnId: column.id, index: toIndex });
                   setDragOverCard(null);
+                  dragPayloadRef.current = null;
                 }}
               >
                 {filteredCards.map((card) => {
@@ -652,14 +675,20 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
                       }`}
                       draggable={!isEditing}
                       onDragStart={(e) => {
-                        e.dataTransfer.setData(DND_MIME, JSON.stringify({ type: 'card', cardId: card.id, fromColumnId: column.id }));
+                        const payload: DragPayload = { type: 'card', cardId: card.id, fromColumnId: column.id };
+                        dragPayloadRef.current = payload;
+                        e.dataTransfer.setData(DND_MIME, JSON.stringify(payload));
+                        e.dataTransfer.setData('text/plain', JSON.stringify(payload));
                         e.dataTransfer.effectAllowed = 'move';
                       }}
                       onDragEnd={() => {
+                        dragPayloadRef.current = null;
                         setDragOverCard(null);
                       }}
                       onDragOver={(e) => {
-                        const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+                        const payload =
+                          dragPayloadRef.current ??
+                          parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                         if (payload?.type !== 'card') return;
                         e.preventDefault();
                         const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
@@ -667,7 +696,9 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
                         setDragOverCard({ cardId: card.id, columnId: column.id, before });
                       }}
                       onDrop={(e) => {
-                        const payload = parseDragPayload(e.dataTransfer.getData(DND_MIME));
+                        const payload =
+                          dragPayloadRef.current ??
+                          parseDragPayload(e.dataTransfer.getData(DND_MIME) || e.dataTransfer.getData('text/plain'));
                         if (payload?.type !== 'card') return;
                         e.preventDefault();
                         const index = column.cards.findIndex((c) => c.id === card.id);
@@ -675,6 +706,7 @@ function KanbanBoard({ boardNote, onSaveBoard }: KanbanBoardProps) {
                         const insertIndex = dragOverCard?.before ? index : index + 1;
                         moveCard({ cardId: payload.cardId, fromColumnId: payload.fromColumnId }, { columnId: column.id, index: insertIndex });
                         setDragOverCard(null);
+                        dragPayloadRef.current = null;
                       }}
                     >
                       <label className="kanban-card-checkbox">
