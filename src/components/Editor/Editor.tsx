@@ -192,8 +192,13 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const resizeTextarea = useCallback(() => {
     const textarea = contentRef.current;
     if (!textarea) return;
+    const container = editorContentRef.current;
+    const prevScrollTop = container?.scrollTop ?? 0;
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
+    if (container && container.scrollTop < prevScrollTop) {
+      container.scrollTop = prevScrollTop;
+    }
   }, []);
 
   const getCaretTopInTextarea = (textarea: HTMLTextAreaElement, caretIndex: number): number => {
@@ -485,11 +490,6 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         pendingSelectionRef.current = null;
       });
     });
-  }, [isEditing, content, resizeTextarea]);
-
-  useEffect(() => {
-    if (!isEditing) return;
-    resizeTextarea();
   }, [isEditing, content, resizeTextarea]);
 
   useEffect(() => {
