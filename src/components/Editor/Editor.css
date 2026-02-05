@@ -6,11 +6,19 @@
   overflow: hidden;
   --editor-prose-max-width: 860px;
   --editor-prose-padding: 32px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.editor.is-preview .editor-preview,
+.editor.is-preview .editor-preview * {
   -webkit-user-select: text;
   user-select: text;
 }
 
-.editor * {
+.editor.is-editing .editor-title-input,
+.editor.is-editing .editor-tag-input,
+.editor.is-editing .editor-textarea {
   -webkit-user-select: text;
   user-select: text;
 }

@@ -733,7 +733,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
 
   return (
-    <div className="editor">
+    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'}`}>
       {/* Header */}
       <div className="editor-header">
         <div className="editor-container editor-header-inner">
