@@ -1,4 +1,4 @@
-import { ArrowUpDown, LayoutGrid, LayoutList, Pin } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid, LayoutList, Pin, Star } from 'lucide-react';
 import { formatDate, getTagColor } from '../../utils/noteUtils';
 import type { Note } from '../../types';
 import './NotesList.css';
@@ -77,6 +77,7 @@ function NotesList({
 	          notes.map((note) => {
 	            const isSelected = note.id === selectedNoteId;
 	            const isPinned = Boolean(note.tags?.includes('pinned'));
+	            const isFavorite = Boolean(note.tags?.includes('favorite'));
 	            const mainTag = note.tags?.find(tag => 
 	              !['favorite', 'archive', 'trash', 'pinned'].includes(tag)
 	            );
@@ -92,6 +93,11 @@ function NotesList({
 	                  {isPinned && (
 	                    <span className="note-card-pin" title="Pinned" aria-label="Pinned">
 	                      <Pin size={14} />
+	                    </span>
+	                  )}
+	                  {isFavorite && (
+	                    <span className="note-card-star" title="Favorite" aria-label="Favorite">
+	                      <Star size={14} />
 	                    </span>
 	                  )}
 	                </div>

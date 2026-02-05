@@ -148,12 +148,24 @@
   flex-shrink: 0;
 }
 
+.note-card-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #F59E0B;
+  flex-shrink: 0;
+}
+
 .note-card.selected .note-card-title {
   color: #1E40AF;
 }
 
 .note-card.selected .note-card-pin {
   color: #2563EB;
+}
+
+.note-card.selected .note-card-star {
+  color: #D97706;
 }
 
 .note-card-preview {

@@ -3,7 +3,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { FileDown, MoreHorizontal, Pin, Share2, X } from 'lucide-react';
+import { FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import './Editor.css';
@@ -418,7 +418,8 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const togglePinned = useCallback(() => {
     if (!note) return;
 
-    const hadPendingDraft = Boolean(draftCacheRef.current[note.id]);
+    const existingDraft = draftCacheRef.current[note.id];
+    const preserveModifiedAt = existingDraft ? Boolean(existingDraft.preserveModifiedAt) : true;
     const nextTags = tags.includes('pinned') ? tags.filter((tag) => tag !== 'pinned') : [...tags, 'pinned'];
     setTags(nextTags);
     setHasChanges(true);
@@ -431,7 +432,30 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       date: note.date,
       token: draftChangeTokenRef.current,
       filename: note.filename,
-      preserveModifiedAt: !hadPendingDraft,
+      preserveModifiedAt,
+    };
+
+    void flushSaveForNote(note.id, note.filename);
+  }, [content, flushSaveForNote, note, tags, title]);
+
+  const toggleFavorite = useCallback(() => {
+    if (!note) return;
+
+    const existingDraft = draftCacheRef.current[note.id];
+    const preserveModifiedAt = existingDraft ? Boolean(existingDraft.preserveModifiedAt) : true;
+    const nextTags = tags.includes('favorite') ? tags.filter((tag) => tag !== 'favorite') : [...tags, 'favorite'];
+    setTags(nextTags);
+    setHasChanges(true);
+
+    draftChangeTokenRef.current += 1;
+    draftCacheRef.current[note.id] = {
+      title,
+      content,
+      tags: nextTags,
+      date: note.date,
+      token: draftChangeTokenRef.current,
+      filename: note.filename,
+      preserveModifiedAt,
     };
 
     void flushSaveForNote(note.id, note.filename);
@@ -704,6 +728,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   }
 
   const isPinned = tags.includes('pinned');
+  const isFavorite = tags.includes('favorite');
   const mainTag = tags.find(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
   const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
 
@@ -746,6 +771,15 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               title={isPinned ? 'Unpin' : 'Pin'}
             >
               <Pin size={18} />
+            </button>
+            <button
+              type="button"
+              className={`editor-action-btn ${isFavorite ? 'active' : ''}`}
+              onClick={toggleFavorite}
+              aria-pressed={isFavorite}
+              title={isFavorite ? 'Unfavorite' : 'Favorite'}
+            >
+              <Star size={18} />
             </button>
             <button className="editor-action-btn">
               <Share2 size={18} />
