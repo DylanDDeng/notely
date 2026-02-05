@@ -31,6 +31,7 @@ interface SidebarProps {
 	storagePath: string;
 	tags: string[];
 	tagCounts?: Record<string, number>;
+	folderCounts?: Record<string, number>;
 	searchQuery: string;
 	onSearchChange: (query: string) => void;
 }
@@ -65,6 +66,7 @@ function Sidebar({
 	storagePath,
 	tags,
 	tagCounts = {},
+	folderCounts = {},
 	searchQuery,
 	onSearchChange,
 }: SidebarProps) {
@@ -144,6 +146,7 @@ function Sidebar({
           {FOLDERS.map((folder) => {
             const Icon = folder.icon;
             const isActive = activeFilter === folder.id;
+            const count = folderCounts[folder.id] ?? folder.count ?? null;
             return (
               <li key={folder.id}>
                 <button
@@ -152,9 +155,7 @@ function Sidebar({
                 >
                   <Icon size={18} />
                   <span className="nav-label">{folder.label}</span>
-                  {folder.count !== null && (
-                    <span className="nav-count">{folder.count}</span>
-                  )}
+                  {typeof count === 'number' && count > 0 && <span className="nav-count">{count}</span>}
                 </button>
               </li>
             );

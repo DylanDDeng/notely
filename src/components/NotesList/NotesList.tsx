@@ -91,12 +91,12 @@ function NotesList({
 	                <div className="note-card-title-row">
 	                  <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
 	                  {isPinned && (
-	                    <span className="note-card-pin" title="Pinned" aria-label="Pinned">
+	                    <span className="note-card-pin" title="置顶" aria-label="置顶">
 	                      <Pin size={14} />
 	                    </span>
 	                  )}
 	                  {isFavorite && (
-	                    <span className="note-card-star" title="Favorite" aria-label="Favorite">
+	                    <span className="note-card-star" title="收藏" aria-label="收藏">
 	                      <Star size={14} />
 	                    </span>
 	                  )}

@@ -366,6 +366,14 @@ function App() {
     return acc;
   }, {});
 
+  const folderCounts = {
+    all: visibleNotes.length,
+    kanban: kanbanNotes.length,
+    favorites: visibleNotes.filter((note) => note.tags?.includes('favorite')).length,
+    archive: visibleNotes.filter((note) => note.tags?.includes('archive')).length,
+    trash: visibleNotes.filter((note) => note.tags?.includes('trash')).length,
+  };
+
   useEffect(() => {
     if (activeFilter !== 'kanban') return;
     if (selectedKanbanId && kanbanNotes.some((b) => b.id === selectedKanbanId)) return;
@@ -485,6 +493,7 @@ function App() {
         storagePath={storagePath}
         tags={allTags}
         tagCounts={tagCounts}
+        folderCounts={folderCounts}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />

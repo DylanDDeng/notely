@@ -768,7 +768,8 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               className={`editor-action-btn ${isPinned ? 'active' : ''}`}
               onClick={togglePinned}
               aria-pressed={isPinned}
-              title={isPinned ? 'Unpin' : 'Pin'}
+              aria-label={isPinned ? '取消置顶' : '置顶'}
+              title={isPinned ? '取消置顶' : '置顶'}
             >
               <Pin size={18} />
             </button>
@@ -777,7 +778,8 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               className={`editor-action-btn ${isFavorite ? 'active' : ''}`}
               onClick={toggleFavorite}
               aria-pressed={isFavorite}
-              title={isFavorite ? 'Unfavorite' : 'Favorite'}
+              aria-label={isFavorite ? '取消收藏' : '收藏'}
+              title={isFavorite ? '取消收藏' : '收藏'}
             >
               <Star size={18} />
             </button>
