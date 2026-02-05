@@ -29,7 +29,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const draftCacheRef = useRef<
     Record<
       string,
-      { title: string; content: string; tags: string[]; date?: string; token: number; filename: string }
+      { title: string; content: string; tags: string[]; date?: string; token: number; filename: string; preserveModifiedAt?: boolean }
     >
   >({});
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -125,6 +125,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         content: entry.content,
         tags: entry.tags,
         date: entry.date,
+        preserveModifiedAt: entry.preserveModifiedAt,
       });
 
       const stillSame = draftCacheRef.current[noteId]?.token === token;
@@ -341,6 +342,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         date: note.date,
         token: draftChangeTokenRef.current,
         filename: note.filename,
+        preserveModifiedAt: false,
       };
       scheduleSave();
     }
@@ -360,6 +362,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         date: note.date,
         token: draftChangeTokenRef.current,
         filename: note.filename,
+        preserveModifiedAt: false,
       };
       scheduleSave();
     }
@@ -383,6 +386,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             date: note.date,
             token: draftChangeTokenRef.current,
             filename: note.filename,
+            preserveModifiedAt: false,
           };
           scheduleSave();
         }
@@ -405,6 +409,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         date: note.date,
         token: draftChangeTokenRef.current,
         filename: note.filename,
+        preserveModifiedAt: false,
       };
       scheduleSave();
     }
@@ -413,6 +418,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const togglePinned = useCallback(() => {
     if (!note) return;
 
+    const hadPendingDraft = Boolean(draftCacheRef.current[note.id]);
     const nextTags = tags.includes('pinned') ? tags.filter((tag) => tag !== 'pinned') : [...tags, 'pinned'];
     setTags(nextTags);
     setHasChanges(true);
@@ -425,6 +431,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       date: note.date,
       token: draftChangeTokenRef.current,
       filename: note.filename,
+      preserveModifiedAt: !hadPendingDraft,
     };
 
     void flushSaveForNote(note.id, note.filename);

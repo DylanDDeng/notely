@@ -357,11 +357,30 @@ ipcMain.handle('notes:read', async (event, filename) => {
 });
 
 // IPC 处理：保存笔记
-ipcMain.handle('notes:save', async (event, { filename, content }) => {
+ipcMain.handle('notes:save', async (event, { filename, content, preserveModifiedAt } = {}) => {
   try {
     await ensureNotesDir();
     const filepath = path.join(currentNotesDir, filename);
+
+    let previousStat = null;
+    if (preserveModifiedAt) {
+      try {
+        previousStat = await fs.stat(filepath);
+      } catch {
+        previousStat = null;
+      }
+    }
+
     await fs.writeFile(filepath, content, 'utf-8');
+
+    if (preserveModifiedAt && previousStat) {
+      try {
+        await fs.utimes(filepath, previousStat.atime, previousStat.mtime);
+      } catch (err) {
+        console.warn('Failed to preserve note timestamps:', err?.message || String(err));
+      }
+    }
+
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };

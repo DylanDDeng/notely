@@ -205,6 +205,7 @@ function App() {
   // 保存笔记（用于自动保存）
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
     const now = new Date();
+    const preserveModifiedAt = Boolean(noteData.preserveModifiedAt);
     const frontmatter = {
       title: noteData.title,
       date: noteData.date || now.toISOString(),
@@ -213,7 +214,7 @@ function App() {
     const fileContent = generateNoteContent(frontmatter, noteData.content);
     const filename = noteData.filename || generateFilename(noteData.title, now);
 
-    const result = await window.electronAPI.saveNote({ filename, content: fileContent });
+    const result = await window.electronAPI.saveNote({ filename, content: fileContent, preserveModifiedAt });
     if (!result.success) {
       throw new Error(result.error || 'Failed to save note');
     }
@@ -224,11 +225,12 @@ function App() {
       const updatedNotes = prevNotes
         .map(note => {
           if (note.id !== noteId) return note;
+          const nextModifiedAt = preserveModifiedAt ? note.modifiedAt : now;
           return {
             ...note,
             filename,
             content: fileContent,
-            modifiedAt: now,
+            modifiedAt: nextModifiedAt,
             ...parsed,
           };
         })
@@ -238,13 +240,14 @@ function App() {
 
     setCurrentNote(prev => {
       if (!prev || prev.id !== noteId) return prev;
+      const nextModifiedAt = preserveModifiedAt ? prev.modifiedAt : now;
       return {
         ...prev,
         filename,
         content: noteData.content,
         tags: noteData.tags,
         date: frontmatter.date,
-        modifiedAt: now,
+        modifiedAt: nextModifiedAt,
       };
     });
   }, []);

@@ -93,6 +93,7 @@ export interface SaveNoteData {
   content: string;
   tags: string[];
   date?: string;
+  preserveModifiedAt?: boolean;
 }
 
 /**
@@ -125,7 +126,7 @@ export interface ElectronAPI {
   // 笔记相关
   getAllNotes: () => Promise<RawNote[]>;
   readNote: (filename: string) => Promise<{ success: boolean; content?: string; error?: string }>;
-  saveNote: (data: { filename: string; content: string }) => Promise<{ success: boolean; error?: string }>;
+  saveNote: (data: { filename: string; content: string; preserveModifiedAt?: boolean }) => Promise<{ success: boolean; error?: string }>;
   createNote: (data: { filename: string; content: string }) => Promise<{ success: boolean; error?: string }>;
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
   
