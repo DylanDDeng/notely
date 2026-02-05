@@ -17,6 +17,8 @@ interface NotesListProps {
   activeFilter: string;
   notesView: 'list' | 'grid';
   onViewChange: (view: 'list' | 'grid') => void;
+  sortOrder: 'desc' | 'asc';
+  onToggleSort: () => void;
 }
 
 function NotesList({
@@ -26,6 +28,8 @@ function NotesList({
   activeFilter,
   notesView,
   onViewChange,
+  sortOrder,
+  onToggleSort,
 }: NotesListProps) {
   const title = FILTER_TITLES[activeFilter] || 
     (activeFilter.startsWith('tag:') ? activeFilter.replace('tag:', '') : 'Notes');
@@ -36,7 +40,13 @@ function NotesList({
       <div className="notes-list-header">
         <h2 className="notes-list-title">{title}</h2>
         <div className="notes-list-actions">
-          <button className="action-btn" title="Sort">
+          <button
+            type="button"
+            className={`action-btn ${sortOrder === 'asc' ? 'active' : ''}`}
+            title={sortOrder === 'desc' ? 'Sorted: newest first (click for oldest first)' : 'Sorted: oldest first (click for newest first)'}
+            aria-label={sortOrder === 'desc' ? 'Sort by modified date: newest first' : 'Sort by modified date: oldest first'}
+            onClick={onToggleSort}
+          >
             <ArrowUpDown size={16} />
           </button>
           <button

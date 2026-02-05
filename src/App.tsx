@@ -15,9 +15,11 @@ import './styles/App.css';
 type ViewType = 'welcome' | 'main' | 'settings';
 type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
 type NotesView = 'list' | 'grid';
+type NotesSortOrder = 'desc' | 'asc';
 
 const STORAGE_PATH_KEY = 'notes:storagePath';
 const FONT_FAMILY_KEY = 'notes:fontFamily';
+const NOTES_SORT_ORDER_KEY = 'notes:notesSortOrder';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
@@ -67,6 +69,25 @@ function App() {
   const [isModalFullScreen, setIsModalFullScreen] = useState(false);
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
   const [selectedKanbanId, setSelectedKanbanId] = useState<string | null>(null);
+  const [notesSortOrder, setNotesSortOrder] = useState<NotesSortOrder>(() => {
+    try {
+      return localStorage.getItem(NOTES_SORT_ORDER_KEY) === 'asc' ? 'asc' : 'desc';
+    } catch {
+      return 'desc';
+    }
+  });
+
+  const toggleNotesSortOrder = useCallback(() => {
+    setNotesSortOrder((prev) => {
+      const next: NotesSortOrder = prev === 'desc' ? 'asc' : 'desc';
+      try {
+        localStorage.setItem(NOTES_SORT_ORDER_KEY, next);
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const trimmed = appFontFamily.trim();
@@ -320,6 +341,11 @@ function App() {
     }
   });
 
+  const sortedFilteredNotes = [...filteredNotes].sort((a, b) => {
+    const diff = a.modifiedAt.getTime() - b.modifiedAt.getTime();
+    return notesSortOrder === 'asc' ? diff : -diff;
+  });
+
   // 获取所有标签
   const allTags = [...new Set(visibleNotes.flatMap(n => n.tags || []))]
     .filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
@@ -467,12 +493,14 @@ function App() {
       ) : (
         <>
           <NotesList
-            notes={filteredNotes}
+            notes={sortedFilteredNotes}
             selectedNoteId={selectedNoteId}
             onOpenNote={handleOpenNote}
             activeFilter={activeFilter}
             notesView={notesView}
             onViewChange={handleNotesViewChange}
+            sortOrder={notesSortOrder}
+            onToggleSort={toggleNotesSortOrder}
           />
           {notesView === 'list' && (
             <Editor
