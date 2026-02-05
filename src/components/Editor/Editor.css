@@ -6,6 +6,13 @@
   overflow: hidden;
   --editor-prose-max-width: 860px;
   --editor-prose-padding: 32px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.editor * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .editor-container {

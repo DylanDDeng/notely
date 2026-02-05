@@ -64,3 +64,10 @@ button {
 input, textarea {
   font-family: inherit;
 }
+
+input,
+textarea,
+select {
+  -webkit-user-select: text;
+  user-select: text;
+}
