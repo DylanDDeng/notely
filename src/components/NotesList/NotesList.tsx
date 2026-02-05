@@ -1,4 +1,4 @@
-import { ArrowUpDown, LayoutGrid, LayoutList } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid, LayoutList, Pin } from 'lucide-react';
 import { formatDate, getTagColor } from '../../utils/noteUtils';
 import type { Note } from '../../types';
 import './NotesList.css';
@@ -74,22 +74,30 @@ function NotesList({
             <p className="empty-hint">Create a new note to get started</p>
           </div>
         ) : (
-          notes.map((note) => {
-            const isSelected = note.id === selectedNoteId;
-            const mainTag = note.tags?.find(tag => 
-              !['favorite', 'archive', 'trash'].includes(tag)
-            );
-            
-            return (
-              <div
-                key={note.id}
-                className={`note-card ${isSelected ? 'selected' : ''}`}
-                onClick={() => onOpenNote(note.id)}
-              >
-                <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
-                <p className="note-card-preview">
-                  {note.contentBody?.substring(0, 120).replace(/#/g, '').trim() || 'No content'}
-                </p>
+	          notes.map((note) => {
+	            const isSelected = note.id === selectedNoteId;
+	            const isPinned = Boolean(note.tags?.includes('pinned'));
+	            const mainTag = note.tags?.find(tag => 
+	              !['favorite', 'archive', 'trash', 'pinned'].includes(tag)
+	            );
+	            
+	            return (
+	              <div
+	                key={note.id}
+	                className={`note-card ${isSelected ? 'selected' : ''}`}
+	                onClick={() => onOpenNote(note.id)}
+	              >
+	                <div className="note-card-title-row">
+	                  <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
+	                  {isPinned && (
+	                    <span className="note-card-pin" title="Pinned" aria-label="Pinned">
+	                      <Pin size={14} />
+	                    </span>
+	                  )}
+	                </div>
+	                <p className="note-card-preview">
+	                  {note.contentBody?.substring(0, 120).replace(/#/g, '').trim() || 'No content'}
+	                </p>
                 <div className="note-card-meta">
                   <span className="note-card-date">
                     {formatDate(note.modifiedAt)}

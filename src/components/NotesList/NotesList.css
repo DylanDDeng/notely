@@ -124,16 +124,36 @@
   border-color: #93C5FD;
 }
 
+.note-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .note-card-title {
   font-size: 15px;
   font-weight: 600;
   color: #1F2937;
   margin: 0 0 6px 0;
   line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+}
+
+.note-card-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #9CA3AF;
+  flex-shrink: 0;
 }
 
 .note-card.selected .note-card-title {
   color: #1E40AF;
+}
+
+.note-card.selected .note-card-pin {
+  color: #2563EB;
 }
 
 .note-card-preview {

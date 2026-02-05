@@ -410,6 +410,26 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     }
   };
 
+  const togglePinned = useCallback(() => {
+    if (!note) return;
+
+    const nextTags = tags.includes('pinned') ? tags.filter((tag) => tag !== 'pinned') : [...tags, 'pinned'];
+    setTags(nextTags);
+    setHasChanges(true);
+
+    draftChangeTokenRef.current += 1;
+    draftCacheRef.current[note.id] = {
+      title,
+      content,
+      tags: nextTags,
+      date: note.date,
+      token: draftChangeTokenRef.current,
+      filename: note.filename,
+    };
+
+    void flushSaveForNote(note.id, note.filename);
+  }, [content, flushSaveForNote, note, tags, title]);
+
   useEffect(() => {
     if (!isEditing) return;
     const pending = pendingSelectionRef.current;
@@ -676,8 +696,9 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     );
   }
 
-  const mainTag = tags.find(tag => !['favorite', 'archive', 'trash'].includes(tag));
-  const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
+  const isPinned = tags.includes('pinned');
+  const mainTag = tags.find(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
+  const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
 
   return (
     <div className="editor">
@@ -710,7 +731,13 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             >
               {isEditing ? 'Preview' : 'Edit'}
             </button>
-            <button className="editor-action-btn">
+            <button
+              type="button"
+              className={`editor-action-btn ${isPinned ? 'active' : ''}`}
+              onClick={togglePinned}
+              aria-pressed={isPinned}
+              title={isPinned ? 'Unpin' : 'Pin'}
+            >
               <Pin size={18} />
             </button>
             <button className="editor-action-btn">

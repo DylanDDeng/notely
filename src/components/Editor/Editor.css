@@ -120,6 +120,11 @@
   color: #6B7280;
 }
 
+.editor-action-btn.active {
+  background: #E5E7EB;
+  color: #374151;
+}
+
 .editor-more {
   position: relative;
   display: flex;

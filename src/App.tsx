@@ -342,16 +342,22 @@ function App() {
   });
 
   const sortedFilteredNotes = [...filteredNotes].sort((a, b) => {
+    if (activeFilter === 'all') {
+      const aPinned = Boolean(a.tags?.includes('pinned'));
+      const bPinned = Boolean(b.tags?.includes('pinned'));
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+    }
+
     const diff = a.modifiedAt.getTime() - b.modifiedAt.getTime();
     return notesSortOrder === 'asc' ? diff : -diff;
   });
 
   // 获取所有标签
   const allTags = [...new Set(visibleNotes.flatMap(n => n.tags || []))]
-    .filter(tag => !['favorite', 'archive', 'trash'].includes(tag));
+    .filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
   const tagCounts = visibleNotes.reduce<Record<string, number>>((acc, note) => {
     (note.tags || []).forEach(tag => {
-      if (['favorite', 'archive', 'trash'].includes(tag)) return;
+      if (['favorite', 'archive', 'trash', 'pinned'].includes(tag)) return;
       acc[tag] = (acc[tag] ?? 0) + 1;
     });
     return acc;
