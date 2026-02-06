@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import { EditorView, Decoration, ViewPlugin, placeholder, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+import { EditorView, Decoration, ViewPlugin, WidgetType, placeholder, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+import type { Range } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import type { Extension } from '@codemirror/state';
 
@@ -9,6 +10,7 @@ interface MarkdownLiveEditorProps {
   onChange: (value: string) => void;
   onEditorReady?: (view: EditorView) => void;
   onOpenExternal?: (url: string) => void;
+  onOpenImagePreview?: (url: string) => void;
 }
 
 const hiddenMarker = Decoration.mark({ class: 'cm-md-hidden-marker' });
@@ -18,14 +20,14 @@ const strikeMark = Decoration.mark({ class: 'cm-md-strike' });
 const inlineCodeMark = Decoration.mark({ class: 'cm-md-inline-code' });
 const linkTextMark = Decoration.mark({ class: 'cm-md-link-text' });
 
-const headingLineDecorations = [
+const headingTextDecorations = [
   null,
-  Decoration.line({ attributes: { class: 'cm-md-heading cm-md-heading-1' } }),
-  Decoration.line({ attributes: { class: 'cm-md-heading cm-md-heading-2' } }),
-  Decoration.line({ attributes: { class: 'cm-md-heading cm-md-heading-3' } }),
-  Decoration.line({ attributes: { class: 'cm-md-heading cm-md-heading-4' } }),
-  Decoration.line({ attributes: { class: 'cm-md-heading cm-md-heading-5' } }),
-  Decoration.line({ attributes: { class: 'cm-md-heading cm-md-heading-6' } }),
+  Decoration.mark({ class: 'cm-md-heading cm-md-heading-1' }),
+  Decoration.mark({ class: 'cm-md-heading cm-md-heading-2' }),
+  Decoration.mark({ class: 'cm-md-heading cm-md-heading-3' }),
+  Decoration.mark({ class: 'cm-md-heading cm-md-heading-4' }),
+  Decoration.mark({ class: 'cm-md-heading cm-md-heading-5' }),
+  Decoration.mark({ class: 'cm-md-heading cm-md-heading-6' }),
 ] as const;
 
 const normalizeUrl = (value: string): string => {
@@ -41,10 +43,61 @@ const addRange = (ranges: ReturnType<typeof hiddenMarker.range>[], from: number,
   ranges.push(hiddenMarker.range(from, to));
 };
 
-const buildLivePreviewDecorations = (view: EditorView): DecorationSet => {
+class MarkdownImageWidget extends WidgetType {
+  constructor(
+    private readonly src: string,
+    private readonly alt: string,
+    private readonly onOpenImagePreview?: (url: string) => void
+  ) {
+    super();
+  }
+
+  eq(other: MarkdownImageWidget) {
+    return this.src === other.src && this.alt === other.alt && this.onOpenImagePreview === other.onOpenImagePreview;
+  }
+
+  toDOM() {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'cm-md-image-widget';
+
+    const img = document.createElement('img');
+    img.className = 'cm-md-image-widget-img';
+    img.src = this.src;
+    img.alt = this.alt;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.referrerPolicy = 'no-referrer';
+
+    img.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.onOpenImagePreview?.(this.src);
+    });
+
+    img.addEventListener('error', () => {
+      wrapper.classList.add('is-broken');
+      const fallback = document.createElement('span');
+      fallback.className = 'cm-md-image-widget-fallback';
+      fallback.textContent = this.alt ? `Image failed: ${this.alt}` : 'Image failed to load';
+      wrapper.replaceChildren(fallback);
+    });
+
+    wrapper.appendChild(img);
+    return wrapper;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const buildLivePreviewDecorations = (
+  view: EditorView,
+  onOpenImagePreview?: (url: string) => void
+): DecorationSet => {
   const doc = view.state.doc;
   const activeLineNo = doc.lineAt(view.state.selection.main.head).number;
-  const ranges: ReturnType<typeof hiddenMarker.range>[] = [];
+  const ranges: Range<Decoration>[] = [];
 
   let inFence = false;
 
@@ -59,9 +112,10 @@ const buildLivePreviewDecorations = (view: EditorView): DecorationSet => {
       const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
       if (heading) {
         const level = heading[2].length;
-        const lineDeco = headingLineDecorations[level];
-        if (lineDeco) {
-          ranges.push(lineDeco.range(line.from));
+        const headingText = headingTextDecorations[level];
+        const headingTextFrom = line.from + heading[0].length;
+        if (headingText && line.to > headingTextFrom) {
+          ranges.push(headingText.range(headingTextFrom, line.to));
         }
         addRange(ranges, line.from + heading[1].length, line.from + heading[1].length + heading[2].length + heading[3].length);
       }
@@ -114,7 +168,7 @@ const buildLivePreviewDecorations = (view: EditorView): DecorationSet => {
         inlineCode = inlineCodeRegex.exec(text);
       }
 
-      const linkRegex = /!?\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+      const linkRegex = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
       let linkMatch = linkRegex.exec(text);
       while (linkMatch) {
         const full = linkMatch[0];
@@ -126,7 +180,19 @@ const buildLivePreviewDecorations = (view: EditorView): DecorationSet => {
         const fullStart = line.from + linkMatch.index;
         const fullEnd = fullStart + full.length;
 
-        if (!isImage) {
+        if (isImage) {
+          const rawUrl = linkMatch[2]?.trim() ?? '';
+          const url = normalizeUrl(rawUrl);
+          if (url) {
+            addRange(ranges, fullStart, fullEnd);
+            ranges.push(
+              Decoration.widget({
+                side: 1,
+                widget: new MarkdownImageWidget(url, textValue, onOpenImagePreview),
+              }).range(fullEnd)
+            );
+          }
+        } else {
           addRange(ranges, fullStart, textStart);
           addRange(ranges, textEnd, fullEnd);
           ranges.push(linkTextMark.range(textStart, textEnd));
@@ -144,18 +210,18 @@ const buildLivePreviewDecorations = (view: EditorView): DecorationSet => {
   return Decoration.set(ranges, true);
 };
 
-const createLivePreviewPlugin = () =>
+const createLivePreviewPlugin = (onOpenImagePreview?: (url: string) => void) =>
   ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
 
       constructor(view: EditorView) {
-        this.decorations = buildLivePreviewDecorations(view);
+        this.decorations = buildLivePreviewDecorations(view, onOpenImagePreview);
       }
 
       update(update: ViewUpdate) {
         if (update.docChanged || update.selectionSet || update.viewportChanged) {
-          this.decorations = buildLivePreviewDecorations(update.view);
+          this.decorations = buildLivePreviewDecorations(update.view, onOpenImagePreview);
         }
       }
     },
@@ -164,9 +230,15 @@ const createLivePreviewPlugin = () =>
     }
   );
 
-function MarkdownLiveEditor({ value, onChange, onEditorReady, onOpenExternal }: MarkdownLiveEditorProps) {
+function MarkdownLiveEditor({
+  value,
+  onChange,
+  onEditorReady,
+  onOpenExternal,
+  onOpenImagePreview,
+}: MarkdownLiveEditorProps) {
   const extensions = useMemo<Extension[]>(() => {
-    const livePreviewPlugin = createLivePreviewPlugin();
+    const livePreviewPlugin = createLivePreviewPlugin(onOpenImagePreview);
     const domHandlers = EditorView.domEventHandlers({
       mousedown: (event, view) => {
         if (!(event.metaKey || event.ctrlKey) || !onOpenExternal) return false;
@@ -179,7 +251,7 @@ function MarkdownLiveEditor({ value, onChange, onEditorReady, onOpenExternal }: 
         const relPos = pos - line.from;
         const source = line.text;
 
-        const linkRegex = /!?\[([^\]\n]+)\]\(([^)\n]+)\)/g;
+        const linkRegex = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
         let match = linkRegex.exec(source);
         while (match) {
           const full = match[0];
@@ -204,7 +276,7 @@ function MarkdownLiveEditor({ value, onChange, onEditorReady, onOpenExternal }: 
     });
 
     return [markdown(), EditorView.lineWrapping, placeholder('Start writing...'), livePreviewPlugin, domHandlers];
-  }, [onOpenExternal]);
+  }, [onOpenExternal, onOpenImagePreview]);
 
   return (
     <CodeMirror

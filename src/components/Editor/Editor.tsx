@@ -799,6 +799,9 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               onOpenExternal={(url) => {
                 void window.electronAPI.openExternal(url);
               }}
+              onOpenImagePreview={(url) => {
+                setLightboxSrc(url);
+              }}
             />
           ) : (
             <div
