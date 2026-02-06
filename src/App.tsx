@@ -20,6 +20,7 @@ type NotesSortOrder = 'desc' | 'asc';
 const STORAGE_PATH_KEY = 'notes:storagePath';
 const FONT_FAMILY_KEY = 'notes:fontFamily';
 const NOTES_SORT_ORDER_KEY = 'notes:notesSortOrder';
+const MIDDLE_PANE_COLLAPSED_KEY = 'notes:middlePaneCollapsed';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
@@ -54,6 +55,22 @@ const saveFontFamily = (fontFamily: string) => {
   localStorage.setItem(FONT_FAMILY_KEY, trimmed);
 };
 
+const getSavedMiddlePaneCollapsed = (): boolean => {
+  try {
+    return localStorage.getItem(MIDDLE_PANE_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+const saveMiddlePaneCollapsed = (collapsed: boolean) => {
+  try {
+    localStorage.setItem(MIDDLE_PANE_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // ignore
+  }
+};
+
 function App() {
   const [view, setView] = useState<ViewType>('welcome');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -69,6 +86,7 @@ function App() {
   const [isModalFullScreen, setIsModalFullScreen] = useState(false);
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
   const [selectedKanbanId, setSelectedKanbanId] = useState<string | null>(null);
+  const [isMiddlePaneCollapsed, setIsMiddlePaneCollapsed] = useState<boolean>(() => getSavedMiddlePaneCollapsed());
   const [notesSortOrder, setNotesSortOrder] = useState<NotesSortOrder>(() => {
     try {
       return localStorage.getItem(NOTES_SORT_ORDER_KEY) === 'asc' ? 'asc' : 'desc';
@@ -85,6 +103,14 @@ function App() {
       } catch {
         // ignore
       }
+      return next;
+    });
+  }, []);
+
+  const toggleMiddlePaneCollapsed = useCallback(() => {
+    setIsMiddlePaneCollapsed((prev) => {
+      const next = !prev;
+      saveMiddlePaneCollapsed(next);
       return next;
     });
   }, []);
@@ -505,6 +531,8 @@ function App() {
             onSelectBoard={setSelectedKanbanId}
             onCreateBoard={handleCreateKanbanBoard}
             onDeleteBoard={handleDeleteKanbanBoard}
+            isCollapsed={isMiddlePaneCollapsed}
+            onToggleCollapsed={toggleMiddlePaneCollapsed}
           />
           <KanbanBoard boardNote={selectedKanbanNote} onSaveBoard={handleSaveKanbanBoard} />
         </>
@@ -519,6 +547,8 @@ function App() {
             onViewChange={handleNotesViewChange}
             sortOrder={notesSortOrder}
             onToggleSort={toggleNotesSortOrder}
+            isCollapsed={isMiddlePaneCollapsed}
+            onToggleCollapsed={toggleMiddlePaneCollapsed}
           />
           {notesView === 'list' && (
             <Editor

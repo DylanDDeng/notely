@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Note } from '../../types';
 import { formatDate } from '../../utils/noteUtils';
@@ -10,6 +10,8 @@ interface KanbanBoardsListProps {
   onSelectBoard: (boardId: string) => void;
   onCreateBoard: (title: string) => Promise<void>;
   onDeleteBoard: (boardId: string) => Promise<void>;
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 const countCards = (markdownBody: string): number => {
@@ -22,6 +24,8 @@ function KanbanBoardsList({
   onSelectBoard,
   onCreateBoard,
   onDeleteBoard,
+  isCollapsed,
+  onToggleCollapsed,
 }: KanbanBoardsListProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
@@ -34,19 +38,30 @@ function KanbanBoardsList({
   }, [boards, query]);
 
   return (
-    <div className="kanban-boards">
+    <div className={`kanban-boards ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="kanban-boards-header">
         <h2 className="kanban-boards-title">Kanban Boards</h2>
-        <button
-          className="kanban-boards-icon-btn"
-          title="New board"
-          onClick={() => {
-            setIsCreating(true);
-            setDraftTitle('');
-          }}
-        >
-          <Plus size={16} />
-        </button>
+        <div className="kanban-boards-header-actions">
+          <button
+            type="button"
+            className="kanban-boards-icon-btn panel-toggle-btn"
+            title={isCollapsed ? 'Expand boards panel' : 'Collapse boards panel'}
+            aria-label={isCollapsed ? 'Expand boards panel' : 'Collapse boards panel'}
+            onClick={onToggleCollapsed}
+          >
+            {isCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+          </button>
+          <button
+            className="kanban-boards-icon-btn"
+            title="New board"
+            onClick={() => {
+              setIsCreating(true);
+              setDraftTitle('');
+            }}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="kanban-boards-search">
@@ -136,4 +151,3 @@ function KanbanBoardsList({
 }
 
 export default KanbanBoardsList;
-

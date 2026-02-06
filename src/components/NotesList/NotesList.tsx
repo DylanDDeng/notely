@@ -1,4 +1,4 @@
-import { ArrowUpDown, LayoutGrid, LayoutList, Pin, Star } from 'lucide-react';
+import { ArrowUpDown, ChevronsLeft, ChevronsRight, LayoutGrid, LayoutList, Pin, Star } from 'lucide-react';
 import { formatDate, getTagColor } from '../../utils/noteUtils';
 import type { Note } from '../../types';
 import './NotesList.css';
@@ -19,6 +19,8 @@ interface NotesListProps {
   onViewChange: (view: 'list' | 'grid') => void;
   sortOrder: 'desc' | 'asc';
   onToggleSort: () => void;
+  isCollapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 
 function NotesList({
@@ -30,16 +32,27 @@ function NotesList({
   onViewChange,
   sortOrder,
   onToggleSort,
+  isCollapsed,
+  onToggleCollapsed,
 }: NotesListProps) {
   const title = FILTER_TITLES[activeFilter] || 
     (activeFilter.startsWith('tag:') ? activeFilter.replace('tag:', '') : 'Notes');
 
   return (
-    <div className={`notes-list ${notesView === 'grid' ? 'grid-view' : ''}`}>
+    <div className={`notes-list ${notesView === 'grid' ? 'grid-view' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
       {/* Header */}
       <div className="notes-list-header">
         <h2 className="notes-list-title">{title}</h2>
         <div className="notes-list-actions">
+          <button
+            type="button"
+            className="action-btn panel-toggle-btn"
+            title={isCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
+            aria-label={isCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
+            onClick={onToggleCollapsed}
+          >
+            {isCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+          </button>
           <button
             type="button"
             className={`action-btn ${sortOrder === 'asc' ? 'active' : ''}`}
