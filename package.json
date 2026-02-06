@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron": "electron .",
-    "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:dev": "concurrently -k \"npm run dev -- --port 5173 --strictPort\" \"wait-on tcp:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
     "dist": "electron-builder"
   },
