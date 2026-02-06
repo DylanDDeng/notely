@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react';
+import { EditorView } from '@codemirror/view';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
@@ -6,6 +7,7 @@ import { format } from 'date-fns';
 import { FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
+import MarkdownLiveEditor from './MarkdownLiveEditor';
 import './Editor.css';
 
 interface EditorProps {
@@ -19,7 +21,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [htmlContent, setHtmlContent] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,8 +34,8 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       { title: string; content: string; tags: string[]; date?: string; token: number; filename: string; preserveModifiedAt?: boolean }
     >
   >({});
-  const contentRef = useRef<HTMLTextAreaElement>(null);
   const editorContentRef = useRef<HTMLDivElement>(null);
+  const liveEditorRef = useRef<EditorView | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const textOffsetMapRef = useRef<number[]>([]);
   const pendingSelectionRef = useRef<{ index?: number; scrollTop: number } | null>(null);
@@ -187,94 +189,37 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       if (!note) return;
       void flushSaveForNote(note.id, note.filename);
     };
-  }, [note?.id]);
+  }, [flushSaveForNote, note?.id]);
 
-  const resizeTextarea = useCallback(() => {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    const container = editorContentRef.current;
-    const prevScrollTop = container?.scrollTop ?? 0;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${textarea.scrollHeight}px`;
-    if (container && container.scrollTop < prevScrollTop) {
-      container.scrollTop = prevScrollTop;
-    }
+  const scrollLiveEditorToPosition = useCallback((index: number) => {
+    const view = liveEditorRef.current;
+    if (!view) return;
+
+    const pos = Math.max(0, Math.min(index, view.state.doc.length));
+    view.dispatch({
+      selection: { anchor: pos },
+      effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+    });
+    view.focus();
   }, []);
 
-  const getCaretTopInTextarea = (textarea: HTMLTextAreaElement, caretIndex: number): number => {
-    const marker = document.createElement('span');
-    marker.textContent = '\u200b';
+  const applyPendingSelectionToLiveEditor = useCallback(() => {
+    const pending = pendingSelectionRef.current;
+    if (!pending) return;
+    const view = liveEditorRef.current;
+    if (!view) return;
 
-    const mirror = document.createElement('div');
-    const style = window.getComputedStyle(textarea);
-    const rect = textarea.getBoundingClientRect();
-
-    mirror.style.position = 'absolute';
-    mirror.style.visibility = 'hidden';
-    mirror.style.pointerEvents = 'none';
-    mirror.style.left = '-9999px';
-    mirror.style.top = '0';
-    mirror.style.width = `${rect.width}px`;
-    mirror.style.whiteSpace = 'pre-wrap';
-    mirror.style.wordBreak = 'break-word';
-    mirror.style.overflowWrap = 'break-word';
-    mirror.style.fontFamily = style.fontFamily;
-    mirror.style.fontSize = style.fontSize;
-    mirror.style.fontWeight = style.fontWeight;
-    mirror.style.fontStyle = style.fontStyle;
-    mirror.style.letterSpacing = style.letterSpacing;
-    mirror.style.wordSpacing = style.wordSpacing;
-    mirror.style.lineHeight = style.lineHeight;
-    mirror.style.paddingTop = style.paddingTop;
-    mirror.style.paddingRight = style.paddingRight;
-    mirror.style.paddingBottom = style.paddingBottom;
-    mirror.style.paddingLeft = style.paddingLeft;
-    mirror.style.borderTopWidth = style.borderTopWidth;
-    mirror.style.borderRightWidth = style.borderRightWidth;
-    mirror.style.borderBottomWidth = style.borderBottomWidth;
-    mirror.style.borderLeftWidth = style.borderLeftWidth;
-    mirror.style.boxSizing = style.boxSizing;
-
-    mirror.textContent = textarea.value.slice(0, Math.max(0, caretIndex));
-    mirror.appendChild(marker);
-    document.body.appendChild(mirror);
-
-    const markerRect = marker.getBoundingClientRect();
-    const mirrorRect = mirror.getBoundingClientRect();
-    const top = markerRect.top - mirrorRect.top;
-
-    document.body.removeChild(mirror);
-    return top;
-  };
-
-  const getLineHeightPx = (textarea: HTMLTextAreaElement): number => {
-    const style = window.getComputedStyle(textarea);
-    const parsed = parseFloat(style.lineHeight);
-    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
-    const fontSize = parseFloat(style.fontSize);
-    return (Number.isNaN(fontSize) ? 16 : fontSize) * 1.2;
-  };
-
-  const scrollEditorToCaretCenter = (caretIndex: number) => {
-    const textarea = contentRef.current;
-    const container = editorContentRef.current;
-    if (!textarea || !container) return;
-
-    const caretTopInTextarea = getCaretTopInTextarea(textarea, caretIndex);
-    const lineHeight = getLineHeightPx(textarea);
-
-    const containerRect = container.getBoundingClientRect();
-    const textareaRect = textarea.getBoundingClientRect();
-    const textareaTopInContainer = textareaRect.top - containerRect.top + container.scrollTop;
-    const caretTopInContainer = textareaTopInContainer + caretTopInTextarea;
-
-    const desired = caretTopInContainer - container.clientHeight / 2 + lineHeight / 2;
-    const maxScrollTop = container.scrollHeight - container.clientHeight;
-    container.scrollTop = Math.min(maxScrollTop, Math.max(0, desired));
-  };
+    if (typeof pending.index === 'number') {
+      scrollLiveEditorToPosition(pending.index);
+    } else {
+      view.scrollDOM.scrollTop = pending.scrollTop;
+      view.focus();
+    }
+    pendingSelectionRef.current = null;
+  }, [scrollLiveEditorToPosition]);
 
   // 渲染 Markdown
-  const renderMarkdown = async (text: string) => {
+  const renderMarkdown = useCallback(async (text: string) => {
     try {
       updateTextOffsetMap(text);
       const result = await remark()
@@ -285,7 +230,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     } catch (err) {
       console.error('Failed to render markdown:', err);
     }
-  };
+  }, []);
 
   const updateTextOffsetMap = (markdown: string) => {
     try {
@@ -333,11 +278,9 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
 
   // 自动保存
   // 处理内容变化
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value;
+  const handleContentChange = (newContent: string) => {
     setContent(newContent);
     setHasChanges(true);
-    renderMarkdown(newContent);
     if (note) {
       draftChangeTokenRef.current += 1;
       draftCacheRef.current[note.id] = {
@@ -468,29 +411,12 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
 
   useEffect(() => {
     if (!isEditing) return;
-    const pending = pendingSelectionRef.current;
-    if (!pending) {
-      resizeTextarea();
-      return;
-    }
-    const textarea = contentRef.current;
-    const container = editorContentRef.current;
-    if (!textarea || !container) return;
+    if (!pendingSelectionRef.current) return;
 
     requestAnimationFrame(() => {
-      resizeTextarea();
-      requestAnimationFrame(() => {
-        textarea.focus();
-        if (typeof pending.index === 'number') {
-          textarea.setSelectionRange(pending.index, pending.index);
-          scrollEditorToCaretCenter(pending.index);
-        } else {
-          container.scrollTop = pending.scrollTop;
-        }
-        pendingSelectionRef.current = null;
-      });
+      applyPendingSelectionToLiveEditor();
     });
-  }, [isEditing, content, resizeTextarea]);
+  }, [applyPendingSelectionToLiveEditor, content, isEditing]);
 
   useEffect(() => {
     if (isEditing) return;
@@ -553,9 +479,10 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   }, [isEditing, htmlContent]);
 
   const exitEditing = useCallback(() => {
-    pendingScrollRestoreRef.current = editorContentRef.current?.scrollTop ?? 0;
+    pendingScrollRestoreRef.current = liveEditorRef.current?.scrollDOM.scrollTop ?? editorContentRef.current?.scrollTop ?? 0;
+    void renderMarkdown(content);
     setIsEditing(false);
-  }, []);
+  }, [content, renderMarkdown]);
 
   useEffect(() => {
     if (!isEditing) return;
@@ -761,7 +688,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
                 setIsEditing(true);
               }}
             >
-              {isEditing ? 'Preview' : 'Edit'}
+              {isEditing ? 'Preview' : 'Live'}
             </button>
             <button
               type="button"
@@ -860,13 +787,18 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       >
         <div className="editor-container editor-content-inner">
           {isEditing ? (
-            <textarea
-              ref={contentRef}
-              className="editor-textarea"
+            <MarkdownLiveEditor
               value={content}
               onChange={handleContentChange}
-              placeholder="Start writing..."
-              autoFocus
+              onEditorReady={(view) => {
+                liveEditorRef.current = view;
+                requestAnimationFrame(() => {
+                  applyPendingSelectionToLiveEditor();
+                });
+              }}
+              onOpenExternal={(url) => {
+                void window.electronAPI.openExternal(url);
+              }}
             />
           ) : (
             <div
