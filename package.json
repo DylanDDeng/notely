@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.notes.app",
-    "productName": "Notes",
+    "productName": "Notely",
     "directories": {
       "output": "release"
     },

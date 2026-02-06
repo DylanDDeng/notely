@@ -31,7 +31,7 @@ function Welcome({ onGetStarted, onOpenFolder }: WelcomeProps) {
         </div>
 
         {/* Title */}
-        <h1 className="welcome-title">Notes</h1>
+        <h1 className="welcome-title">Notely</h1>
         <p className="welcome-subtitle">Your thoughts, beautifully organized</p>
 
         {/* Features */}

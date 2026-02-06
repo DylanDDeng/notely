@@ -118,7 +118,7 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
           <div className="settings-item-info">
             <span className="settings-item-label">Launch at startup</span>
             <span className="settings-item-description">
-              Automatically open Notes when you log in
+              Automatically open Notely when you log in
             </span>
           </div>
           <label className="toggle">
@@ -135,7 +135,7 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
           <div className="settings-item-info">
             <span className="settings-item-label">Show in menu bar</span>
             <span className="settings-item-description">
-              Display Notes icon in the macOS menu bar
+              Display Notely icon in the macOS menu bar
             </span>
           </div>
           <label className="toggle">
@@ -321,7 +321,7 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
       case 'shortcuts':
         return renderPlaceholder('Keyboard Shortcuts', 'View and customize keyboard shortcuts');
       case 'about':
-        return renderPlaceholder('About', 'Information about Notes');
+        return renderPlaceholder('About', 'Information about Notely');
       default:
         return renderGeneralSettings();
     }

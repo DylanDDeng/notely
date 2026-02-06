@@ -120,7 +120,7 @@ function Sidebar({
       <div className="sidebar-header">
         <div className="logo">
           <Feather size={24} color="#2563EB" strokeWidth={2.5} />
-          <span className="logo-text">Notes</span>
+          <span className="logo-text">Notely</span>
         </div>
         <button className="icon-btn" onClick={onOpenSettings}>
           <Settings size={18} />
