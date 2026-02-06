@@ -6,6 +6,7 @@
   overflow: hidden;
   --editor-prose-max-width: 860px;
   --editor-prose-padding: 32px;
+  --editor-tail-space: clamp(96px, 18vh, 240px);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -288,7 +289,7 @@
 
 .editor-live-cm .cm-content {
   min-height: 100%;
-  padding: 0;
+  padding: 0 0 var(--editor-tail-space) 0;
   caret-color: #2563EB;
 }
 
@@ -411,6 +412,7 @@
   cursor: text;
   overflow-wrap: anywhere;
   word-break: break-word;
+  padding-bottom: var(--editor-tail-space);
 }
 
 .editor-placeholder {
