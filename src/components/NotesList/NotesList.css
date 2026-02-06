@@ -6,7 +6,9 @@
   border-right: 1px solid #E5E5E5;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   transition: width 0.22s ease, min-width 0.22s ease, flex-basis 0.22s ease;
 }
 
@@ -35,10 +37,14 @@
 }
 
 .notes-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
+  background: #FFFFFF;
   border-bottom: 1px solid #F3F4F6;
 }
 
@@ -83,8 +89,6 @@
 
 /* Notes Container */
 .notes-container {
-  flex: 1;
-  overflow-y: auto;
   padding: 8px;
 }
 

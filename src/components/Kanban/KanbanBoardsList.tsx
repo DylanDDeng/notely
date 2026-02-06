@@ -39,72 +39,74 @@ function KanbanBoardsList({
 
   return (
     <div className={`kanban-boards ${isCollapsed ? 'collapsed' : ''}`}>
-      <div className="kanban-boards-header">
-        <h2 className="kanban-boards-title">Kanban Boards</h2>
-        <div className="kanban-boards-header-actions">
-          <button
-            type="button"
-            className="kanban-boards-icon-btn panel-toggle-btn"
-            title={isCollapsed ? 'Expand boards panel' : 'Collapse boards panel'}
-            aria-label={isCollapsed ? 'Expand boards panel' : 'Collapse boards panel'}
-            onClick={onToggleCollapsed}
-          >
-            {isCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
-          </button>
-          <button
-            className="kanban-boards-icon-btn"
-            title="New board"
-            onClick={() => {
-              setIsCreating(true);
-              setDraftTitle('');
-            }}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-      </div>
-
-      <div className="kanban-boards-search">
-        <input
-          className="kanban-boards-search-input"
-          type="text"
-          placeholder="Search boards..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-
-      {isCreating && (
-        <form
-          className="kanban-boards-create"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const title = draftTitle.trim();
-            if (!title) return;
-            void onCreateBoard(title).then(() => {
-              setIsCreating(false);
-              setDraftTitle('');
-            });
-          }}
-        >
-          <input
-            className="kanban-boards-create-input"
-            type="text"
-            autoFocus
-            placeholder="Board title..."
-            value={draftTitle}
-            onChange={(e) => setDraftTitle(e.target.value)}
-          />
-          <div className="kanban-boards-create-actions">
-            <button type="button" className="kanban-boards-btn secondary" onClick={() => setIsCreating(false)}>
-              Cancel
+      <div className="kanban-boards-top">
+        <div className="kanban-boards-header">
+          <h2 className="kanban-boards-title">Kanban Boards</h2>
+          <div className="kanban-boards-header-actions">
+            <button
+              type="button"
+              className="kanban-boards-icon-btn panel-toggle-btn"
+              title={isCollapsed ? 'Expand boards panel' : 'Collapse boards panel'}
+              aria-label={isCollapsed ? 'Expand boards panel' : 'Collapse boards panel'}
+              onClick={onToggleCollapsed}
+            >
+              {isCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
             </button>
-            <button type="submit" className="kanban-boards-btn primary">
-              Create
+            <button
+              className="kanban-boards-icon-btn"
+              title="New board"
+              onClick={() => {
+                setIsCreating(true);
+                setDraftTitle('');
+              }}
+            >
+              <Plus size={16} />
             </button>
           </div>
-        </form>
-      )}
+        </div>
+
+        <div className="kanban-boards-search">
+          <input
+            className="kanban-boards-search-input"
+            type="text"
+            placeholder="Search boards..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+
+        {isCreating && (
+          <form
+            className="kanban-boards-create"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const title = draftTitle.trim();
+              if (!title) return;
+              void onCreateBoard(title).then(() => {
+                setIsCreating(false);
+                setDraftTitle('');
+              });
+            }}
+          >
+            <input
+              className="kanban-boards-create-input"
+              type="text"
+              autoFocus
+              placeholder="Board title..."
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.target.value)}
+            />
+            <div className="kanban-boards-create-actions">
+              <button type="button" className="kanban-boards-btn secondary" onClick={() => setIsCreating(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="kanban-boards-btn primary">
+                Create
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
 
       <div className="kanban-boards-list">
         {filteredBoards.length === 0 ? (

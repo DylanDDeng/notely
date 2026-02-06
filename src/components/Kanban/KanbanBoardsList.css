@@ -6,7 +6,9 @@
   border-right: 1px solid #E5E5E5;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   transition: width 0.22s ease, min-width 0.22s ease, flex-basis 0.22s ease;
 }
 
@@ -27,6 +29,13 @@
 .kanban-boards.collapsed .kanban-boards-list,
 .kanban-boards.collapsed .kanban-boards-icon-btn:not(.panel-toggle-btn) {
   display: none;
+}
+
+.kanban-boards-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #FFFFFF;
 }
 
 .kanban-boards-header {
@@ -152,8 +161,6 @@
 }
 
 .kanban-boards-list {
-  flex: 1;
-  overflow-y: auto;
   padding: 10px 12px 14px;
 }
 
