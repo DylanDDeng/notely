@@ -108,8 +108,8 @@
 }
 
 .kanban-boards-search-input:focus {
-  border-color: rgba(37, 99, 235, 0.6);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: rgba(51, 65, 85, 0.52);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.12);
 }
 
 .kanban-boards-create {
@@ -132,8 +132,8 @@
 }
 
 .kanban-boards-create-input:focus {
-  border-color: rgba(37, 99, 235, 0.6);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: rgba(51, 65, 85, 0.52);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.12);
 }
 
 .kanban-boards-create-actions {
@@ -163,7 +163,7 @@
 }
 
 .kanban-boards-btn.primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
   color: #FFFFFF;
 }
 
@@ -203,8 +203,8 @@
 }
 
 .kanban-board-item.active {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: rgba(37, 99, 235, 0.32);
+  background: rgba(51, 65, 85, 0.14);
+  border-color: rgba(51, 65, 85, 0.3);
 }
 
 .kanban-board-item-main {

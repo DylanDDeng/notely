@@ -82,13 +82,13 @@
 }
 
 .kanban-board-btn.active {
-  border-color: rgba(37, 99, 235, 0.5);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: rgba(51, 65, 85, 0.48);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.12);
 }
 
 .kanban-board-btn.primary {
   border-color: rgba(255, 255, 255, 0.2);
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
   color: #FFFFFF;
 }
 
@@ -137,8 +137,8 @@
 }
 
 .kanban-filter-field input[type="date"]:focus {
-  border-color: rgba(37, 99, 235, 0.6);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: rgba(51, 65, 85, 0.52);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.12);
 }
 
 .kanban-filter-actions {
@@ -203,8 +203,8 @@
 }
 
 .kanban-column.drag-over {
-  border-color: rgba(37, 99, 235, 0.45);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.10);
+  border-color: rgba(51, 65, 85, 0.42);
+  box-shadow: 0 0 0 4px rgba(51, 65, 85, 0.1);
 }
 
 .kanban-column-header {
@@ -326,7 +326,7 @@
 }
 
 .kanban-card.drop-target {
-  outline: 2px dashed rgba(37, 99, 235, 0.5);
+  outline: 2px dashed rgba(51, 65, 85, 0.5);
   outline-offset: 2px;
 }
 
@@ -460,9 +460,9 @@
 }
 
 .kanban-add-card:hover {
-  background: rgba(37, 99, 235, 0.06);
-  border-color: rgba(37, 99, 235, 0.35);
-  color: #2563EB;
+  background: rgba(51, 65, 85, 0.08);
+  border-color: rgba(51, 65, 85, 0.34);
+  color: #374151;
 }
 
 .kanban-add-column {
@@ -483,9 +483,9 @@
 }
 
 .kanban-add-column:hover {
-  border-color: rgba(37, 99, 235, 0.4);
-  color: #2563EB;
-  background: rgba(37, 99, 235, 0.04);
+  border-color: rgba(51, 65, 85, 0.34);
+  color: #374151;
+  background: rgba(51, 65, 85, 0.06);
 }
 
 .kanban-modal-overlay {
@@ -557,8 +557,8 @@
 
 .kanban-modal-field input:focus,
 .kanban-modal-field select:focus {
-  border-color: rgba(37, 99, 235, 0.6);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: rgba(51, 65, 85, 0.52);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.12);
 }
 
 .kanban-modal-actions {
@@ -588,10 +588,10 @@
 }
 
 .kanban-modal-btn.primary {
-  background: #2563EB;
+  background: #374151;
   color: #FFFFFF;
 }
 
 .kanban-modal-btn.primary:hover {
-  background: #1D4ED8;
+  background: #1F2937;
 }

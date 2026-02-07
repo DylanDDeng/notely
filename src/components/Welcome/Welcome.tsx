@@ -27,7 +27,7 @@ function Welcome({ onGetStarted, onOpenFolder }: WelcomeProps) {
       <div className="welcome-content">
         {/* Logo */}
         <div className="welcome-logo">
-          <Feather size={64} color="#2563EB" strokeWidth={1.5} />
+          <Feather size={64} color="#374151" strokeWidth={1.5} />
         </div>
 
         {/* Title */}

@@ -103,9 +103,9 @@
 }
 
 .editor-mode-btn {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
   color: #FFFFFF;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(51, 65, 85, 0.34);
   padding: 6px 12px;
   border-radius: 8px;
   font-size: 12px;
@@ -142,8 +142,8 @@
 }
 
 .editor-action-btn.active {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: rgba(37, 99, 235, 0.32);
+  background: rgba(51, 65, 85, 0.14);
+  border-color: rgba(51, 65, 85, 0.3);
   color: var(--accent-primary);
 }
 
@@ -726,8 +726,8 @@
 }
 
 .editor-export-field select:focus {
-  border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  border-color: #374151;
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.18);
 }
 
 .editor-export-field select:disabled {
@@ -784,8 +784,8 @@
 }
 
 .editor-export-btn.primary {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
+  border-color: rgba(51, 65, 85, 0.32);
   color: #FFFFFF;
 }
 

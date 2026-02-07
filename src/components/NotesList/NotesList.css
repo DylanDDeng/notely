@@ -90,8 +90,8 @@
 }
 
 .action-btn.active {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: rgba(37, 99, 235, 0.32);
+  background: rgba(51, 65, 85, 0.14);
+  border-color: rgba(51, 65, 85, 0.3);
   color: var(--accent-primary);
 }
 
@@ -162,14 +162,14 @@
 }
 
 .note-card.selected {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: rgba(37, 99, 235, 0.5);
-  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.16);
+  background: rgba(51, 65, 85, 0.14);
+  border-color: rgba(51, 65, 85, 0.36);
+  box-shadow: 0 16px 30px rgba(31, 41, 55, 0.18);
 }
 
 .notes-container.grid .note-card.selected {
-  background: rgba(37, 99, 235, 0.2);
-  border-color: rgba(37, 99, 235, 0.5);
+  background: rgba(51, 65, 85, 0.18);
+  border-color: rgba(51, 65, 85, 0.36);
 }
 
 .note-card-title-row {
@@ -205,7 +205,7 @@
 }
 
 .note-card.selected .note-card-title {
-  color: #1e3a8a;
+  color: #111827;
 }
 
 .note-card.selected .note-card-pin {
@@ -228,7 +228,7 @@
 }
 
 .note-card.selected .note-card-preview {
-  color: #2563eb;
+  color: #374151;
 }
 
 .note-card-meta {

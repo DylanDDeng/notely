@@ -81,8 +81,8 @@
 
 .search-input:focus {
   background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(37, 99, 235, 0.45);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: rgba(51, 65, 85, 0.45);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.12);
 }
 
 .search-input::placeholder {
@@ -121,7 +121,7 @@
 }
 
 .section-title-btn:focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline: 2px solid rgba(51, 65, 85, 0.35);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -217,8 +217,8 @@
 }
 
 .nav-item.active {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: rgba(37, 99, 235, 0.32);
+  background: rgba(51, 65, 85, 0.14);
+  border-color: rgba(51, 65, 85, 0.3);
   color: var(--accent-primary);
 }
 
@@ -239,8 +239,8 @@
 }
 
 .nav-item.active .nav-count {
-  color: #2563EB;
-  background: rgba(37, 99, 235, 0.12);
+  color: #374151;
+  background: rgba(51, 65, 85, 0.12);
 }
 
 .tag-list {
@@ -291,17 +291,17 @@
 }
 
 .tag-nav-item.active {
-  color: var(--accent-primary);
-  border-color: rgba(37, 99, 235, 0.46);
+  color: var(--tag-accent-primary);
+  border-color: rgba(37, 99, 235, 0.42);
   background:
-    rgba(37, 99, 235, 0.18);
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.16);
+    rgba(37, 99, 235, 0.14);
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.14);
 }
 
 .tag-nav-item.active .nav-count {
-  color: #1e40af;
+  color: var(--tag-accent-strong);
   border-color: rgba(37, 99, 235, 0.35);
-  background: rgba(37, 99, 235, 0.18);
+  background: rgba(37, 99, 235, 0.14);
 }
 
 .tag-dot {
@@ -323,9 +323,9 @@
   justify-content: center;
   gap: 8px;
   padding: 10px 16px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
   color: white;
-  border: 1px solid rgba(59, 130, 246, 0.36);
+  border: 1px solid rgba(51, 65, 85, 0.34);
   border-radius: 12px;
   font-size: 14px;
   font-weight: 500;
@@ -336,5 +336,5 @@
 .new-note-btn:hover {
   filter: brightness(1.03);
   transform: translateY(-1px);
-  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.28);
+  box-shadow: 0 12px 26px rgba(31, 41, 55, 0.24);
 }

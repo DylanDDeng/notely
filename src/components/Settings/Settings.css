@@ -85,8 +85,8 @@
 }
 
 .settings-nav-item.active {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: rgba(37, 99, 235, 0.34);
+  background: rgba(51, 65, 85, 0.14);
+  border-color: rgba(51, 65, 85, 0.32);
   color: var(--accent-primary);
 }
 
@@ -324,8 +324,8 @@
 }
 
 .settings-font-suggestion.active {
-  background: rgba(37, 99, 235, 0.12);
-  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(51, 65, 85, 0.12);
+  border-color: rgba(51, 65, 85, 0.34);
   color: var(--accent-primary);
 }
 

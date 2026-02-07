@@ -90,7 +90,7 @@
 .welcome-btn-primary {
   width: 100%;
   padding: 14px 24px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
   color: white;
   border: none;
   border-radius: 10px;
@@ -104,7 +104,7 @@
 .welcome-btn-primary:hover {
   filter: brightness(1.04);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 4px 12px rgba(31, 41, 55, 0.3);
 }
 
 .welcome-btn-secondary {

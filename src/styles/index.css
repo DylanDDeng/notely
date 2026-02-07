@@ -20,8 +20,12 @@
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-tertiary: #64748b;
-  --accent-primary: #2563eb;
-  --accent-primary-strong: #1d4ed8;
+  --accent-primary: #374151;
+  --accent-primary-strong: #1f2937;
+  --ui-gradient-start: #4b5563;
+  --ui-gradient-end: #1f2937;
+  --tag-accent-primary: #2563eb;
+  --tag-accent-strong: #1d4ed8;
 }
 
 html, body {
@@ -72,13 +76,13 @@ body::before {
 
 /* Selection */
 ::selection {
-  background: rgba(37, 99, 235, 0.2);
-  color: #1e3a8a;
+  background: rgba(51, 65, 85, 0.2);
+  color: #111827;
 }
 
 /* Focus styles */
 :focus-visible {
-  outline: 2px solid rgba(37, 99, 235, 0.55);
+  outline: 2px solid rgba(51, 65, 85, 0.5);
   outline-offset: 2px;
 }
 
