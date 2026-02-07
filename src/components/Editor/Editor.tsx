@@ -4,7 +4,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
+import { Copy, FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
@@ -548,6 +548,31 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       .trim();
   }, []);
 
+  const copyMarkdownSource = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      showToast('success', 'Markdown copied');
+      setIsMoreMenuOpen(false);
+    } catch (err) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = content;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!ok) throw new Error('Copy command failed');
+        showToast('success', 'Markdown copied');
+        setIsMoreMenuOpen(false);
+      } catch {
+        showToast('error', 'Failed to copy markdown');
+      }
+    }
+  }, [content, showToast]);
+
   const exportCurrentNoteToPdf = useCallback(async () => {
     if (!note) return;
     if (isExporting) return;
@@ -771,6 +796,17 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
               </button>
               {isMoreMenuOpen && (
                 <div className="editor-more-menu" role="menu">
+                  <button
+                    type="button"
+                    className="editor-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      void copyMarkdownSource();
+                    }}
+                  >
+                    <Copy size={16} />
+                    <span>Copy Markdown</span>
+                  </button>
                   <button
                     type="button"
                     className="editor-more-item"
