@@ -6,13 +6,13 @@
 
 :root {
   --app-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --glass-bg: rgba(255, 255, 255, 0.44);
-  --glass-bg-strong: rgba(255, 255, 255, 0.62);
-  --glass-bg-soft: rgba(255, 255, 255, 0.3);
-  --glass-border: rgba(255, 255, 255, 0.52);
-  --glass-border-strong: rgba(148, 163, 184, 0.35);
-  --glass-shadow: 0 16px 44px rgba(15, 23, 42, 0.15);
-  --glass-blur: 20px;
+  --glass-bg: rgba(255, 255, 255, 0.36);
+  --glass-bg-strong: rgba(255, 255, 255, 0.5);
+  --glass-bg-soft: rgba(255, 255, 255, 0.24);
+  --glass-border: rgba(255, 255, 255, 0.66);
+  --glass-border-strong: rgba(148, 163, 184, 0.42);
+  --glass-shadow: 0 20px 54px rgba(15, 23, 42, 0.18);
+  --glass-blur: 26px;
   --glass-radius-lg: 18px;
   --glass-radius-md: 14px;
   --surface-content: rgba(255, 255, 255, 0.9);
@@ -35,9 +35,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
   color: var(--text-primary);
   background:
-    radial-gradient(1000px circle at -12% -24%, rgba(59, 130, 246, 0.18), transparent 60%),
-    radial-gradient(860px circle at 116% -8%, rgba(56, 189, 248, 0.16), transparent 55%),
-    linear-gradient(165deg, #eef3ff 0%, #f8fbff 46%, #edf7ff 100%);
+    radial-gradient(1080px circle at -12% -24%, rgba(59, 130, 246, 0.24), transparent 60%),
+    radial-gradient(940px circle at 116% -8%, rgba(56, 189, 248, 0.2), transparent 55%),
+    linear-gradient(165deg, #e7efff 0%, #f4f8ff 46%, #e8f4ff 100%);
   position: relative;
 }
 
@@ -47,15 +47,15 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(to bottom right, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08)),
+    linear-gradient(to bottom right, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.1)),
     repeating-linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.04) 0px,
-      rgba(255, 255, 255, 0.04) 2px,
+      rgba(255, 255, 255, 0.06) 0px,
+      rgba(255, 255, 255, 0.06) 2px,
       transparent 2px,
       transparent 6px
     );
-  opacity: 0.45;
+  opacity: 0.56;
   z-index: 0;
 }
 
