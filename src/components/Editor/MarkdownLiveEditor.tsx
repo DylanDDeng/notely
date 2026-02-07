@@ -161,7 +161,6 @@ const buildLivePreviewDecorations = (
   onOpenImagePreview?: (url: string) => void
 ): DecorationSet => {
   const doc = view.state.doc;
-  const activeLineNo = doc.lineAt(view.state.selection.main.head).number;
   const ranges: Range<Decoration>[] = [];
 
   let inFence = false;
@@ -169,11 +168,10 @@ const buildLivePreviewDecorations = (
   for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
     const line = doc.line(lineNo);
     const text = line.text;
-    const isActiveLine = lineNo === activeLineNo;
     const trimmed = text.trimStart();
     const isFenceLine = /^(```|~~~)/.test(trimmed);
 
-    if (!isActiveLine && !inFence && text.length > 0) {
+    if (!inFence && text.length > 0) {
       const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
       if (heading) {
         const level = heading[2].length;
@@ -299,7 +297,7 @@ const createLivePreviewPlugin = (onOpenImagePreview?: (url: string) => void) =>
       }
 
       update(update: ViewUpdate) {
-        if (update.docChanged || update.selectionSet || update.viewportChanged) {
+        if (update.docChanged) {
           this.decorations = buildLivePreviewDecorations(update.view, onOpenImagePreview);
         }
       }
