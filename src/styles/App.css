@@ -5,6 +5,7 @@
   -webkit-user-select: none;
   user-select: none;
   position: relative;
+  background: transparent;
 }
 
 /* Drag region for macOS */
