@@ -52,6 +52,17 @@ const addRange = (ranges: ReturnType<typeof hiddenMarker.range>[], from: number,
   ranges.push(hiddenMarker.range(from, to));
 };
 
+const addRangeUnlessLineExhausted = (
+  ranges: ReturnType<typeof hiddenMarker.range>[],
+  from: number,
+  to: number,
+  lineEnd: number
+) => {
+  if (to <= from) return;
+  if (to >= lineEnd) return;
+  ranges.push(hiddenMarker.range(from, to));
+};
+
 class MarkdownImageWidget extends WidgetType {
   constructor(
     private readonly src: string,
@@ -158,20 +169,23 @@ class MarkdownListMarkerWidget extends WidgetType {
 
 const buildLivePreviewDecorations = (
   view: EditorView,
-  onOpenImagePreview?: (url: string) => void
+  onOpenImagePreview?: (url: string) => void,
+  activeLineNo?: number
 ): DecorationSet => {
   const doc = view.state.doc;
   const ranges: Range<Decoration>[] = [];
+  const focusedLineNo = activeLineNo ?? doc.lineAt(view.state.selection.main.head).number;
 
   let inFence = false;
 
   for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
     const line = doc.line(lineNo);
     const text = line.text;
+    const isActiveLine = lineNo === focusedLineNo;
     const trimmed = text.trimStart();
     const isFenceLine = /^(```|~~~)/.test(trimmed);
 
-    if (!inFence && text.length > 0) {
+    if (!isActiveLine && !inFence && text.length > 0) {
       const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
       if (heading) {
         const level = heading[2].length;
@@ -180,7 +194,12 @@ const buildLivePreviewDecorations = (
         if (headingText && line.to > headingTextFrom) {
           ranges.push(headingText.range(headingTextFrom, line.to));
         }
-        addRange(ranges, line.from + heading[1].length, line.from + heading[1].length + heading[2].length + heading[3].length);
+        addRangeUnlessLineExhausted(
+          ranges,
+          line.from + heading[1].length,
+          line.from + heading[1].length + heading[2].length + heading[3].length,
+          line.to
+        );
       }
 
       const quotePrefix = text.match(/^(\s*>+\s*)+/);
@@ -188,24 +207,25 @@ const buildLivePreviewDecorations = (
         const quoteDepth = (quotePrefix[0].match(/>/g) || []).length;
         const normalizedDepth = Math.max(1, Math.min(quoteDepth, quoteLineDecorations.length));
         ranges.push(quoteLineDecorations[normalizedDepth - 1].range(line.from));
-        addRange(ranges, line.from, line.from + quotePrefix[0].length);
       }
 
       const taskPrefix = text.match(/^(\s*[-+*]\s+\[(?: |x|X)\]\s+)/);
       if (taskPrefix) {
-        addRange(ranges, line.from, line.from + taskPrefix[0].length);
+        addRangeUnlessLineExhausted(ranges, line.from, line.from + taskPrefix[0].length, line.to);
       } else {
         const listPrefix = text.match(/^(\s*)([-+*]|\d+[.)])(\s+)/);
         if (listPrefix) {
           const markerFrom = line.from + listPrefix[1].length;
           const markerTo = markerFrom + listPrefix[2].length + listPrefix[3].length;
-          const isOrdered = /^\d+[.)]$/.test(listPrefix[2]);
-          ranges.push(
-            Decoration.replace({
-              widget: new MarkdownListMarkerWidget(listPrefix[2], isOrdered),
-              inclusive: false,
-            }).range(markerFrom, markerTo)
-          );
+          if (markerTo < line.to) {
+            const isOrdered = /^\d+[.)]$/.test(listPrefix[2]);
+            ranges.push(
+              Decoration.replace({
+                widget: new MarkdownListMarkerWidget(listPrefix[2], isOrdered),
+                inclusive: false,
+              }).range(markerFrom, markerTo)
+            );
+          }
         }
       }
 
@@ -293,12 +313,18 @@ const createLivePreviewPlugin = (onOpenImagePreview?: (url: string) => void) =>
       decorations: DecorationSet;
 
       constructor(view: EditorView) {
-        this.decorations = buildLivePreviewDecorations(view, onOpenImagePreview);
+        this.activeLineNo = view.state.doc.lineAt(view.state.selection.main.head).number;
+        this.decorations = buildLivePreviewDecorations(view, onOpenImagePreview, this.activeLineNo);
       }
 
+      activeLineNo: number;
+
       update(update: ViewUpdate) {
-        if (update.docChanged) {
-          this.decorations = buildLivePreviewDecorations(update.view, onOpenImagePreview);
+        const nextActiveLineNo = update.state.doc.lineAt(update.state.selection.main.head).number;
+        const activeLineChanged = nextActiveLineNo !== this.activeLineNo;
+        if (update.docChanged || (update.selectionSet && activeLineChanged)) {
+          this.activeLineNo = nextActiveLineNo;
+          this.decorations = buildLivePreviewDecorations(update.view, onOpenImagePreview, this.activeLineNo);
         }
       }
     },
