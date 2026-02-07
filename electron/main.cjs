@@ -252,7 +252,7 @@ async function createWindow() {
     transparent: process.platform === 'darwin',
     ...(process.platform === 'darwin'
       ? {
-          vibrancy: 'sidebar',
+          vibrancy: 'under-window',
           visualEffectState: 'active',
         }
       : {}),
