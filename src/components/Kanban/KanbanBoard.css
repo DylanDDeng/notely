@@ -30,7 +30,7 @@
   gap: 16px;
   padding: 18px 24px 14px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .kanban-board-title-wrap {
@@ -66,11 +66,11 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.64);
   padding: 9px 12px;
   border-radius: 10px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.54);
+  background: rgba(255, 255, 255, 0.4);
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 650;
@@ -78,7 +78,7 @@
 }
 
 .kanban-board-btn:hover {
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .kanban-board-btn.active {
@@ -99,7 +99,7 @@
 .kanban-filter {
   padding: 12px 24px 14px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .kanban-filter-row {
@@ -127,12 +127,12 @@
 }
 
 .kanban-filter-field input[type="date"] {
-  border: 1px solid rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.64);
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 13px;
   outline: none;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.44);
   color: var(--text-primary);
 }
 
@@ -146,8 +146,8 @@
 }
 
 .kanban-filter-clear {
-  border: 1px solid rgba(255, 255, 255, 0.54);
-  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  background: rgba(255, 255, 255, 0.44);
   color: var(--text-secondary);
   border-radius: 10px;
   padding: 8px 12px;
@@ -157,7 +157,7 @@
 }
 
 .kanban-filter-clear:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .kanban-filter-tags {
@@ -195,8 +195,8 @@
   width: 280px;
   min-width: 280px;
   max-height: 100%;
-  background: rgba(255, 255, 255, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 16px;
   display: flex;
   flex-direction: column;
@@ -271,8 +271,8 @@
 }
 
 .kanban-icon-btn {
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   width: 32px;
   height: 32px;
   border-radius: 10px;
@@ -285,7 +285,7 @@
 }
 
 .kanban-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.68);
   color: var(--text-primary);
 }
 
@@ -309,8 +309,8 @@
   gap: 10px;
   padding: 10px 10px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.74);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
   align-items: flex-start;
   cursor: grab;
@@ -322,7 +322,7 @@
 
 .kanban-card.done {
   opacity: 0.82;
-  background: rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.44);
 }
 
 .kanban-card.drop-target {

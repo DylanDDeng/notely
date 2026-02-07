@@ -72,7 +72,7 @@
 .editor-header {
   padding: 16px 0;
   border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .editor-header-inner {
@@ -127,8 +127,8 @@
 }
 
 .editor-action-btn {
-  background: rgba(255, 255, 255, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.48);
   padding: 8px;
   border-radius: 6px;
   cursor: pointer;
@@ -140,8 +140,8 @@
 }
 
 .editor-action-btn:hover {
-  background: rgba(255, 255, 255, 0.5);
-  border-color: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.34);
+  border-color: rgba(255, 255, 255, 0.64);
   color: var(--text-secondary);
 }
 
@@ -164,8 +164,8 @@
   min-width: 170px;
   padding: 6px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.56);
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.64);
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.2);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -192,7 +192,7 @@
 }
 
 .editor-more-item:hover {
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.44);
 }
 
 /* Title */
@@ -641,8 +641,8 @@
 
 .editor-export-modal {
   width: min(520px, 100%);
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.68);
   border-radius: 16px;
   box-shadow: 0 34px 90px rgba(15, 23, 42, 0.28);
   backdrop-filter: blur(20px);
@@ -657,8 +657,8 @@
   align-items: flex-start;
   justify-content: space-between;
   padding: 16px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.56);
-  background: rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .editor-export-header-text h2 {
@@ -675,8 +675,8 @@
 }
 
 .editor-export-close {
-  background: rgba(255, 255, 255, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.52);
   padding: 6px;
   border-radius: 10px;
   cursor: pointer;
@@ -688,7 +688,7 @@
 }
 
 .editor-export-close:hover {
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.42);
   color: var(--text-primary);
 }
 
@@ -719,12 +719,12 @@
 }
 
 .editor-export-field select {
-  border: 1px solid rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.66);
   border-radius: 12px;
   padding: 10px 12px;
   font-size: 13px;
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.46);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -765,11 +765,11 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 18px 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.56);
+  border-top: 1px solid rgba(255, 255, 255, 0.64);
 }
 
 .editor-export-btn {
-  border: 1px solid rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 12px;
   padding: 9px 14px;
   font-size: 13px;
@@ -779,12 +779,12 @@
 }
 
 .editor-export-btn.secondary {
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.44);
   color: var(--text-secondary);
 }
 
 .editor-export-btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .editor-export-btn.primary {
@@ -809,8 +809,8 @@
   z-index: 9200;
   padding: 10px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.68);
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
   color: var(--text-primary);
   backdrop-filter: blur(14px);

@@ -53,7 +53,7 @@
   justify-content: space-between;
   padding: 16px 20px;
   background: var(--glass-bg-strong);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.62);
   backdrop-filter: blur(calc(var(--glass-blur) - 4px));
   -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 4px));
 }
@@ -75,8 +75,8 @@
 }
 
 .action-btn {
-  background: rgba(255, 255, 255, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.48);
   padding: 6px;
   border-radius: 10px;
   cursor: pointer;
@@ -88,8 +88,8 @@
 }
 
 .action-btn:hover {
-  background: rgba(255, 255, 255, 0.45);
-  border-color: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.34);
+  border-color: rgba(255, 255, 255, 0.64);
   color: var(--text-secondary);
 }
 
@@ -133,25 +133,25 @@
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.15s;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .notes-container.grid .note-card {
   margin-bottom: 0;
-  border-color: rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.46);
+  border-color: rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.34);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
 }
 
 .note-card:hover {
-  background: rgba(255, 255, 255, 0.34);
-  border-color: rgba(255, 255, 255, 0.46);
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.58);
 }
 
 .notes-container.grid .note-card:hover {
-  background: rgba(255, 255, 255, 0.56);
-  border-color: rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.46);
+  border-color: rgba(255, 255, 255, 0.66);
   box-shadow: 0 12px 26px rgba(15, 23, 42, 0.14);
   transform: translateY(-1px);
 }
