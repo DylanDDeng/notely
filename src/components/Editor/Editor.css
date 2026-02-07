@@ -2,7 +2,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--surface-content);
+  background: var(--surface-content-strong);
   border: 1px solid var(--glass-border);
   border-radius: var(--glass-radius-lg);
   box-shadow: var(--glass-shadow);
@@ -67,8 +67,8 @@
 /* Header */
 .editor-header {
   padding: 16px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: transparent;
 }
 
 .editor-header-inner {
@@ -264,7 +264,7 @@
   display: flex;
   scrollbar-gutter: stable;
   scroll-padding-bottom: var(--editor-tail-space);
-  background: var(--surface-content-strong);
+  background: transparent;
 }
 
 .editor-content-inner {
