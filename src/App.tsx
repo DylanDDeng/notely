@@ -115,6 +115,29 @@ function App() {
     });
   }, []);
 
+  const makeUniqueFilename = useCallback((title: string, excludeFilename?: string) => {
+    const baseFilename = generateFilename(title);
+    const baseName = baseFilename.replace(/\.md$/i, '');
+    const excluded = excludeFilename?.toLowerCase();
+    const existingFilenames = new Set(
+      notes
+        .map((note) => note.filename.toLowerCase())
+        .filter((filename) => !excluded || filename !== excluded)
+    );
+
+    if (!existingFilenames.has(baseFilename.toLowerCase())) {
+      return baseFilename;
+    }
+
+    let suffix = 2;
+    let candidate = `${baseName}-${suffix}.md`;
+    while (existingFilenames.has(candidate.toLowerCase())) {
+      suffix += 1;
+      candidate = `${baseName}-${suffix}.md`;
+    }
+    return candidate;
+  }, [notes]);
+
   useEffect(() => {
     const trimmed = appFontFamily.trim();
     if (!trimmed) {
@@ -214,7 +237,7 @@ function App() {
       tags: [] as string[],
     };
     const content = generateNoteContent(frontmatter, '');
-    const filename = generateFilename('Untitled Note', now);
+    const filename = makeUniqueFilename('Untitled Note');
     
     try {
       await window.electronAPI.createNote({ filename, content });
@@ -226,7 +249,7 @@ function App() {
     } catch (err) {
       console.error('Failed to create note:', err);
     }
-  }, [activeFilter, handleOpenNote, loadNotes]);
+  }, [activeFilter, handleOpenNote, loadNotes, makeUniqueFilename]);
 
   // 保存笔记（用于自动保存）
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
@@ -238,23 +261,38 @@ function App() {
       tags: noteData.tags,
     };
     const fileContent = generateNoteContent(frontmatter, noteData.content);
-    const filename = noteData.filename || generateFilename(noteData.title, now);
+    const previousFilename = noteData.filename;
+    const filename = makeUniqueFilename(noteData.title, previousFilename);
+    const previousNoteId =
+      noteData.id ||
+      (previousFilename ? previousFilename.replace(/\.md$/i, '') : filename.replace(/\.md$/i, ''));
+    const nextNoteId = filename.replace(/\.md$/i, '');
+    const isRenamed = Boolean(previousFilename && previousFilename !== filename);
 
     const result = await window.electronAPI.saveNote({ filename, content: fileContent, preserveModifiedAt });
     if (!result.success) {
       throw new Error(result.error || 'Failed to save note');
     }
 
-    const noteId = noteData.id || filename.replace(/\.md$/i, '');
+    if (isRenamed && previousFilename) {
+      const deleteResult = await window.electronAPI.deleteNote(previousFilename);
+      if (!deleteResult.success) {
+        console.warn('Failed to remove old note filename after rename:', deleteResult.error);
+      }
+    }
+
     const parsed = parseNote(fileContent, filename);
     setNotes(prevNotes => {
       const updatedNotes = prevNotes
         .map(note => {
-          if (note.id !== noteId) return note;
+          if (note.id !== previousNoteId) return note;
           const nextModifiedAt = preserveModifiedAt ? note.modifiedAt : now;
+          const nextFilepath = note.filepath.replace(/[^/\\]+$/, filename);
           return {
             ...note,
+            id: nextNoteId,
             filename,
+            filepath: nextFilepath,
             content: fileContent,
             modifiedAt: nextModifiedAt,
             ...parsed,
@@ -264,19 +302,25 @@ function App() {
       return updatedNotes;
     });
 
+    if (selectedNoteId === previousNoteId) {
+      setSelectedNoteId(nextNoteId);
+    }
+
     setCurrentNote(prev => {
-      if (!prev || prev.id !== noteId) return prev;
+      if (!prev || prev.id !== previousNoteId) return prev;
       const nextModifiedAt = preserveModifiedAt ? prev.modifiedAt : now;
       return {
         ...prev,
+        id: nextNoteId,
         filename,
+        title: noteData.title,
         content: noteData.content,
         tags: noteData.tags,
         date: frontmatter.date,
         modifiedAt: nextModifiedAt,
       };
     });
-  }, []);
+  }, [makeUniqueFilename, selectedNoteId]);
 
   // 开始使用 - 使用默认路径
   const handleGetStarted = useCallback(async () => {
@@ -409,7 +453,7 @@ function App() {
   const handleCreateKanbanBoard = useCallback(
     async (title: string) => {
       const now = new Date();
-      const baseFilename = generateFilename(title, now).replace(/\.md$/i, '');
+      const baseFilename = generateFilename(title).replace(/\.md$/i, '');
       const filename = `${baseFilename}-${now.getTime()}.md`;
       const frontmatter = {
         title,

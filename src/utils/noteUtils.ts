@@ -63,13 +63,16 @@ export function generateNoteContent(frontmatter: NoteFrontmatter, body: string):
 /**
  * 生成文件名
  */
-export function generateFilename(title: string, date: Date): string {
-  const dateStr = date.toISOString().split('T')[0];
-  const sanitizedTitle = title
-    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '-')
+export function generateFilename(title: string): string {
+  const fallbackTitle = 'Untitled Note';
+  const trimmed = title.trim();
+  const safeTitle = (trimmed || fallbackTitle)
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
     .replace(/-+/g, '-')
-    .substring(0, 50);
-  return `${dateStr}-${sanitizedTitle}.md`;
+    .trim()
+    .slice(0, 80);
+  return `${safeTitle || fallbackTitle}.md`;
 }
 
 /**
