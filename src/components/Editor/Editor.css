@@ -6,9 +6,10 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--glass-radius-lg);
   box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(calc(var(--glass-blur) - 6px));
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 6px));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   overflow: hidden;
+  isolation: isolate;
   --editor-prose-max-width: 860px;
   --editor-prose-padding: 32px;
   --editor-tail-space: clamp(96px, 18vh, 240px);
@@ -265,6 +266,7 @@
   scrollbar-gutter: stable;
   scroll-padding-bottom: var(--editor-tail-space);
   background: transparent;
+  contain: paint;
 }
 
 .editor-content-inner {

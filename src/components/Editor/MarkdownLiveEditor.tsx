@@ -123,7 +123,6 @@ class MarkdownVideoWidget extends WidgetType {
   toDOM() {
     const wrapper = document.createElement('span');
     wrapper.className = 'cm-md-video-widget';
-    wrapper.contentEditable = 'false';
 
     const title = document.createElement('span');
     title.className = 'cm-md-video-widget-title';
@@ -139,7 +138,7 @@ class MarkdownVideoWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return true;
+    return false;
   }
 }
 
@@ -281,12 +280,11 @@ const buildLivePreviewDecorations = (
             const widget = isVideoSource(rawUrl) || isVideoSource(url)
               ? new MarkdownVideoWidget(url, textValue)
               : new MarkdownImageWidget(url, textValue, onOpenImagePreview);
-            addRange(ranges, fullStart, fullEnd);
             ranges.push(
-              Decoration.widget({
-                side: 1,
+              Decoration.replace({
                 widget,
-              }).range(fullEnd)
+                inclusive: false,
+              }).range(fullStart, fullEnd)
             );
           }
         } else {

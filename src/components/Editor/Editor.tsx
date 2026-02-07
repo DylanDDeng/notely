@@ -661,6 +661,19 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   };
 
   const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = editorContentRef.current;
+    if (
+      container &&
+      e.target === e.currentTarget &&
+      container.scrollHeight > container.clientHeight
+    ) {
+      const rect = container.getBoundingClientRect();
+      const scrollbarHitWidth = 18;
+      if (e.clientX >= rect.right - scrollbarHitWidth) {
+        return;
+      }
+    }
+
     const target = e.target as HTMLElement | null;
     if (!target) {
       pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };

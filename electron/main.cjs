@@ -252,7 +252,8 @@ async function createWindow() {
     transparent: process.platform === 'darwin',
     ...(process.platform === 'darwin'
       ? {
-          vibrancy: 'under-window',
+          // "under-window" is prone to repaint flicker while scrolling translucent panels.
+          vibrancy: 'sidebar',
           visualEffectState: 'active',
         }
       : {}),
