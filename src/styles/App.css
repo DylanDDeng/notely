@@ -4,6 +4,7 @@
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
+  position: relative;
 }
 
 /* Drag region for macOS */
@@ -16,6 +17,19 @@
   height: 40px;
   -webkit-app-region: drag;
   pointer-events: none;
+}
+
+.app-main {
+  gap: 12px;
+  padding: 10px;
+}
+
+.app-main > .sidebar,
+.app-main > .notes-list,
+.app-main > .kanban-boards,
+.app-main > .kanban-board,
+.app-main > .editor {
+  min-height: 0;
 }
 
 /* Ensure interactive elements are not draggable */

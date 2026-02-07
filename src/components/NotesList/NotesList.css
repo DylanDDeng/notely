@@ -2,8 +2,12 @@
   width: 320px;
   min-width: 320px;
   flex: 0 0 320px;
-  background: #FFFFFF;
-  border-right: 1px solid #E5E5E5;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius-lg);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -16,7 +20,7 @@
   width: auto;
   min-width: 0;
   flex: 1;
-  border-right: none;
+  border-right: 1px solid var(--glass-border);
 }
 
 .notes-list.collapsed {
@@ -44,14 +48,16 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  background: #FFFFFF;
-  border-bottom: 1px solid #F3F4F6;
+  background: var(--glass-bg-strong);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(calc(var(--glass-blur) - 4px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 4px));
 }
 
 .notes-list-title {
   font-size: 18px;
-  font-weight: 600;
-  color: #1F2937;
+  font-weight: 650;
+  color: var(--text-primary);
   margin: 0;
 }
 
@@ -61,30 +67,32 @@
 }
 
 .panel-toggle-btn {
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .action-btn {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.34);
   padding: 6px;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .action-btn:hover {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: rgba(255, 255, 255, 0.45);
+  border-color: rgba(255, 255, 255, 0.52);
+  color: var(--text-secondary);
 }
 
 .action-btn.active {
-  background: #E5E7EB;
-  color: #1F2937;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(37, 99, 235, 0.32);
+  color: var(--accent-primary);
 }
 
 /* Notes Container */
@@ -118,38 +126,40 @@
 .note-card {
   padding: 14px 16px;
   margin-bottom: 4px;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.15s;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .notes-container.grid .note-card {
   margin-bottom: 0;
-  border-color: #E5E7EB;
-  background: #FFFFFF;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.46);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
 }
 
 .note-card:hover {
-  background: #F9FAFB;
+  background: rgba(255, 255, 255, 0.34);
+  border-color: rgba(255, 255, 255, 0.46);
 }
 
 .notes-container.grid .note-card:hover {
-  background: #FFFFFF;
-  border-color: #D1D5DB;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.56);
+  border-color: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.14);
   transform: translateY(-1px);
 }
 
 .note-card.selected {
-  background: #EFF6FF;
-  border-color: #BFDBFE;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(37, 99, 235, 0.34);
 }
 
 .notes-container.grid .note-card.selected {
-  background: #F8FAFF;
-  border-color: #93C5FD;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(37, 99, 235, 0.34);
 }
 
 .note-card-title-row {
@@ -161,7 +171,7 @@
 .note-card-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
   margin: 0 0 6px 0;
   line-height: 1.4;
   flex: 1;
@@ -172,7 +182,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
@@ -185,11 +195,11 @@
 }
 
 .note-card.selected .note-card-title {
-  color: #1E40AF;
+  color: #1e3a8a;
 }
 
 .note-card.selected .note-card-pin {
-  color: #2563EB;
+  color: var(--accent-primary);
 }
 
 .note-card.selected .note-card-star {
@@ -198,7 +208,7 @@
 
 .note-card-preview {
   font-size: 13px;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin: 0 0 10px 0;
   line-height: 1.5;
   display: -webkit-box;
@@ -208,7 +218,7 @@
 }
 
 .note-card.selected .note-card-preview {
-  color: #3B82F6;
+  color: #2563eb;
 }
 
 .note-card-meta {
@@ -219,7 +229,7 @@
 
 .note-card-date {
   font-size: 12px;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 .note-card-tag {

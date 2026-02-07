@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #FAFAFA 0%, #F5F5F5 100%);
+  background: transparent;
   -webkit-app-region: drag;
 }
 
@@ -15,6 +15,12 @@
   text-align: center;
   padding: 40px;
   max-width: 480px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
 /* Logo */
@@ -26,8 +32,8 @@
 /* Title */
 .welcome-title {
   font-size: 42px;
-  font-weight: 700;
-  color: #1F2937;
+  font-weight: 750;
+  color: var(--text-primary);
   margin: 0 0 12px 0;
   letter-spacing: -0.5px;
   animation: fadeInUp 0.6s ease-out 0.1s both;
@@ -35,7 +41,7 @@
 
 .welcome-subtitle {
   font-size: 17px;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin: 0 0 48px 0;
   animation: fadeInUp 0.6s ease-out 0.2s both;
 }
@@ -53,12 +59,12 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #4B5563;
+  color: var(--text-secondary);
   font-size: 15px;
 }
 
 .welcome-feature-icon {
-  color: #2563EB;
+  color: var(--accent-primary);
   flex-shrink: 0;
 }
 
@@ -80,7 +86,7 @@
 .welcome-btn-primary {
   width: 100%;
   padding: 14px 24px;
-  background: #2563EB;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
   border-radius: 10px;
@@ -92,7 +98,7 @@
 }
 
 .welcome-btn-primary:hover {
-  background: #1D4ED8;
+  filter: brightness(1.04);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
@@ -100,9 +106,9 @@
 .welcome-btn-secondary {
   width: 100%;
   padding: 14px 24px;
-  background: transparent;
-  color: #374151;
-  border: 1px solid #E5E7EB;
+  background: rgba(255, 255, 255, 0.46);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 10px;
   font-size: 16px;
   font-weight: 500;
@@ -116,14 +122,14 @@
 }
 
 .welcome-btn-secondary:hover {
-  background: #F9FAFB;
-  border-color: #D1D5DB;
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.68);
 }
 
 /* Version */
 .welcome-version {
   font-size: 13px;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   margin: 0;
   animation: fadeInUp 0.6s ease-out 0.5s both;
 }

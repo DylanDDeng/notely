@@ -2,7 +2,12 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #FFFFFF;
+  background: var(--surface-content);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius-lg);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(calc(var(--glass-blur) - 6px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) - 6px));
   overflow: hidden;
   --editor-prose-max-width: 860px;
   --editor-prose-padding: 32px;
@@ -43,14 +48,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid #F3F4F6;
-  border-top-color: #2563EB;
+  border: 3px solid rgba(148, 163, 184, 0.18);
+  border-top-color: var(--accent-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -62,7 +67,8 @@
 /* Header */
 .editor-header {
   padding: 16px 0;
-  border-bottom: 1px solid #F3F4F6;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .editor-header-inner {
@@ -80,7 +86,7 @@
 
 .editor-date {
   font-size: 13px;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 .editor-tag {
@@ -97,9 +103,9 @@
 }
 
 .editor-mode-btn {
-  background: #2563EB;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: #FFFFFF;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   padding: 6px 12px;
   border-radius: 8px;
   font-size: 12px;
@@ -109,7 +115,7 @@
 }
 
 .editor-mode-btn:hover {
-  background: #1D4ED8;
+  filter: brightness(1.03);
 }
 
 .editor-mode-btn:active {
@@ -117,12 +123,12 @@
 }
 
 .editor-action-btn {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.34);
   padding: 8px;
   border-radius: 6px;
   cursor: pointer;
-  color: #9CA3AF;
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,13 +136,15 @@
 }
 
 .editor-action-btn:hover {
-  background: #F3F4F6;
-  color: #6B7280;
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.52);
+  color: var(--text-secondary);
 }
 
 .editor-action-btn.active {
-  background: #E5E7EB;
-  color: #374151;
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(37, 99, 235, 0.32);
+  color: var(--accent-primary);
 }
 
 .editor-more {
@@ -152,9 +160,11 @@
   min-width: 170px;
   padding: 6px;
   border-radius: 12px;
-  border: 1px solid #E5E7EB;
-  background: #FFFFFF;
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .editor-more-item {
@@ -167,7 +177,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #111827;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
 }
@@ -178,14 +188,14 @@
 }
 
 .editor-more-item:hover {
-  background: #F3F4F6;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 /* Title */
 .editor-title-input {
   font-size: 32px;
   font-weight: 700;
-  color: #1F2937;
+  color: var(--text-primary);
   border: none;
   outline: none;
   padding: 24px 0 12px;
@@ -194,7 +204,7 @@
 }
 
 .editor-title-input::placeholder {
-  color: #D1D5DB;
+  color: #94a3b8;
 }
 
 /* Tags */
@@ -236,14 +246,14 @@
   border: none;
   outline: none;
   font-size: 13px;
-  color: #6B7280;
+  color: var(--text-secondary);
   padding: 4px 0;
   background: transparent;
   min-width: 80px;
 }
 
 .editor-tag-input::placeholder {
-  color: #9CA3AF;
+  color: var(--text-tertiary);
 }
 
 /* Content */
@@ -254,6 +264,7 @@
   display: flex;
   scrollbar-gutter: stable;
   scroll-padding-bottom: var(--editor-tail-space);
+  background: var(--surface-content-strong);
 }
 
 .editor-content-inner {
@@ -276,7 +287,7 @@
   background: transparent;
   font-size: 15px;
   line-height: 1.8;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .editor-live-cm .cm-focused {
@@ -331,7 +342,7 @@
 }
 
 .editor-live-cm .cm-md-heading {
-  color: #1F2937;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -344,7 +355,7 @@
 
 .editor-live-cm .cm-md-strong {
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .editor-live-cm .cm-md-em {
@@ -356,7 +367,7 @@
 }
 
 .editor-live-cm .cm-md-inline-code {
-  background: #F3F4F6;
+  background: rgba(148, 163, 184, 0.16);
   padding: 1px 6px;
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -382,8 +393,8 @@
   height: auto;
   display: block;
   border-radius: 12px;
-  border: 1px solid #E5E7EB;
-  background: #F9FAFB;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.9);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
   cursor: zoom-in;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
@@ -400,9 +411,9 @@
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 12px;
-  color: #9CA3AF;
-  border: 1px dashed #D1D5DB;
-  background: #F9FAFB;
+  color: var(--text-tertiary);
+  border: 1px dashed rgba(148, 163, 184, 0.5);
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .editor-textarea {
@@ -426,7 +437,7 @@
 .editor-preview {
   font-size: 15px;
   line-height: 1.8;
-  color: #374151;
+  color: var(--text-secondary);
   min-height: 100%;
   cursor: text;
   overflow-wrap: anywhere;
@@ -448,7 +459,7 @@
   margin-top: 24px;
   margin-bottom: 12px;
   font-weight: 600;
-  color: #1F2937;
+  color: var(--text-primary);
 }
 
 .editor-preview h1 { font-size: 28px; }
@@ -468,8 +479,8 @@
   display: block;
   margin: 16px auto;
   border-radius: 12px;
-  border: 1px solid #E5E7EB;
-  background: #F9FAFB;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(248, 250, 252, 0.9);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
   cursor: zoom-in;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
@@ -505,7 +516,7 @@
 }
 
 .editor-preview code {
-  background: #F3F4F6;
+  background: rgba(148, 163, 184, 0.16);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 14px;
@@ -514,7 +525,7 @@
 }
 
 .editor-preview pre {
-  background: #F3F4F6;
+  background: rgba(148, 163, 184, 0.12);
   padding: 16px;
   border-radius: 8px;
   overflow-x: auto;
@@ -529,10 +540,10 @@
 }
 
 .editor-preview blockquote {
-  border-left: 4px solid #E5E7EB;
+  border-left: 4px solid rgba(148, 163, 184, 0.5);
   padding-left: 16px;
   margin-left: 0;
-  color: #6B7280;
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
@@ -619,16 +630,19 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .editor-export-modal {
   width: min(520px, 100%);
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 16px;
-  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 34px 90px rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -639,30 +653,30 @@
   align-items: flex-start;
   justify-content: space-between;
   padding: 16px 18px;
-  border-bottom: 1px solid #E5E7EB;
-  background: #F9FAFB;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .editor-export-header-text h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 700;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .editor-export-header-text p {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .editor-export-close {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.42);
   padding: 6px;
   border-radius: 10px;
   cursor: pointer;
-  color: #6B7280;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -670,8 +684,8 @@
 }
 
 .editor-export-close:hover {
-  background: #E5E7EB;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--text-primary);
 }
 
 .editor-export-close:disabled {
@@ -697,16 +711,16 @@
   flex-direction: column;
   gap: 6px;
   font-size: 12px;
-  color: #6B7280;
+  color: var(--text-secondary);
 }
 
 .editor-export-field select {
-  border: 1px solid #E5E7EB;
+  border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: 12px;
   padding: 10px 12px;
   font-size: 13px;
-  color: #111827;
-  background: #FFFFFF;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.6);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -733,7 +747,7 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .editor-export-checkbox input {
@@ -747,11 +761,11 @@
   justify-content: flex-end;
   gap: 10px;
   padding: 14px 18px 16px;
-  border-top: 1px solid #E5E7EB;
+  border-top: 1px solid rgba(255, 255, 255, 0.56);
 }
 
 .editor-export-btn {
-  border: 1px solid #E5E7EB;
+  border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 12px;
   padding: 9px 14px;
   font-size: 13px;
@@ -761,23 +775,22 @@
 }
 
 .editor-export-btn.secondary {
-  background: #FFFFFF;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--text-secondary);
 }
 
 .editor-export-btn.secondary:hover {
-  background: #F3F4F6;
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .editor-export-btn.primary {
-  background: #2563EB;
-  border-color: #2563EB;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-color: rgba(255, 255, 255, 0.2);
   color: #FFFFFF;
 }
 
 .editor-export-btn.primary:hover {
-  background: #1D4ED8;
-  border-color: #1D4ED8;
+  filter: brightness(1.04);
 }
 
 .editor-export-btn:disabled {
@@ -792,10 +805,12 @@
   z-index: 9200;
   padding: 10px 14px;
   border-radius: 14px;
-  border: 1px solid #E5E7EB;
-  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
-  color: #111827;
+  color: var(--text-primary);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   font-size: 13px;
   max-width: min(360px, calc(100vw - 32px));
 }

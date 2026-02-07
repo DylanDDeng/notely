@@ -484,7 +484,7 @@ function App() {
   // 欢迎页
   if (view === 'welcome' || isFirstLaunch) {
     return (
-      <div className="app">
+      <div className="app app-welcome">
         <Welcome 
           onGetStarted={handleGetStarted}
           onOpenFolder={handleOpenFolder}
@@ -496,7 +496,7 @@ function App() {
   // 设置页
   if (view === 'settings') {
     return (
-      <div className="app">
+      <div className="app app-settings">
         <Settings
           onBack={() => setView('main')}
           storagePath={storagePath}
@@ -510,7 +510,7 @@ function App() {
 
   // 主界面
   return (
-    <div className="app">
+    <div className="app app-main">
       <Sidebar
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}

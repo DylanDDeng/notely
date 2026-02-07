@@ -6,17 +6,20 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .note-modal {
   width: min(1200px, 100%);
   height: min(900px, 100%);
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.56);
   border-radius: 16px;
   box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -33,26 +36,26 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid #E5E7EB;
-  background: #F9FAFB;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.56);
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .note-modal-back {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.36);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
   border-radius: 8px;
-  color: #374151;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
 }
 
 .note-modal-back:hover {
-  background: #E5E7EB;
+  background: rgba(255, 255, 255, 0.56);
 }
 
 .note-modal-header-actions {
@@ -62,12 +65,12 @@
 }
 
 .note-modal-icon-btn {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.36);
   padding: 6px;
   border-radius: 8px;
   cursor: pointer;
-  color: #6B7280;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,8 +78,8 @@
 }
 
 .note-modal-icon-btn:hover {
-  background: #E5E7EB;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--text-primary);
 }
 
 .note-modal-body {
