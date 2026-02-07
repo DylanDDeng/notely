@@ -16,6 +16,39 @@ interface EditorProps {
   isLoading: boolean;
 }
 
+const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
+
+const isVideoSource = (url: string): boolean => VIDEO_SOURCE_PATTERN.test(url.trim());
+
+const transformMediaEmbeds = (html: string): string => {
+  if (!html || !html.includes('<img')) return html;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const images = Array.from(doc.querySelectorAll('img'));
+  if (images.length === 0) return html;
+
+  let changed = false;
+  for (const image of images) {
+    const src = image.getAttribute('src')?.trim() ?? '';
+    if (!src || !isVideoSource(src)) continue;
+
+    const video = doc.createElement('video');
+    video.setAttribute('src', src);
+    video.setAttribute('controls', '');
+    video.setAttribute('preload', 'metadata');
+    video.setAttribute('playsinline', '');
+    video.className = 'editor-preview-video';
+    const alt = image.getAttribute('alt')?.trim();
+    if (alt) video.setAttribute('title', alt);
+
+    image.replaceWith(video);
+    changed = true;
+  }
+
+  return changed ? doc.body.innerHTML : html;
+};
+
 function Editor({ note, onSave, isLoading }: EditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -226,7 +259,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         .use(remarkGfm)
         .use(remarkHtml)
         .process(text);
-      setHtmlContent(String(result.value));
+      setHtmlContent(transformMediaEmbeds(String(result.value)));
       return true;
     } catch (err) {
       console.error('Failed to render markdown:', err);
@@ -607,6 +640,10 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     if (!target) {
       pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
       setIsEditing(true);
+      return;
+    }
+
+    if (target.closest('video')) {
       return;
     }
 

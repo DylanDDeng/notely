@@ -35,6 +35,10 @@ const headingTextDecorations = [
   Decoration.mark({ class: 'cm-md-heading cm-md-heading-6' }),
 ] as const;
 
+const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
+
+const isVideoSource = (value: string): boolean => VIDEO_SOURCE_PATTERN.test(value.trim());
+
 const normalizeUrl = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -93,6 +97,59 @@ class MarkdownImageWidget extends WidgetType {
 
   ignoreEvent() {
     return false;
+  }
+}
+
+class MarkdownVideoWidget extends WidgetType {
+  constructor(private readonly src: string, private readonly title: string) {
+    super();
+  }
+
+  eq(other: MarkdownVideoWidget) {
+    return this.src === other.src && this.title === other.title;
+  }
+
+  toDOM() {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'cm-md-video-widget';
+    wrapper.contentEditable = 'false';
+
+    const video = document.createElement('video');
+    video.className = 'cm-md-video-widget-player';
+    video.src = this.src;
+    video.controls = true;
+    video.preload = 'metadata';
+    video.playsInline = true;
+    if (this.title) {
+      video.title = this.title;
+    }
+
+    const stopBubble = (event: Event) => {
+      event.stopPropagation();
+    };
+    wrapper.addEventListener('mousedown', stopBubble);
+    wrapper.addEventListener('pointerdown', stopBubble);
+    wrapper.addEventListener('click', stopBubble);
+    wrapper.addEventListener('dblclick', stopBubble);
+    video.addEventListener('mousedown', stopBubble);
+    video.addEventListener('pointerdown', stopBubble);
+    video.addEventListener('click', stopBubble);
+    video.addEventListener('dblclick', stopBubble);
+
+    video.addEventListener('error', () => {
+      wrapper.classList.add('is-broken');
+      const fallback = document.createElement('span');
+      fallback.className = 'cm-md-image-widget-fallback';
+      fallback.textContent = this.title ? `Video failed: ${this.title}` : 'Video failed to load';
+      wrapper.replaceChildren(fallback);
+    });
+
+    wrapper.appendChild(video);
+    return wrapper;
+  }
+
+  ignoreEvent() {
+    return true;
   }
 }
 
@@ -224,11 +281,14 @@ const buildLivePreviewDecorations = (
           const rawUrl = linkMatch[2]?.trim() ?? '';
           const url = normalizeUrl(rawUrl);
           if (url) {
+            const widget = isVideoSource(rawUrl) || isVideoSource(url)
+              ? new MarkdownVideoWidget(url, textValue)
+              : new MarkdownImageWidget(url, textValue, onOpenImagePreview);
             addRange(ranges, fullStart, fullEnd);
             ranges.push(
               Decoration.widget({
                 side: 1,
-                widget: new MarkdownImageWidget(url, textValue, onOpenImagePreview),
+                widget,
               }).range(fullEnd)
             );
           }
@@ -281,8 +341,12 @@ function MarkdownLiveEditor({
     const livePreviewPlugin = createLivePreviewPlugin(onOpenImagePreview);
     const domHandlers = EditorView.domEventHandlers({
       mousedown: (event, view) => {
-        if (!(event.metaKey || event.ctrlKey) || !onOpenExternal) return false;
         const target = event.target as HTMLElement | null;
+        if (target?.closest('.cm-md-video-widget')) {
+          return true;
+        }
+
+        if (!(event.metaKey || event.ctrlKey) || !onOpenExternal) return false;
         const linkNode = target?.closest('.cm-md-link-text');
         if (!linkNode) return false;
 
