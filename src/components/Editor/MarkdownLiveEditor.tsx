@@ -114,37 +114,16 @@ class MarkdownVideoWidget extends WidgetType {
     wrapper.className = 'cm-md-video-widget';
     wrapper.contentEditable = 'false';
 
-    const video = document.createElement('video');
-    video.className = 'cm-md-video-widget-player';
-    video.src = this.src;
-    video.controls = true;
-    video.preload = 'metadata';
-    video.playsInline = true;
-    if (this.title) {
-      video.title = this.title;
-    }
+    const title = document.createElement('span');
+    title.className = 'cm-md-video-widget-title';
+    title.textContent = this.title || 'Video';
 
-    const stopBubble = (event: Event) => {
-      event.stopPropagation();
-    };
-    wrapper.addEventListener('mousedown', stopBubble);
-    wrapper.addEventListener('pointerdown', stopBubble);
-    wrapper.addEventListener('click', stopBubble);
-    wrapper.addEventListener('dblclick', stopBubble);
-    video.addEventListener('mousedown', stopBubble);
-    video.addEventListener('pointerdown', stopBubble);
-    video.addEventListener('click', stopBubble);
-    video.addEventListener('dblclick', stopBubble);
+    const source = document.createElement('span');
+    source.className = 'cm-md-video-widget-source';
+    source.textContent = this.src;
 
-    video.addEventListener('error', () => {
-      wrapper.classList.add('is-broken');
-      const fallback = document.createElement('span');
-      fallback.className = 'cm-md-image-widget-fallback';
-      fallback.textContent = this.title ? `Video failed: ${this.title}` : 'Video failed to load';
-      wrapper.replaceChildren(fallback);
-    });
-
-    wrapper.appendChild(video);
+    wrapper.appendChild(title);
+    wrapper.appendChild(source);
     return wrapper;
   }
 
