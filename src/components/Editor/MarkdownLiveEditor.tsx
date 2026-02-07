@@ -320,9 +320,8 @@ const createLivePreviewPlugin = (onOpenImagePreview?: (url: string) => void) =>
       activeLineNo: number;
 
       update(update: ViewUpdate) {
-        const nextActiveLineNo = update.state.doc.lineAt(update.state.selection.main.head).number;
-        const activeLineChanged = nextActiveLineNo !== this.activeLineNo;
-        if (update.docChanged || (update.selectionSet && activeLineChanged)) {
+        if (update.docChanged) {
+          const nextActiveLineNo = update.state.doc.lineAt(update.state.selection.main.head).number;
           this.activeLineNo = nextActiveLineNo;
           this.decorations = buildLivePreviewDecorations(update.view, onOpenImagePreview, this.activeLineNo);
         }
