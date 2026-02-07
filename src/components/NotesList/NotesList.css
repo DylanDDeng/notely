@@ -126,8 +126,11 @@
 .note-card {
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 14px 16px;
   margin-bottom: 10px;
+  min-height: 120px;
   border-radius: 12px;
   cursor: pointer;
   transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
@@ -138,6 +141,7 @@
 
 .notes-container.grid .note-card {
   margin-bottom: 0;
+  min-height: 132px;
   border-color: rgba(148, 163, 184, 0.3);
   background: rgba(248, 250, 252, 0.2);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
@@ -182,10 +186,14 @@
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 6px 0;
-  line-height: 1.4;
+  margin: 0;
+  line-height: 1.35;
   flex: 1;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .note-card-pin {
@@ -217,24 +225,31 @@
 }
 
 .note-card-preview {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0 0 10px 0;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+  font-size: 12px;
+  color: rgba(100, 116, 139, 0.84);
+  margin: 6px 0 8px;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.note-card.show-preview .note-card-preview,
+.note-card:hover .note-card-preview {
+  opacity: 1;
 }
 
 .note-card.selected .note-card-preview {
-  color: #374151;
+  color: rgba(55, 65, 81, 0.9);
 }
 
 .note-card-meta {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: auto;
 }
 
 .note-card-date {

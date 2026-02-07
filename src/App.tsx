@@ -543,6 +543,7 @@ function App() {
             selectedNoteId={selectedNoteId}
             onOpenNote={handleOpenNote}
             activeFilter={activeFilter}
+            isSearchMode={Boolean(searchQuery.trim())}
             notesView={notesView}
             onViewChange={handleNotesViewChange}
             sortOrder={notesSortOrder}

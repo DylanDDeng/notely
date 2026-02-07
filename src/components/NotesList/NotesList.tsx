@@ -15,6 +15,7 @@ interface NotesListProps {
   selectedNoteId: string | null;
   onOpenNote: (noteId: string) => void;
   activeFilter: string;
+  isSearchMode: boolean;
   notesView: 'list' | 'grid';
   onViewChange: (view: 'list' | 'grid') => void;
   sortOrder: 'desc' | 'asc';
@@ -23,11 +24,36 @@ interface NotesListProps {
   onToggleCollapsed: () => void;
 }
 
+const extractPreviewSummary = (contentBody: string): string => {
+  const firstMeaningfulLine = contentBody
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  if (!firstMeaningfulLine) return '';
+
+  const plainText = firstMeaningfulLine
+    .replace(/!\[[^\]]*]\(([^)]+)\)/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/^#{1,6}\s+/g, '')
+    .replace(/^>\s*/g, '')
+    .replace(/^\s*[-+*]\s+\[(?: |x|X)\]\s+/g, '')
+    .replace(/^\s*[-+*]\s+/g, '')
+    .replace(/^\s*\d+[.)]\s+/g, '')
+    .replace(/[`*_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!plainText) return '';
+  return plainText.slice(0, 120);
+};
+
 function NotesList({
   notes,
   selectedNoteId,
   onOpenNote,
   activeFilter,
+  isSearchMode,
   notesView,
   onViewChange,
   sortOrder,
@@ -88,19 +114,21 @@ function NotesList({
           </div>
         ) : (
 	          notes.map((note) => {
-	            const isSelected = note.id === selectedNoteId;
-	            const isPinned = Boolean(note.tags?.includes('pinned'));
-	            const isFavorite = Boolean(note.tags?.includes('favorite'));
-	            const mainTag = note.tags?.find(tag => 
-	              !['favorite', 'archive', 'trash', 'pinned'].includes(tag)
-	            );
-	            
-	            return (
-	              <div
-	                key={note.id}
-	                className={`note-card ${isSelected ? 'selected' : ''}`}
-	                onClick={() => onOpenNote(note.id)}
-	              >
+            const isSelected = note.id === selectedNoteId;
+            const isPinned = Boolean(note.tags?.includes('pinned'));
+            const isFavorite = Boolean(note.tags?.includes('favorite'));
+            const previewText = extractPreviewSummary(note.contentBody || '');
+            const shouldShowPreview = isSearchMode || isSelected;
+            const mainTag = note.tags?.find(tag => 
+              !['favorite', 'archive', 'trash', 'pinned'].includes(tag)
+            );
+            
+            return (
+              <div
+                key={note.id}
+                className={`note-card ${isSelected ? 'selected' : ''} ${shouldShowPreview ? 'show-preview' : ''}`}
+                onClick={() => onOpenNote(note.id)}
+              >
 	                <div className="note-card-title-row">
 	                  <h3 className="note-card-title">{note.title || 'Untitled'}</h3>
 	                  {isPinned && (
@@ -114,9 +142,7 @@ function NotesList({
 	                    </span>
 	                  )}
 	                </div>
-	                <p className="note-card-preview">
-	                  {note.contentBody?.substring(0, 120).replace(/#/g, '').trim() || 'No content'}
-	                </p>
+                <p className="note-card-preview">{previewText || 'No content'}</p>
                 <div className="note-card-meta">
                   <span className="note-card-date">
                     {formatDate(note.modifiedAt)}
