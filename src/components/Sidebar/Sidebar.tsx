@@ -10,7 +10,7 @@ import {
 	Search,
 	ChevronDown,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { FolderItem } from '../../types';
 import { getTagColor } from '../../utils/noteUtils';
 import './Sidebar.css';
@@ -195,16 +195,24 @@ function Sidebar({
           </span>
         </button>
         {!isTagsCollapsed && (
-          <ul className="nav-list">
+          <ul className="nav-list tag-list">
             {tags.map((tag) => {
               const isActive = activeFilter === `tag:${tag}`;
               const color = getTagColor(tag);
               const count = tagCounts[tag] ?? 0;
+              const tagStyle = {
+                '--tag-accent': color,
+                '--tag-bg': `${color}14`,
+                '--tag-bg-hover': `${color}20`,
+                '--tag-border': `${color}44`,
+                '--tag-count-bg': `${color}1F`,
+              } as CSSProperties;
               return (
                 <li key={tag}>
                   <button
-                    className={`nav-item ${isActive ? 'active' : ''}`}
+                    className={`nav-item tag-nav-item ${isActive ? 'active' : ''}`}
                     onClick={() => handleTagClick(tag)}
+                    style={tagStyle}
                   >
                     <span
                       className="tag-dot"
