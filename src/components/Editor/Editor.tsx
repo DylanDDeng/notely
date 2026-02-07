@@ -38,6 +38,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const liveEditorRef = useRef<EditorView | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const textOffsetMapRef = useRef<number[]>([]);
+  const textOffsetMapSourceRef = useRef<string>('');
   const pendingSelectionRef = useRef<{ index?: number; scrollTop: number } | null>(null);
   const pendingScrollRestoreRef = useRef<number | null>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -221,14 +222,15 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   // 渲染 Markdown
   const renderMarkdown = useCallback(async (text: string) => {
     try {
-      updateTextOffsetMap(text);
       const result = await remark()
         .use(remarkGfm)
         .use(remarkHtml)
         .process(text);
       setHtmlContent(String(result.value));
+      return true;
     } catch (err) {
       console.error('Failed to render markdown:', err);
+      return false;
     }
   }, []);
 
@@ -271,10 +273,17 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
 
       visit(tree);
       textOffsetMapRef.current = offsets;
+      textOffsetMapSourceRef.current = markdown;
     } catch (err) {
       textOffsetMapRef.current = [];
+      textOffsetMapSourceRef.current = markdown;
     }
   };
+
+  const ensureTextOffsetMap = useCallback((markdown: string) => {
+    if (textOffsetMapSourceRef.current === markdown) return;
+    updateTextOffsetMap(markdown);
+  }, []);
 
   // 自动保存
   // 处理内容变化
@@ -425,62 +434,60 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     const container = editorContentRef.current;
     if (!container) return;
 
-    let rafId = 0;
     let cancelled = false;
-    let programmaticScroll = false;
+    let raf1 = 0;
+    let raf2 = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
     const apply = () => {
       if (cancelled) return;
       const maxScrollTop = container.scrollHeight - container.clientHeight;
       const next = Math.min(maxScrollTop, Math.max(0, pendingScroll));
-      programmaticScroll = true;
       container.scrollTop = next;
     };
 
-    const stop = (clearPending: boolean) => {
+    const stop = () => {
       if (cancelled) return;
       cancelled = true;
-      cancelAnimationFrame(rafId);
-      resizeObserver.disconnect();
-      container.removeEventListener('scroll', onScroll);
-      if (clearPending) {
-        pendingScrollRestoreRef.current = null;
-      }
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      if (settleTimer) clearTimeout(settleTimer);
+      container.removeEventListener('wheel', onUserIntent);
+      container.removeEventListener('touchmove', onUserIntent);
+      container.removeEventListener('pointerdown', onUserIntent);
+      pendingScrollRestoreRef.current = null;
     };
 
-    const onScroll = () => {
-      if (programmaticScroll) {
-        programmaticScroll = false;
-        return;
-      }
-      stop(true);
-    };
+    const onUserIntent = () => stop();
 
-    const resizeObserver = new ResizeObserver(() => apply());
-    const previewEl = previewRef.current;
-    if (previewEl) resizeObserver.observe(previewEl);
+    container.addEventListener('wheel', onUserIntent, { passive: true });
+    container.addEventListener('touchmove', onUserIntent, { passive: true });
+    container.addEventListener('pointerdown', onUserIntent, { passive: true });
 
-    container.addEventListener('scroll', onScroll, { passive: true });
-
-    const start = performance.now();
-    const tick = () => {
+    raf1 = requestAnimationFrame(() => {
       apply();
+      raf2 = requestAnimationFrame(() => apply());
+    });
 
-      if (cancelled) return;
-      if (performance.now() - start >= 4000) {
-        stop(true);
-        return;
-      }
-      rafId = requestAnimationFrame(tick);
+    // Final short settle pass for delayed layout shifts, then release control.
+    settleTimer = setTimeout(() => {
+      apply();
+      stop();
+    }, 180);
+
+    return () => {
+      if (settleTimer) clearTimeout(settleTimer);
+      container.removeEventListener('wheel', onUserIntent);
+      container.removeEventListener('touchmove', onUserIntent);
+      container.removeEventListener('pointerdown', onUserIntent);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
     };
-
-    rafId = requestAnimationFrame(tick);
-    return () => stop(false);
   }, [isEditing, htmlContent]);
 
-  const exitEditing = useCallback(() => {
+  const exitEditing = useCallback(async () => {
     pendingScrollRestoreRef.current = liveEditorRef.current?.scrollDOM.scrollTop ?? editorContentRef.current?.scrollTop ?? 0;
-    void renderMarkdown(content);
+    await renderMarkdown(content);
     setIsEditing(false);
   }, [content, renderMarkdown]);
 
@@ -489,7 +496,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        exitEditing();
+        void exitEditing();
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -622,6 +629,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
 
     const scrollTop = editorContentRef.current?.scrollTop ?? 0;
     const plainTextOffset = getPlainTextOffsetFromEvent(e);
+    ensureTextOffsetMap(content);
     const map = textOffsetMapRef.current;
     let index: number | undefined;
     if (plainTextOffset !== null && map.length > 0) {
@@ -683,7 +691,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
           <div className="editor-actions">
             <button
               className="editor-mode-btn"
-              onClick={isEditing ? exitEditing : () => {
+              onClick={isEditing ? () => { void exitEditing(); } : () => {
                 pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
                 setIsEditing(true);
               }}
