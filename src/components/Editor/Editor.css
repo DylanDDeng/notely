@@ -327,6 +327,15 @@
   display: none;
 }
 
+.editor-live-cm .cm-md-list-marker {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.editor-live-cm .cm-md-list-marker.is-unordered {
+  letter-spacing: 0.02em;
+}
+
 .editor-live-cm .cm-line.cm-md-quote-line {
   border-left: 4px solid #E5E7EB;
   padding-left: 12px;

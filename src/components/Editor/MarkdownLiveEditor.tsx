@@ -96,6 +96,30 @@ class MarkdownImageWidget extends WidgetType {
   }
 }
 
+class MarkdownListMarkerWidget extends WidgetType {
+  constructor(
+    private readonly marker: string,
+    private readonly ordered: boolean
+  ) {
+    super();
+  }
+
+  eq(other: MarkdownListMarkerWidget) {
+    return this.marker === other.marker && this.ordered === other.ordered;
+  }
+
+  toDOM() {
+    const marker = document.createElement('span');
+    marker.className = `cm-md-list-marker ${this.ordered ? 'is-ordered' : 'is-unordered'}`;
+    marker.textContent = this.ordered ? `${this.marker} ` : '• ';
+    return marker;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
 const buildLivePreviewDecorations = (
   view: EditorView,
   onOpenImagePreview?: (url: string) => void
@@ -139,7 +163,15 @@ const buildLivePreviewDecorations = (
       } else {
         const listPrefix = text.match(/^(\s*)([-+*]|\d+[.)])(\s+)/);
         if (listPrefix) {
-          addRange(ranges, line.from + listPrefix[1].length, line.from + listPrefix[1].length + listPrefix[2].length + listPrefix[3].length);
+          const markerFrom = line.from + listPrefix[1].length;
+          const markerTo = markerFrom + listPrefix[2].length + listPrefix[3].length;
+          const isOrdered = /^\d+[.)]$/.test(listPrefix[2]);
+          ranges.push(
+            Decoration.replace({
+              widget: new MarkdownListMarkerWidget(listPrefix[2], isOrdered),
+              inclusive: false,
+            }).range(markerFrom, markerTo)
+          );
         }
       }
 
