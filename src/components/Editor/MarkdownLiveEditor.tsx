@@ -19,6 +19,11 @@ const emMark = Decoration.mark({ class: 'cm-md-em' });
 const strikeMark = Decoration.mark({ class: 'cm-md-strike' });
 const inlineCodeMark = Decoration.mark({ class: 'cm-md-inline-code' });
 const linkTextMark = Decoration.mark({ class: 'cm-md-link-text' });
+const quoteLineDecorations = [
+  Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-1' } }),
+  Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-2' } }),
+  Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-3' } }),
+] as const;
 
 const headingTextDecorations = [
   null,
@@ -122,6 +127,9 @@ const buildLivePreviewDecorations = (
 
       const quotePrefix = text.match(/^(\s*>+\s*)+/);
       if (quotePrefix) {
+        const quoteDepth = (quotePrefix[0].match(/>/g) || []).length;
+        const normalizedDepth = Math.max(1, Math.min(quoteDepth, quoteLineDecorations.length));
+        ranges.push(quoteLineDecorations[normalizedDepth - 1].range(line.from));
         addRange(ranges, line.from, line.from + quotePrefix[0].length);
       }
 

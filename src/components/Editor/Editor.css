@@ -316,6 +316,20 @@
   display: none;
 }
 
+.editor-live-cm .cm-line.cm-md-quote-line {
+  border-left: 4px solid #E5E7EB;
+  padding-left: 12px;
+  color: #6B7280;
+}
+
+.editor-live-cm .cm-line.cm-md-quote-depth-2 {
+  border-left-color: #D1D5DB;
+}
+
+.editor-live-cm .cm-line.cm-md-quote-depth-3 {
+  border-left-color: #CBD5E1;
+}
+
 .editor-live-cm .cm-md-heading {
   color: #1F2937;
   font-weight: 700;
