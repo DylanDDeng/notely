@@ -462,7 +462,6 @@ function App() {
       setIsModalOpen(false);
       setIsModalFullScreen(false);
       setNotesView('list');
-      setActiveFilter('all');
       await loadNotes();
     } catch (err) {
       console.error('Failed to open daily note:', err);
@@ -519,6 +518,13 @@ function App() {
   }).sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
 
   const notesListItems = isGlobalSearchMode ? globalSearchNotes : sortedFilteredNotes;
+  const currentNoteRecord = currentNote
+    ? notes.find((note) => note.id === currentNote.id || note.filename === currentNote.filename) ?? null
+    : null;
+  const calendarEditorNote =
+    currentNote && (currentNoteRecord ? isCalendarNote(currentNoteRecord) : DAILY_NOTE_FILENAME_RE.test(currentNote.filename))
+      ? currentNote
+      : null;
 
   // 获取所有标签
   const allTags = [...new Set(regularNotes.flatMap(n => n.tags || []))]
@@ -733,10 +739,17 @@ function App() {
           <KanbanBoard boardNote={selectedKanbanNote} onSaveBoard={handleSaveKanbanBoard} />
         </>
       ) : activeFilter === 'calendar' ? (
-        <CalendarView
-          notes={calendarNotes}
-          onOpenDailyNote={handleOpenDailyNote}
-        />
+        <>
+          <CalendarView
+            notes={calendarNotes}
+            onSelectDate={handleOpenDailyNote}
+          />
+          <Editor
+            note={calendarEditorNote}
+            onSave={handleSaveNote}
+            isLoading={isLoading && !calendarEditorNote}
+          />
+        </>
       ) : (
         <>
           <NotesList
