@@ -453,8 +453,7 @@ function App() {
   const handleCreateKanbanBoard = useCallback(
     async (title: string) => {
       const now = new Date();
-      const baseFilename = generateFilename(title).replace(/\.md$/i, '');
-      const filename = `${baseFilename}-${now.getTime()}.md`;
+      const filename = makeUniqueFilename(title);
       const frontmatter = {
         title,
         date: now.toISOString(),
@@ -477,7 +476,7 @@ function App() {
       setActiveFilter('kanban');
       setSelectedKanbanId(filename.replace(/\.md$/i, ''));
     },
-    [loadNotes]
+    [loadNotes, makeUniqueFilename]
   );
 
   const handleDeleteKanbanBoard = useCallback(
@@ -502,19 +501,40 @@ function App() {
 
   const handleSaveKanbanBoard = useCallback(async (noteId: string, filename: string, content: string) => {
     const now = new Date();
-    const result = await window.electronAPI.saveNote({ filename, content });
+    const parsedFromContent = parseNote(content, filename);
+    const nextFilename = makeUniqueFilename(parsedFromContent.title, filename);
+    const previousFilename = filename;
+    const previousNoteId = noteId || previousFilename.replace(/\.md$/i, '');
+    const nextNoteId = nextFilename.replace(/\.md$/i, '');
+    const isRenamed = previousFilename !== nextFilename;
+
+    const result = await window.electronAPI.saveNote({ filename: nextFilename, content });
     if (!result.success) {
       throw new Error(result.error || 'Failed to save kanban board');
     }
 
-    const parsed = parseNote(content, filename);
+    if (isRenamed) {
+      const deleteResult = await window.electronAPI.deleteNote(previousFilename);
+      if (!deleteResult.success) {
+        console.warn('Failed to remove old kanban filename after rename:', deleteResult.error);
+      }
+    }
+
+    const parsed = parseNote(content, nextFilename);
     setNotes((prevNotes) => {
       const updated = prevNotes
         .map((note) => {
-          if (note.id !== noteId) return note;
+          const isTarget =
+            note.id === previousNoteId ||
+            note.filename === previousFilename ||
+            note.id === nextNoteId;
+          if (!isTarget) return note;
+          const nextFilepath = note.filepath.replace(/[^/\\]+$/, nextFilename);
           return {
             ...note,
-            filename,
+            id: nextNoteId,
+            filename: nextFilename,
+            filepath: nextFilepath,
             content,
             modifiedAt: now,
             ...parsed,
@@ -523,7 +543,11 @@ function App() {
         .sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
       return updated;
     });
-  }, []);
+
+    if (selectedKanbanId === previousNoteId) {
+      setSelectedKanbanId(nextNoteId);
+    }
+  }, [makeUniqueFilename, selectedKanbanId]);
 
   // 欢迎页
   if (view === 'welcome' || isFirstLaunch) {

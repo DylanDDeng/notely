@@ -125,7 +125,7 @@
 
 .editor-action-btn {
   background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.48);
+  border: 1px solid transparent;
   padding: 8px;
   border-radius: 6px;
   cursor: pointer;
@@ -138,14 +138,19 @@
 
 .editor-action-btn:hover {
   background: rgba(255, 255, 255, 0.34);
-  border-color: rgba(255, 255, 255, 0.64);
+  border-color: transparent;
   color: var(--text-secondary);
 }
 
 .editor-action-btn.active {
   background: rgba(51, 65, 85, 0.14);
-  border-color: rgba(51, 65, 85, 0.3);
+  border-color: transparent;
   color: var(--accent-primary);
+}
+
+.editor-action-btn:focus-visible {
+  outline: 2px solid rgba(51, 65, 85, 0.45);
+  outline-offset: 1px;
 }
 
 .editor-more {
