@@ -123,6 +123,7 @@ class MarkdownVideoWidget extends WidgetType {
   toDOM() {
     const wrapper = document.createElement('span');
     wrapper.className = 'cm-md-video-widget';
+    wrapper.contentEditable = 'false';
 
     const title = document.createElement('span');
     title.className = 'cm-md-video-widget-title';
@@ -138,7 +139,7 @@ class MarkdownVideoWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }
 
