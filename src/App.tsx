@@ -469,7 +469,89 @@ function App() {
     }
   }, [loadNotes, notes]);
 
+  const updateNoteTags = useCallback(async (noteId: string, transform: (tags: string[]) => string[]) => {
+    const note = notes.find((item) => item.id === noteId);
+    if (!note || isKanbanNote(note)) return;
+
+    const currentTags = note.tags ?? [];
+    const nextTags = Array.from(
+      new Set(
+        transform(currentTags)
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (nextTags.length === currentTags.length && nextTags.every((tag, index) => tag === currentTags[index])) {
+      return;
+    }
+
+    await handleSaveNote({
+      id: note.id,
+      filename: note.filename,
+      title: note.title,
+      content: note.contentBody,
+      tags: nextTags,
+      date: note.date,
+    });
+  }, [handleSaveNote, notes]);
+
+  const handleMoveNoteToTrash = useCallback(async (noteId: string) => {
+    const target = notes.find((note) => note.id === noteId);
+    if (!target || isKanbanNote(target)) return;
+
+    await updateNoteTags(noteId, (tags) => {
+      const sanitized = tags.filter((tag) => !['trash', 'favorite', 'archive', 'pinned'].includes(tag));
+      return [...sanitized, 'trash'];
+    });
+
+    if (selectedNoteId === noteId && activeFilter !== 'trash') {
+      setSelectedNoteId(null);
+      setCurrentNote(null);
+      setIsModalOpen(false);
+      setIsModalFullScreen(false);
+    }
+  }, [activeFilter, notes, selectedNoteId, updateNoteTags]);
+
+  const handleRestoreFromTrash = useCallback(async (noteId: string) => {
+    const target = notes.find((note) => note.id === noteId);
+    if (!target || isKanbanNote(target)) return;
+
+    await updateNoteTags(noteId, (tags) => tags.filter((tag) => tag !== 'trash'));
+
+    if (selectedNoteId === noteId && activeFilter === 'trash') {
+      setSelectedNoteId(null);
+      setCurrentNote(null);
+      setIsModalOpen(false);
+      setIsModalFullScreen(false);
+    }
+  }, [activeFilter, notes, selectedNoteId, updateNoteTags]);
+
+  const handleDeleteNotePermanently = useCallback(async (noteId: string) => {
+    const target = notes.find((note) => note.id === noteId);
+    if (!target || isKanbanNote(target)) return;
+
+    const confirmed = window.confirm(`Delete "${target.title || 'Untitled'}" permanently? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const result = await window.electronAPI.deleteNote(target.filename);
+    if (!result.success) {
+      window.alert(result.error || 'Failed to delete note');
+      return;
+    }
+
+    setNotes((prev) => prev.filter((note) => note.id !== noteId));
+
+    if (selectedNoteId === noteId) {
+      setSelectedNoteId(null);
+      setCurrentNote(null);
+      setIsModalOpen(false);
+      setIsModalFullScreen(false);
+    }
+  }, [notes, selectedNoteId]);
+
   const regularNotes = notes.filter((note) => !isKanbanNote(note) && !isCalendarNote(note));
+  const nonTrashRegularNotes = regularNotes.filter((note) => !note.tags?.includes('trash'));
   const calendarNotes = notes.filter((note) => isCalendarNote(note) && !isKanbanNote(note));
   const kanbanNotes = notes.filter((note) => isKanbanNote(note));
   const selectedKanbanNote = selectedKanbanId ? kanbanNotes.find((n) => n.id === selectedKanbanId) ?? null : null;
@@ -482,20 +564,20 @@ function App() {
     // 标签/分类过滤
     switch (activeFilter) {
       case 'all':
-        return true;
+        return !note.tags?.includes('trash');
       case 'favorites':
-        return note.tags?.includes('favorite');
+        return note.tags?.includes('favorite') && !note.tags?.includes('trash');
       case 'archive':
-        return note.tags?.includes('archive');
+        return note.tags?.includes('archive') && !note.tags?.includes('trash');
       case 'trash':
         return note.tags?.includes('trash');
       default:
         // 标签过滤
         if (activeFilter.startsWith('tag:')) {
           const tag = activeFilter.replace('tag:', '');
-          return note.tags?.includes(tag);
+          return note.tags?.includes(tag) && !note.tags?.includes('trash');
         }
-        return true;
+        return !note.tags?.includes('trash');
     }
   });
 
@@ -527,9 +609,9 @@ function App() {
       : null;
 
   // 获取所有标签
-  const allTags = [...new Set(regularNotes.flatMap(n => n.tags || []))]
+  const allTags = [...new Set(nonTrashRegularNotes.flatMap(n => n.tags || []))]
     .filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
-  const tagCounts = regularNotes.reduce<Record<string, number>>((acc, note) => {
+  const tagCounts = nonTrashRegularNotes.reduce<Record<string, number>>((acc, note) => {
     (note.tags || []).forEach(tag => {
       if (['favorite', 'archive', 'trash', 'pinned'].includes(tag)) return;
       acc[tag] = (acc[tag] ?? 0) + 1;
@@ -538,11 +620,11 @@ function App() {
   }, {});
 
   const folderCounts = {
-    all: regularNotes.length,
+    all: nonTrashRegularNotes.length,
     calendar: calendarNotes.length,
     kanban: kanbanNotes.length,
-    favorites: regularNotes.filter((note) => note.tags?.includes('favorite')).length,
-    archive: regularNotes.filter((note) => note.tags?.includes('archive')).length,
+    favorites: nonTrashRegularNotes.filter((note) => note.tags?.includes('favorite')).length,
+    archive: nonTrashRegularNotes.filter((note) => note.tags?.includes('archive')).length,
     trash: regularNotes.filter((note) => note.tags?.includes('trash')).length,
   };
 
@@ -699,6 +781,9 @@ function App() {
             notes={notesListItems}
             selectedNoteId={selectedNoteId}
             onOpenNote={handleOpenNote}
+            onMoveToTrash={handleMoveNoteToTrash}
+            onRestoreFromTrash={handleRestoreFromTrash}
+            onDeletePermanently={handleDeleteNotePermanently}
             activeFilter="search"
             isSearchMode
             notesView={notesView}
@@ -756,6 +841,9 @@ function App() {
             notes={notesListItems}
             selectedNoteId={selectedNoteId}
             onOpenNote={handleOpenNote}
+            onMoveToTrash={handleMoveNoteToTrash}
+            onRestoreFromTrash={handleRestoreFromTrash}
+            onDeletePermanently={handleDeleteNotePermanently}
             activeFilter={activeFilter}
             isSearchMode={isGlobalSearchMode}
             notesView={notesView}
