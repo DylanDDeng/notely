@@ -29,6 +29,7 @@
 .app-main > .notes-list,
 .app-main > .kanban-boards,
 .app-main > .kanban-board,
+.app-main > .calendar-view,
 .app-main > .editor {
   min-height: 0;
 }

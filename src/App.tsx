@@ -5,6 +5,7 @@ import Editor from './components/Editor/Editor';
 import NoteModal from './components/NoteModal/NoteModal';
 import Settings from './components/Settings/Settings';
 import Welcome from './components/Welcome/Welcome';
+import CalendarView from './components/Calendar/CalendarView';
 import { parseNote, generateNoteContent, generateFilename } from './utils/noteUtils';
 import KanbanBoardsList from './components/Kanban/KanbanBoardsList';
 import KanbanBoard from './components/Kanban/KanbanBoard';
@@ -13,7 +14,7 @@ import type { Note, RawNote, SaveNoteData, EditorNote } from './types';
 import './styles/App.css';
 
 type ViewType = 'welcome' | 'main' | 'settings';
-type FilterType = 'all' | 'favorites' | 'archive' | 'trash' | string;
+type FilterType = 'all' | 'calendar' | 'favorites' | 'archive' | 'trash' | string;
 type NotesView = 'list' | 'grid';
 type NotesSortOrder = 'desc' | 'asc';
 
@@ -23,6 +24,20 @@ const NOTES_SORT_ORDER_KEY = 'notes:notesSortOrder';
 const MIDDLE_PANE_COLLAPSED_KEY = 'notes:middlePaneCollapsed';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+const DAILY_NOTE_FILENAME_RE = /^\d{4}-\d{2}-\d{2}\.md$/i;
+
+const toYmd = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const isKanbanNote = (note: Note): boolean => note.type === 'kanban';
+
+const isCalendarNote = (note: Note): boolean => {
+  return note.type === 'calendar' || DAILY_NOTE_FILENAME_RE.test(note.filename);
+};
 
 // 检查是否是首次启动
 const hasCompletedWelcome = (): boolean => {
@@ -198,7 +213,7 @@ function App() {
   // 选择笔记
   const handleSelectNote = useCallback((noteId: string) => {
     setSelectedNoteId(noteId);
-    const note = notes.find(n => n.id === noteId && n.type !== 'kanban');
+    const note = notes.find(n => n.id === noteId && !isKanbanNote(n));
     if (note) {
       setCurrentNote({
         id: note.id,
@@ -214,11 +229,20 @@ function App() {
   }, [notes]);
 
   const handleOpenNote = useCallback((noteId: string) => {
+    const note = notes.find((item) => item.id === noteId);
+    if (note && isKanbanNote(note)) {
+      setSelectedKanbanId(note.id);
+      setActiveFilter('kanban');
+      setIsModalOpen(false);
+      setSearchQuery('');
+      return;
+    }
+
     handleSelectNote(noteId);
     if (notesView === 'grid') {
       setIsModalOpen(true);
     }
-  }, [handleSelectNote, notesView]);
+  }, [handleSelectNote, notes, notesView]);
 
   const handleNotesViewChange = useCallback((nextView: NotesView) => {
     setNotesView(nextView);
@@ -243,7 +267,7 @@ function App() {
       await window.electronAPI.createNote({ filename, content });
       await loadNotes();
       handleOpenNote(filename.replace('.md', ''));
-      if (activeFilter === 'kanban') {
+      if (activeFilter === 'kanban' || activeFilter === 'calendar') {
         setActiveFilter('all');
       }
     } catch (err) {
@@ -255,17 +279,29 @@ function App() {
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
     const now = new Date();
     const preserveModifiedAt = Boolean(noteData.preserveModifiedAt);
+    const previousFilename = noteData.filename;
+    const previousNoteId =
+      noteData.id ||
+      (previousFilename ? previousFilename.replace(/\.md$/i, '') : '');
+    const existingNote = notes.find((note) => {
+      if (previousNoteId && note.id === previousNoteId) return true;
+      if (previousFilename && note.filename === previousFilename) return true;
+      return false;
+    });
+    const existingType = existingNote?.type;
+    const isCalendarEntry = existingType === 'calendar' || (previousFilename ? DAILY_NOTE_FILENAME_RE.test(previousFilename) : false);
+
     const frontmatter = {
       title: noteData.title,
       date: noteData.date || now.toISOString(),
       tags: noteData.tags,
+      ...(isCalendarEntry ? { type: 'calendar' } : {}),
     };
     const fileContent = generateNoteContent(frontmatter, noteData.content);
-    const previousFilename = noteData.filename;
-    const filename = makeUniqueFilename(noteData.title, previousFilename);
-    const previousNoteId =
-      noteData.id ||
-      (previousFilename ? previousFilename.replace(/\.md$/i, '') : filename.replace(/\.md$/i, ''));
+    const filename =
+      isCalendarEntry && previousFilename
+        ? previousFilename
+        : makeUniqueFilename(noteData.title, previousFilename);
     const nextNoteId = filename.replace(/\.md$/i, '');
     const isRenamed = Boolean(previousFilename && previousFilename !== filename);
 
@@ -320,7 +356,7 @@ function App() {
         modifiedAt: nextModifiedAt,
       };
     });
-  }, [makeUniqueFilename, selectedNoteId]);
+  }, [makeUniqueFilename, notes, selectedNoteId]);
 
   // 开始使用 - 使用默认路径
   const handleGetStarted = useCallback(async () => {
@@ -380,19 +416,69 @@ function App() {
     saveFontFamily(trimmed);
   }, []);
 
-  // 过滤笔记
-  const visibleNotes = notes.filter(note => note.type !== 'kanban');
-  const kanbanNotes = notes.filter(note => note.type === 'kanban');
-  const selectedKanbanNote = selectedKanbanId ? kanbanNotes.find((n) => n.id === selectedKanbanId) ?? null : null;
+  const handleOpenDailyNote = useCallback(async (date: Date) => {
+    const ymd = toYmd(date);
+    const filename = `${ymd}.md`;
+    const existing = notes.find((note) => note.filename.toLowerCase() === filename.toLowerCase());
 
-  const filteredNotes = visibleNotes.filter(note => {
-    // 搜索过滤
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchTitle = note.title?.toLowerCase().includes(query);
-      const matchContent = note.contentBody?.toLowerCase().includes(query);
-      if (!matchTitle && !matchContent) return false;
+    try {
+      if (!existing) {
+        const localNoon = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0);
+        const frontmatter = {
+          title: ymd,
+          date: localNoon.toISOString(),
+          tags: [] as string[],
+          type: 'calendar' as const,
+        };
+        const content = generateNoteContent(frontmatter, '');
+        const createResult = await window.electronAPI.createNote({ filename, content });
+        if (!createResult.success) {
+          throw new Error(createResult.error || 'Failed to create daily note');
+        }
+      } else if (isKanbanNote(existing)) {
+        throw new Error(`"${filename}" already exists and is used by a kanban board`);
+      }
+
+      const rawNotes = await window.electronAPI.getAllNotes();
+      const raw = rawNotes.find((item) => item.filename.toLowerCase() === filename.toLowerCase());
+      if (!raw) {
+        throw new Error('Daily note was not found after creation');
+      }
+      const parsed = parseNote(raw.content, raw.filename);
+      const createdAt = new Date(raw.createdAt);
+      const modifiedAt = new Date(raw.modifiedAt);
+
+      setSelectedNoteId(raw.id);
+      setCurrentNote({
+        id: raw.id,
+        filename: raw.filename,
+        title: parsed.title,
+        content: parsed.contentBody,
+        tags: parsed.tags,
+        date: parsed.date,
+        createdAt,
+        modifiedAt,
+      });
+      setIsModalOpen(false);
+      setIsModalFullScreen(false);
+      setNotesView('list');
+      setActiveFilter('all');
+      await loadNotes();
+    } catch (err) {
+      console.error('Failed to open daily note:', err);
+      window.alert(err instanceof Error ? err.message : 'Failed to open daily note');
     }
+  }, [loadNotes, notes]);
+
+  const regularNotes = notes.filter((note) => !isKanbanNote(note) && !isCalendarNote(note));
+  const calendarNotes = notes.filter((note) => isCalendarNote(note) && !isKanbanNote(note));
+  const kanbanNotes = notes.filter((note) => isKanbanNote(note));
+  const selectedKanbanNote = selectedKanbanId ? kanbanNotes.find((n) => n.id === selectedKanbanId) ?? null : null;
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const isGlobalSearchMode = normalizedSearch.length > 0;
+
+  const filteredNotes = regularNotes.filter(note => {
+    if (isGlobalSearchMode) return true;
 
     // 标签/分类过滤
     switch (activeFilter) {
@@ -425,10 +511,19 @@ function App() {
     return notesSortOrder === 'asc' ? diff : -diff;
   });
 
+  const globalSearchNotes = notes.filter((note) => {
+    if (!isGlobalSearchMode) return false;
+    const matchTitle = note.title?.toLowerCase().includes(normalizedSearch);
+    const matchContent = note.contentBody?.toLowerCase().includes(normalizedSearch);
+    return Boolean(matchTitle || matchContent);
+  }).sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
+
+  const notesListItems = isGlobalSearchMode ? globalSearchNotes : sortedFilteredNotes;
+
   // 获取所有标签
-  const allTags = [...new Set(visibleNotes.flatMap(n => n.tags || []))]
+  const allTags = [...new Set(regularNotes.flatMap(n => n.tags || []))]
     .filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
-  const tagCounts = visibleNotes.reduce<Record<string, number>>((acc, note) => {
+  const tagCounts = regularNotes.reduce<Record<string, number>>((acc, note) => {
     (note.tags || []).forEach(tag => {
       if (['favorite', 'archive', 'trash', 'pinned'].includes(tag)) return;
       acc[tag] = (acc[tag] ?? 0) + 1;
@@ -437,11 +532,12 @@ function App() {
   }, {});
 
   const folderCounts = {
-    all: visibleNotes.length,
+    all: regularNotes.length,
+    calendar: calendarNotes.length,
     kanban: kanbanNotes.length,
-    favorites: visibleNotes.filter((note) => note.tags?.includes('favorite')).length,
-    archive: visibleNotes.filter((note) => note.tags?.includes('archive')).length,
-    trash: visibleNotes.filter((note) => note.tags?.includes('trash')).length,
+    favorites: regularNotes.filter((note) => note.tags?.includes('favorite')).length,
+    archive: regularNotes.filter((note) => note.tags?.includes('archive')).length,
+    trash: regularNotes.filter((note) => note.tags?.includes('trash')).length,
   };
 
   useEffect(() => {
@@ -591,7 +687,39 @@ function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
       />
-      {activeFilter === 'kanban' ? (
+      {isGlobalSearchMode ? (
+        <>
+          <NotesList
+            notes={notesListItems}
+            selectedNoteId={selectedNoteId}
+            onOpenNote={handleOpenNote}
+            activeFilter="search"
+            isSearchMode
+            notesView={notesView}
+            onViewChange={handleNotesViewChange}
+            sortOrder={notesSortOrder}
+            onToggleSort={toggleNotesSortOrder}
+            isCollapsed={isMiddlePaneCollapsed}
+            onToggleCollapsed={toggleMiddlePaneCollapsed}
+          />
+          {notesView === 'list' && (
+            <Editor
+              note={currentNote}
+              onSave={handleSaveNote}
+              isLoading={isLoading && !currentNote}
+            />
+          )}
+          <NoteModal
+            isOpen={notesView === 'grid' && isModalOpen}
+            note={currentNote}
+            onSave={handleSaveNote}
+            isLoading={isLoading && !currentNote}
+            isFullScreen={isModalFullScreen}
+            onToggleFullScreen={() => setIsModalFullScreen(prev => !prev)}
+            onClose={() => setIsModalOpen(false)}
+          />
+        </>
+      ) : activeFilter === 'kanban' ? (
         <>
           <KanbanBoardsList
             boards={kanbanNotes}
@@ -604,14 +732,19 @@ function App() {
           />
           <KanbanBoard boardNote={selectedKanbanNote} onSaveBoard={handleSaveKanbanBoard} />
         </>
+      ) : activeFilter === 'calendar' ? (
+        <CalendarView
+          notes={calendarNotes}
+          onOpenDailyNote={handleOpenDailyNote}
+        />
       ) : (
         <>
           <NotesList
-            notes={sortedFilteredNotes}
+            notes={notesListItems}
             selectedNoteId={selectedNoteId}
             onOpenNote={handleOpenNote}
             activeFilter={activeFilter}
-            isSearchMode={Boolean(searchQuery.trim())}
+            isSearchMode={isGlobalSearchMode}
             notesView={notesView}
             onViewChange={handleNotesViewChange}
             sortOrder={notesSortOrder}

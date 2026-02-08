@@ -5,6 +5,7 @@ import './NotesList.css';
 
 const FILTER_TITLES: Record<string, string> = {
   'all': 'All Notes',
+  'search': 'Search Results',
   'favorites': 'Favorites',
   'archive': 'Archive',
   'trash': 'Trash',
