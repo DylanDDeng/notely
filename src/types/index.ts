@@ -69,6 +69,29 @@ export interface ExportNotePdfResult {
   error?: string;
 }
 
+export interface GenerateWechatHtmlWithAiRequest {
+  markdown: string;
+  title?: string;
+  apiKey: string;
+  model: string;
+}
+
+export interface GenerateWechatHtmlWithAiResult {
+  success: boolean;
+  html?: string;
+  error?: string;
+}
+
+export interface WriteClipboardTextResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface WechatAiConfig {
+  apiKey: string;
+  model: string;
+}
+
 /**
  * 编辑器中的笔记数据
  */
@@ -135,9 +158,13 @@ export interface ElectronAPI {
   
   // Shell
   openExternal: (url: string) => Promise<void>;
+  writeClipboardText: (text: string) => Promise<WriteClipboardTextResult>;
 
   // Export
   exportNotePdf: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
+
+  // AI
+  generateWechatHtmlWithAi: (data: GenerateWechatHtmlWithAiRequest) => Promise<GenerateWechatHtmlWithAiResult>;
 }
 
 /**

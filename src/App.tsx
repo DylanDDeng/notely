@@ -22,6 +22,9 @@ const STORAGE_PATH_KEY = 'notes:storagePath';
 const FONT_FAMILY_KEY = 'notes:fontFamily';
 const NOTES_SORT_ORDER_KEY = 'notes:notesSortOrder';
 const MIDDLE_PANE_COLLAPSED_KEY = 'notes:middlePaneCollapsed';
+const WECHAT_AI_API_KEY = 'notes:wechatAi:apiKey';
+const WECHAT_AI_MODEL = 'notes:wechatAi:model';
+const DEFAULT_WECHAT_AI_MODEL = 'kimi-k2.5';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const DAILY_NOTE_FILENAME_RE = /^\d{4}-\d{2}-\d{2}\.md$/i;
@@ -70,6 +73,45 @@ const saveFontFamily = (fontFamily: string) => {
   localStorage.setItem(FONT_FAMILY_KEY, trimmed);
 };
 
+const getSavedWechatAiApiKey = (): string => {
+  try {
+    return localStorage.getItem(WECHAT_AI_API_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+const saveWechatAiApiKey = (apiKey: string) => {
+  const trimmed = apiKey.trim();
+  try {
+    if (!trimmed) {
+      localStorage.removeItem(WECHAT_AI_API_KEY);
+      return;
+    }
+    localStorage.setItem(WECHAT_AI_API_KEY, trimmed);
+  } catch {
+    // ignore
+  }
+};
+
+const getSavedWechatAiModel = (): string => {
+  try {
+    return localStorage.getItem(WECHAT_AI_MODEL) || DEFAULT_WECHAT_AI_MODEL;
+  } catch {
+    return DEFAULT_WECHAT_AI_MODEL;
+  }
+};
+
+const saveWechatAiModel = (model: string) => {
+  const trimmed = model.trim();
+  const next = trimmed || DEFAULT_WECHAT_AI_MODEL;
+  try {
+    localStorage.setItem(WECHAT_AI_MODEL, next);
+  } catch {
+    // ignore
+  }
+};
+
 const getSavedMiddlePaneCollapsed = (): boolean => {
   try {
     return localStorage.getItem(MIDDLE_PANE_COLLAPSED_KEY) === 'true';
@@ -100,6 +142,8 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModalFullScreen, setIsModalFullScreen] = useState(false);
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
+  const [wechatAiApiKey, setWechatAiApiKey] = useState<string>(() => getSavedWechatAiApiKey());
+  const [wechatAiModel, setWechatAiModel] = useState<string>(() => getSavedWechatAiModel());
   const [selectedKanbanId, setSelectedKanbanId] = useState<string | null>(null);
   const [isMiddlePaneCollapsed, setIsMiddlePaneCollapsed] = useState<boolean>(() => getSavedMiddlePaneCollapsed());
   const [notesSortOrder, setNotesSortOrder] = useState<NotesSortOrder>(() => {
@@ -414,6 +458,18 @@ function App() {
     const trimmed = nextFontFamily.trim();
     setAppFontFamily(trimmed);
     saveFontFamily(trimmed);
+  }, []);
+
+  const handleChangeWechatAiApiKey = useCallback((apiKey: string) => {
+    const value = apiKey.trim();
+    setWechatAiApiKey(value);
+    saveWechatAiApiKey(value);
+  }, []);
+
+  const handleChangeWechatAiModel = useCallback((model: string) => {
+    const value = model.trim() || DEFAULT_WECHAT_AI_MODEL;
+    setWechatAiModel(value);
+    saveWechatAiModel(value);
   }, []);
 
   const handleOpenDailyNote = useCallback(async (date: Date) => {
@@ -755,6 +811,10 @@ function App() {
           onChangeStoragePath={handleChangeStoragePath}
           fontFamily={appFontFamily}
           onChangeFontFamily={handleChangeFontFamily}
+          wechatAiApiKey={wechatAiApiKey}
+          wechatAiModel={wechatAiModel}
+          onChangeWechatAiApiKey={handleChangeWechatAiApiKey}
+          onChangeWechatAiModel={handleChangeWechatAiModel}
         />
       </div>
     );
@@ -798,6 +858,8 @@ function App() {
               note={currentNote}
               onSave={handleSaveNote}
               isLoading={isLoading && !currentNote}
+              wechatAiApiKey={wechatAiApiKey}
+              wechatAiModel={wechatAiModel}
             />
           )}
           <NoteModal
@@ -833,6 +895,8 @@ function App() {
             note={calendarEditorNote}
             onSave={handleSaveNote}
             isLoading={isLoading && !calendarEditorNote}
+            wechatAiApiKey={wechatAiApiKey}
+            wechatAiModel={wechatAiModel}
           />
         </>
       ) : (
@@ -858,6 +922,8 @@ function App() {
               note={currentNote}
               onSave={handleSaveNote}
               isLoading={isLoading && !currentNote}
+              wechatAiApiKey={wechatAiApiKey}
+              wechatAiModel={wechatAiModel}
             />
           )}
           <NoteModal

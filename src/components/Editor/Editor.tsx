@@ -6,7 +6,6 @@ import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
 import { Copy, FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
-import { convertMarkdownToWechatHtml } from '../../utils/wechatHtmlExporter';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import './Editor.css';
@@ -15,6 +14,8 @@ interface EditorProps {
   note: EditorNote | null;
   onSave: (note: SaveNoteData) => Promise<void>;
   isLoading: boolean;
+  wechatAiApiKey: string;
+  wechatAiModel: string;
 }
 
 type EditorMode = 'live' | 'source' | 'preview';
@@ -52,7 +53,7 @@ const transformMediaEmbeds = (html: string): string => {
   return changed ? doc.body.innerHTML : html;
 };
 
-function Editor({ note, onSave, isLoading }: EditorProps) {
+function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: EditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -84,6 +85,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isGeneratingWechatHtml, setIsGeneratingWechatHtml] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportPdfOptions>({
     pageSize: 'A4',
     orientation: 'portrait',
@@ -92,7 +94,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     includeDate: true,
     includePageNumbers: true,
   });
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const isPreviewMode = editorMode === 'preview';
   const isSourceMode = editorMode === 'source';
   const isEditing = !isPreviewMode;
@@ -127,10 +129,10 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     setIsExportOpen(false);
   }, [note?.id]);
 
-  const showToast = useCallback((type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     setToast({ type, message });
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 3200);
+    toastTimerRef.current = setTimeout(() => setToast(null), 5200);
   }, []);
 
   useEffect(() => {
@@ -562,25 +564,43 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   }, []);
 
   const copyTextToClipboard = useCallback(async (text: string): Promise<boolean> => {
+    const copyViaNativeClipboard = async (): Promise<boolean> => {
+      if (typeof window.electronAPI.writeClipboardText !== 'function') return false;
+      try {
+        const result = await window.electronAPI.writeClipboardText(text);
+        return Boolean(result?.success);
+      } catch {
+        return false;
+      }
+    };
+
     try {
       await navigator.clipboard.writeText(text);
       return true;
     } catch {
-      try {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.setAttribute('readonly', 'true');
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        return ok;
-      } catch {
-        return false;
-      }
+      // continue to fallbacks
     }
+
+    if (await copyViaNativeClipboard()) {
+      return true;
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (ok) return true;
+    } catch {
+      // continue to final fallback
+    }
+
+    return copyViaNativeClipboard();
   }, []);
 
   const copyMarkdownSource = useCallback(async () => {
@@ -593,20 +613,62 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     setIsMoreMenuOpen(false);
   }, [content, copyTextToClipboard, showToast]);
 
-  const copyWechatHtml = useCallback(async () => {
+  const generateWechatHtmlWithAi = useCallback(async () => {
+    const apiKey = wechatAiApiKey.trim();
+    const model = wechatAiModel.trim();
+
+    if (!apiKey || !model) {
+      showToast('error', 'Set Moonshot API key and model in Settings > Editor first');
+      setIsMoreMenuOpen(false);
+      return;
+    }
+
+    const markdown = content.trim();
+    if (!markdown) {
+      showToast('error', 'Current note is empty');
+      setIsMoreMenuOpen(false);
+      return;
+    }
+
+    if (isGeneratingWechatHtml) return;
+    setIsGeneratingWechatHtml(true);
+    showToast('info', 'Generating WeChat HTML with AI...');
+
     try {
-      const wechatHtml = convertMarkdownToWechatHtml(content, { styleType: 3 });
-      const ok = await copyTextToClipboard(wechatHtml);
+      if (typeof window.electronAPI.generateWechatHtmlWithAi !== 'function') {
+        throw new Error('AI WeChat channel is unavailable. Please restart the app.');
+      }
+
+      const result = await window.electronAPI.generateWechatHtmlWithAi({
+        markdown,
+        title: title.trim() || undefined,
+        apiKey,
+        model,
+      });
+
+      if (!result.success || !result.html) {
+        throw new Error(result.error || 'Failed to generate WeChat HTML');
+      }
+
+      const ok = await copyTextToClipboard(result.html);
       if (!ok) {
-        showToast('error', 'Failed to copy WeChat HTML');
+        showToast('error', 'Generated AI HTML, but failed to copy');
         return;
       }
-      showToast('success', 'WeChat HTML copied');
+
+      showToast('success', 'AI WeChat HTML generated and copied');
       setIsMoreMenuOpen(false);
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to export WeChat HTML');
+      const message = err instanceof Error ? err.message : String(err);
+      if (/No handler registered for ['"]wechat:generateHtmlWithAi['"]/i.test(message)) {
+        showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      } else {
+        showToast('error', message || 'Failed to generate AI WeChat HTML');
+      }
+    } finally {
+      setIsGeneratingWechatHtml(false);
     }
-  }, [content, copyTextToClipboard, showToast]);
+  }, [content, copyTextToClipboard, isGeneratingWechatHtml, showToast, title, wechatAiApiKey, wechatAiModel]);
 
   const exportCurrentNoteToPdf = useCallback(async () => {
     if (!note) return;
@@ -882,12 +944,13 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
                     type="button"
                     className="editor-more-item"
                     role="menuitem"
+                    disabled={isGeneratingWechatHtml}
                     onClick={() => {
-                      void copyWechatHtml();
+                      void generateWechatHtmlWithAi();
                     }}
                   >
                     <Copy size={16} />
-                    <span>Copy WeChat HTML</span>
+                    <span>{isGeneratingWechatHtml ? 'Generating AI WeChat HTML…' : 'Generate WeChat HTML (AI)'}</span>
                   </button>
                   <button
                     type="button"

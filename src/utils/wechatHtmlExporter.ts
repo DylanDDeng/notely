@@ -2,6 +2,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 
 type TableAlign = 'left' | 'center' | 'right' | null;
+type CalloutTone = 'tip' | 'info' | 'warn' | 'neutral';
 
 interface MdNode {
   type: string;
@@ -18,70 +19,76 @@ interface MdNode {
   children?: MdNode[];
 }
 
-interface RenderContext {
-  styleType: number;
-  paragraphCount: number;
-}
-
 export interface WechatHtmlExportOptions {
   styleType?: number;
+  issueLabel?: string;
+  articleTitle?: string;
+  articleSubtitle?: string;
+  footerCtaTitle?: string;
+  footerCtaBody?: string;
 }
 
-const FONT_SERIF = "'Noto Serif SC','Source Han Serif SC','Songti SC','STSong','Times New Roman',serif";
-const FONT_SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif";
-
-const STYLES = {
-  section: 'margin:0;padding:0;',
-  paragraphFirst:
-    `margin:0;color:#202124;font-size:17px;line-height:1.95;font-family:${FONT_SERIF};letter-spacing:0.01em;text-align:justify;`,
-  paragraph:
-    `margin:0;color:#202124;font-size:17px;line-height:1.95;font-family:${FONT_SERIF};letter-spacing:0.01em;text-align:justify;text-indent:2em;`,
-  heading1:
-    `margin:10px 0 8px;color:#111111;font-size:34px;line-height:1.32;font-weight:700;text-align:center;font-family:${FONT_SERIF};letter-spacing:0.04em;`,
-  heading2:
-    `margin:8px 0;color:#111111;font-size:27px;line-height:1.45;font-weight:700;font-family:${FONT_SERIF};padding-left:12px;border-left:4px solid #101828;`,
-  heading3:
-    `margin:8px 0;color:#1f2937;font-size:22px;line-height:1.5;font-weight:700;font-family:${FONT_SERIF};`,
-  heading4:
-    `margin:8px 0;color:#1f2937;font-size:19px;line-height:1.55;font-weight:700;font-family:${FONT_SANS};`,
-  heading5:
-    `margin:8px 0;color:#334155;font-size:17px;line-height:1.6;font-weight:700;font-family:${FONT_SANS};`,
-  heading6:
-    `margin:8px 0;color:#475569;font-size:16px;line-height:1.65;font-weight:700;font-family:${FONT_SANS};`,
-  separator: 'border:none;border-top:1px solid #d7dce1;margin:0;',
-  quote:
-    `margin:0;padding:12px 14px;border-left:4px solid #cbd5e1;background:#f8fafc;color:#334155;font-size:15px;line-height:1.9;font-family:${FONT_SERIF};`,
-  codeBlock:
-    `margin:0;padding:14px 16px;background:#0f172a;color:#e2e8f0;border-radius:10px;font-size:13px;line-height:1.7;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;white-space:pre-wrap;word-break:break-word;`,
-  inlineCode:
-    `background:#f1f5f9;color:#0f172a;border:1px solid #e2e8f0;border-radius:4px;padding:1px 5px;font-size:0.92em;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;`,
-  link: 'color:#0f6adf;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px;',
-  image:
-    'display:block;width:100%;max-width:100%;height:auto;border-radius:14px;border:1px solid #e5e7eb;box-shadow:0 12px 34px rgba(15,23,42,0.10);background:#f8fafc;',
-  imageCaption:
-    `margin:10px 0 0;text-align:center;color:#64748b;font-size:12px;line-height:1.6;font-family:${FONT_SANS};`,
-  ul: `margin:0;padding-left:1.4em;color:#202124;font-family:${FONT_SERIF};font-size:16px;line-height:1.9;`,
-  ol: `margin:0;padding-left:1.6em;color:#202124;font-family:${FONT_SERIF};font-size:16px;line-height:1.9;`,
-  li: 'margin:6px 0;',
-  liParagraph: 'margin:0;',
-  taskBox: `display:inline-block;width:1.2em;color:#64748b;font-family:${FONT_SANS};`,
-  tableWrap: 'margin:0;overflow-x:auto;',
-  table: `width:100%;border-collapse:collapse;border:1px solid #dbe3eb;background:#ffffff;font-family:${FONT_SANS};`,
-  th:
-    'border:1px solid #dbe3eb;padding:10px 12px;background:#f8fafc;color:#0f172a;font-size:14px;line-height:1.5;text-align:left;font-weight:700;',
-  td:
-    'border:1px solid #dbe3eb;padding:10px 12px;color:#1f2937;font-size:14px;line-height:1.65;text-align:left;',
-  hrSection: 'margin:20px 0;padding:0;',
-  mediaSection: 'margin:20px 0 16px;padding:0;',
-  blockSection: 'margin:16px 0;padding:0;',
-  h1Section: 'margin:26px 0 18px;padding:0;',
-  h2Section: 'margin:24px 0 16px;padding:0;',
-  h3Section: 'margin:20px 0 12px;padding:0;',
-} as const;
+interface RenderContext {
+  sectionIndex: number;
+}
 
 const DEFAULT_STYLE_TYPE = 3;
-const SEPARATOR_AND_STYLE_MARK = (styleType: number): string =>
-  `<section><span leaf=""><br></span></section>\n<p style="display:none;"><mp-style-type data-value="${styleType}"></mp-style-type></p>`;
+const DEFAULT_ISSUE_LABEL = 'BUBBLE 2026 · ISSUE #15';
+const ROOT_STYLE = "font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #ffffff; color: #1f1f1f; line-height: 1.8; max-width: 700px; margin: 0 auto; padding: 20px; font-size: 15px;";
+
+const STYLES = {
+  heroWrap: 'margin-bottom: 30px;',
+  issueTag: 'display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 12px;',
+  heroTitle: 'margin: 0; font-size: 24px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.5px;',
+  heroSubtitle: 'margin: 8px 0 0; color: #666; font-size: 15px;',
+
+  paragraph: 'margin: 16px 0; color: #333; font-size: 15px; line-height: 1.8;',
+  strong: 'font-weight: 700; color: #1a1a1a;',
+  em: 'font-style: italic;',
+  del: 'text-decoration: line-through; color: #777;',
+  inlineCode: 'background: #f3e5f5; color: #7b1fa2; padding: 2px 6px; border-radius: 4px; font-weight: 600; font-size: 14px;',
+  link: 'color: #0f6adf; text-decoration: underline;',
+
+  sectionHeader: 'margin: 40px 0 24px; display: flex; align-items: center; gap: 12px;',
+  sectionBadge: 'background: #1b5e20; color: white; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;',
+  sectionBadgeNeutral: 'background: #424242; color: white; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;',
+  sectionTitle: 'font-size: 18px; font-weight: 700; color: #1a1a1a;',
+
+  imageCard: 'margin: 20px auto; width: 80%; border: 1px solid #f0f0f0; border-radius: 12px; overflow: hidden; background: #fff;',
+  image: 'width: 100%; display: block;',
+  imageCaptionWrap: 'padding: 12px 16px; border-top: 1px solid #f0f0f0; background: #fafafa;',
+  imageCaption: 'margin: 0; color: #666; font-size: 14px;',
+
+  tipCard: 'margin: 24px 0; padding: 16px; background: #f1f8e9; border-radius: 12px; border-left: 4px solid #689f38;',
+  tipText: 'margin: 0; color: #33691e; font-size: 15px; line-height: 1.7;',
+  infoCard: 'margin: 24px 0; padding: 16px; background: #e3f2fd; border-radius: 12px; border-left: 4px solid #1e88e5;',
+  infoText: 'margin: 0; color: #0d47a1; font-size: 15px; line-height: 1.7;',
+  warnCard: 'margin: 24px 0; padding: 16px; background: #fff3e0; border-radius: 12px; border-left: 4px solid #ef6c00;',
+  warnText: 'margin: 0; color: #8d3c00; font-size: 15px; line-height: 1.7;',
+  neutralCard: 'margin: 24px 0; padding: 16px; background: #f5f5f5; border-radius: 12px; border-left: 4px solid #9e9e9e;',
+  neutralText: 'margin: 0; color: #424242; font-size: 15px; line-height: 1.7;',
+
+  list: 'margin: 16px 0; padding-left: 1.3em; color: #333; font-size: 15px; line-height: 1.8;',
+  orderedList: 'margin: 16px 0; padding-left: 1.6em; color: #333; font-size: 15px; line-height: 1.8;',
+  listItem: 'margin: 8px 0;',
+
+  tableWrap: 'margin: 20px 0; overflow-x: auto; border: 1px solid #f0f0f0; border-radius: 12px; background: #fff;',
+  table: 'width: 100%; border-collapse: collapse;',
+  tableTh: 'border: 1px solid #f0f0f0; background: #fafafa; padding: 10px 12px; color: #1f2937; font-size: 14px; font-weight: 700; text-align: left;',
+  tableTd: 'border: 1px solid #f0f0f0; padding: 10px 12px; color: #333; font-size: 14px; line-height: 1.7; text-align: left;',
+
+  hr: 'margin: 24px 0; border: none; border-top: 1px solid #eceff3;',
+
+  codeBlock: "margin: 20px 0; padding: 14px 16px; background: #0f172a; color: #e2e8f0; border-radius: 10px; font-size: 13px; line-height: 1.7; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; white-space: pre-wrap; word-break: break-word;",
+
+  videoCard: 'margin: 24px 0; background: #1a1a1a; border-radius: 12px; padding: 24px; text-align: center;',
+  videoLabel: "margin: 0; color: #69f0ae; font-family: 'Courier New', monospace; font-size: 13px; letter-spacing: 2px;",
+  videoTitle: 'margin: 8px 0 0; color: #fff; font-size: 15px;',
+
+  footerCta: 'margin: 60px 0 40px; padding: 32px 24px; background: #f5f5f5; border-radius: 16px; text-align: center;',
+  footerCtaTitle: 'margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #1a1a1a;',
+  footerCtaBody: 'margin: 0; color: #666; font-size: 14px; line-height: 1.8;',
+} as const;
 
 const escapeHtml = (value: string): string =>
   value
@@ -96,8 +103,14 @@ const escapeAttr = (value: string): string => escapeHtml(value).replace(/`/g, '&
 const safeStyleType = (value: number | undefined): number => {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_STYLE_TYPE;
   const normalized = Math.trunc(value);
-  if (normalized < 0) return DEFAULT_STYLE_TYPE;
-  return normalized;
+  return normalized > 0 ? normalized : DEFAULT_STYLE_TYPE;
+};
+
+const safeImageSrc = (value: string | undefined): string => {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return '';
 };
 
 const safeLinkHref = (value: string | undefined): string => {
@@ -107,27 +120,35 @@ const safeLinkHref = (value: string | undefined): string => {
   return `https://${raw}`;
 };
 
-const safeImageSrc = (value: string | undefined): string => {
-  const raw = (value || '').trim();
-  if (!raw) return '';
-  if (/^(https?:\/\/|data:image\/)/i.test(raw)) return raw;
-  return '';
+const collectText = (node: MdNode | undefined): string => {
+  if (!node) return '';
+  if (node.type === 'text' || node.type === 'inlineCode') return node.value || '';
+  const children = node.children || [];
+  return children.map((child) => collectText(child)).join('');
+};
+
+const collectTextFromChildren = (children: MdNode[] | undefined): string => {
+  if (!Array.isArray(children)) return '';
+  return children.map((child) => collectText(child)).join('').replace(/\s+/g, ' ').trim();
+};
+
+const isConclusionHeading = (title: string): boolean => /^(结语|总结|尾声|结尾|最后)$/i.test(title.trim());
+
+const parseCalloutTone = (text: string): { tone: CalloutTone; content: string } => {
+  const match = text.match(/^\[!(TIP|INFO|WARN|NOTE|QUOTE)\]\s*/i);
+  if (!match) return { tone: 'tip', content: text };
+
+  const key = match[1].toUpperCase();
+  const content = text.replace(match[0], '').trim();
+  if (key === 'INFO') return { tone: 'info', content };
+  if (key === 'WARN') return { tone: 'warn', content };
+  if (key === 'NOTE' || key === 'QUOTE') return { tone: 'neutral', content };
+  return { tone: 'tip', content };
 };
 
 const renderInlineChildren = (children: MdNode[] | undefined, ctx: RenderContext): string => {
   if (!Array.isArray(children) || children.length === 0) return '';
-  return children.map((child) => renderInlineNode(child, ctx)).join('');
-};
-
-const renderInlineImage = (node: MdNode, _ctx: RenderContext): string => {
-  const src = safeImageSrc(node.url);
-  if (!src) return '';
-  const altText = escapeHtml((node.alt || '').trim());
-  const titleText = escapeHtml((node.title || '').trim());
-  const caption = titleText || altText;
-  const captionHtml = caption ? `<p style="${STYLES.imageCaption}">${caption}</p>` : '';
-  return `<span style="display:block;margin:12px 0;">` +
-    `<img src="${escapeAttr(src)}" alt="${altText}" style="${STYLES.image}" />${captionHtml}</span>`;
+  return children.map((node) => renderInlineNode(node, ctx)).join('');
 };
 
 const renderInlineNode = (node: MdNode, ctx: RenderContext): string => {
@@ -135,13 +156,13 @@ const renderInlineNode = (node: MdNode, ctx: RenderContext): string => {
     case 'text':
       return escapeHtml(node.value || '');
     case 'strong':
-      return `<strong style="font-weight:700;color:#0f172a;">${renderInlineChildren(node.children, ctx)}</strong>`;
+      return `<strong style="${STYLES.strong}">${renderInlineChildren(node.children, ctx)}</strong>`;
     case 'emphasis':
-      return `<em style="font-style:italic;">${renderInlineChildren(node.children, ctx)}</em>`;
+      return `<em style="${STYLES.em}">${renderInlineChildren(node.children, ctx)}</em>`;
     case 'delete':
-      return `<span style="text-decoration:line-through;color:#64748b;">${renderInlineChildren(node.children, ctx)}</span>`;
+      return `<span style="${STYLES.del}">${renderInlineChildren(node.children, ctx)}</span>`;
     case 'inlineCode':
-      return `<code style="${STYLES.inlineCode}">${escapeHtml(node.value || '')}</code>`;
+      return `<span style="${STYLES.inlineCode}">${escapeHtml(node.value || '')}</span>`;
     case 'link': {
       const href = safeLinkHref(node.url);
       const text = renderInlineChildren(node.children, ctx) || escapeHtml(href);
@@ -149,205 +170,247 @@ const renderInlineNode = (node: MdNode, ctx: RenderContext): string => {
     }
     case 'break':
       return '<br />';
-    case 'image':
-      return renderInlineImage(node, ctx);
     default:
       return renderInlineChildren(node.children, ctx);
   }
 };
 
-const withSection = (content: string, sectionStyle: string): string =>
-  `<section style="${sectionStyle}">${content}</section>`;
+const renderHero = (title: string, options: WechatHtmlExportOptions): string => {
+  const issueLabel = (options.issueLabel || DEFAULT_ISSUE_LABEL).trim() || DEFAULT_ISSUE_LABEL;
+  const subtitle = (options.articleSubtitle || '').trim();
+  const subtitleHtml = subtitle ? `<p style="${STYLES.heroSubtitle}">${escapeHtml(subtitle)}</p>` : '';
 
-const withStyleMark = (blockHtml: string, styleType: number): string =>
-  `${blockHtml}\n${SEPARATOR_AND_STYLE_MARK(styleType)}`;
-
-const headingStyleByDepth = (depth: number): string => {
-  switch (depth) {
-    case 1:
-      return STYLES.heading1;
-    case 2:
-      return STYLES.heading2;
-    case 3:
-      return STYLES.heading3;
-    case 4:
-      return STYLES.heading4;
-    case 5:
-      return STYLES.heading5;
-    default:
-      return STYLES.heading6;
-  }
+  return `<div style="${STYLES.heroWrap}">` +
+    `<span style="${STYLES.issueTag}">${escapeHtml(issueLabel)}</span>` +
+    `<h1 style="${STYLES.heroTitle}">${escapeHtml(title)}</h1>` +
+    subtitleHtml +
+    `</div>`;
 };
 
-const headingSectionByDepth = (depth: number): string => {
-  switch (depth) {
-    case 1:
-      return STYLES.h1Section;
-    case 2:
-      return STYLES.h2Section;
-    case 3:
-      return STYLES.h3Section;
-    default:
-      return STYLES.blockSection;
-  }
-};
-
-const renderImageBlock = (node: MdNode): string | null => {
+const renderImageCard = (node: MdNode): string | null => {
   const src = safeImageSrc(node.url);
   if (!src) return null;
   const altText = escapeHtml((node.alt || '').trim());
   const titleText = escapeHtml((node.title || '').trim());
   const caption = titleText || altText;
-  const captionHtml = caption ? `<p style="${STYLES.imageCaption}">${caption}</p>` : '';
-  return withSection(
-    `<img src="${escapeAttr(src)}" alt="${altText}" style="${STYLES.image}" />${captionHtml}`,
-    STYLES.mediaSection
-  );
+  const captionHtml = caption
+    ? `<div style="${STYLES.imageCaptionWrap}"><p style="${STYLES.imageCaption}">${caption}</p></div>`
+    : '';
+
+  return `<div style="${STYLES.imageCard}">` +
+    `<img src="${escapeAttr(src)}" style="${STYLES.image}" alt="${altText}" />` +
+    captionHtml +
+    `</div>`;
+};
+
+const renderSectionHeader = (title: string, ctx: RenderContext): string => {
+  if (isConclusionHeading(title)) {
+    return `<div style="${STYLES.sectionHeader}">` +
+      `<span style="${STYLES.sectionBadgeNeutral}">${escapeHtml(title)}</span>` +
+      `</div>`;
+  }
+
+  ctx.sectionIndex += 1;
+  const indexText = String(ctx.sectionIndex).padStart(2, '0');
+  return `<div style="${STYLES.sectionHeader}">` +
+    `<span style="${STYLES.sectionBadge}">${indexText}</span>` +
+    `<span style="${STYLES.sectionTitle}">${escapeHtml(title)}</span>` +
+    `</div>`;
 };
 
 const renderList = (node: MdNode, ctx: RenderContext, nested: boolean): string => {
-  const isOrdered = Boolean(node.ordered);
-  const listTag = isOrdered ? 'ol' : 'ul';
-  const listStyle = isOrdered ? STYLES.ol : STYLES.ul;
-  const startAttr =
-    isOrdered && typeof node.start === 'number' && node.start > 1 ? ` start="${Math.trunc(node.start)}"` : '';
+  const ordered = Boolean(node.ordered);
+  const tag = ordered ? 'ol' : 'ul';
+  const listStyle = ordered ? STYLES.orderedList : STYLES.list;
+  const startAttr = ordered && typeof node.start === 'number' && node.start > 1 ? ` start="${Math.trunc(node.start)}"` : '';
+
   const items = (node.children || [])
     .filter((item) => item.type === 'listItem')
     .map((item) => {
-      const parts: string[] = [];
-      const itemChildren = item.children || [];
-      const taskPrefix =
-        typeof item.checked === 'boolean'
-          ? `<span style="${STYLES.taskBox}">${item.checked ? '☑' : '☐'}</span>`
-          : '';
+      const prefix = typeof item.checked === 'boolean' ? (item.checked ? '☑ ' : '☐ ') : '';
+      const body = (item.children || [])
+        .map((child) => {
+          if (child.type === 'paragraph') return renderInlineChildren(child.children, ctx);
+          if (child.type === 'list') return renderList(child, ctx, true);
+          return renderInlineChildren(child.children, ctx);
+        })
+        .join('');
 
-      for (const child of itemChildren) {
-        if (child.type === 'paragraph') {
-          parts.push(`<p style="${STYLES.liParagraph}">${renderInlineChildren(child.children, ctx)}</p>`);
-          continue;
-        }
-        if (child.type === 'list') {
-          parts.push(renderList(child, ctx, true));
-          continue;
-        }
-        if (child.type === 'code') {
-          parts.push(`<pre style="${STYLES.codeBlock}">${escapeHtml(child.value || '')}</pre>`);
-          continue;
-        }
-        parts.push(renderInlineChildren(child.children, ctx));
-      }
-
-      return `<li style="${STYLES.li}">${taskPrefix}${parts.join('')}</li>`;
+      return `<li style="${STYLES.listItem}">${escapeHtml(prefix)}${body}</li>`;
     })
     .join('');
 
-  const listHtml = `<${listTag}${startAttr} style="${listStyle}">${items}</${listTag}>`;
-  if (nested) return listHtml;
-  return withSection(listHtml, STYLES.blockSection);
+  const html = `<${tag}${startAttr} style="${listStyle}">${items}</${tag}>`;
+  if (nested) return html;
+  return html;
 };
 
 const renderTable = (node: MdNode, ctx: RenderContext): string => {
   const rows = (node.children || []).filter((child) => child.type === 'tableRow');
   if (rows.length === 0) return '';
 
-  const alignments = node.align || [];
-  const tableRows = rows
+  const aligns = node.align || [];
+  const rowHtml = rows
     .map((row, rowIndex) => {
       const cells = (row.children || [])
         .filter((cell) => cell.type === 'tableCell')
         .map((cell, cellIndex) => {
-          const align = alignments[cellIndex];
-          const alignStyle = align ? `text-align:${align};` : '';
-          const tag = rowIndex === 0 ? 'th' : 'td';
-          const baseStyle = rowIndex === 0 ? STYLES.th : STYLES.td;
-          return `<${tag} style="${baseStyle}${alignStyle}">${renderInlineChildren(cell.children, ctx)}</${tag}>`;
+          const align = aligns[cellIndex];
+          const alignStyle = align ? `text-align: ${align};` : '';
+          if (rowIndex === 0) {
+            return `<th style="${STYLES.tableTh}${alignStyle}">${renderInlineChildren(cell.children, ctx)}</th>`;
+          }
+          return `<td style="${STYLES.tableTd}${alignStyle}">${renderInlineChildren(cell.children, ctx)}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
     })
     .join('');
 
-  return withSection(
-    `<div style="${STYLES.tableWrap}"><table style="${STYLES.table}">${tableRows}</table></div>`,
-    STYLES.blockSection
-  );
+  return `<div style="${STYLES.tableWrap}"><table style="${STYLES.table}">${rowHtml}</table></div>`;
 };
 
-const renderQuote = (node: MdNode, ctx: RenderContext): string => {
-  const children = node.children || [];
-  const body = children
-    .map((child) => {
-      if (child.type === 'paragraph') {
-        return `<p style="margin:0 0 8px;">${renderInlineChildren(child.children, ctx)}</p>`;
-      }
-      if (child.type === 'list') {
-        return renderList(child, ctx, true);
-      }
-      return renderInlineChildren(child.children, ctx);
-    })
-    .join('');
+const renderCallout = (node: MdNode): string => {
+  const text = collectTextFromChildren(node.children);
+  const parsed = parseCalloutTone(text);
+  const content = escapeHtml(parsed.content);
 
-  return withSection(`<blockquote style="${STYLES.quote}">${body}</blockquote>`, STYLES.blockSection);
+  if (parsed.tone === 'info') {
+    return `<div style="${STYLES.infoCard}"><p style="${STYLES.infoText}">${content}</p></div>`;
+  }
+  if (parsed.tone === 'warn') {
+    return `<div style="${STYLES.warnCard}"><p style="${STYLES.warnText}">${content}</p></div>`;
+  }
+  if (parsed.tone === 'neutral') {
+    return `<div style="${STYLES.neutralCard}"><p style="${STYLES.neutralText}">${content}</p></div>`;
+  }
+
+  return `<div style="${STYLES.tipCard}"><p style="${STYLES.tipText}">${content}</p></div>`;
+};
+
+const renderVideoCard = (raw: string): string => {
+  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  let label = 'VIDEO';
+  let title = '视频片段';
+
+  if (lines.length >= 2) {
+    label = lines[0] || label;
+    title = lines[1] || title;
+  } else if (lines.length === 1) {
+    const parts = lines[0].split('|').map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      label = parts[0] || label;
+      title = parts[1] || title;
+    } else {
+      title = lines[0] || title;
+    }
+  }
+
+  return `<div style="${STYLES.videoCard}">` +
+    `<p style="${STYLES.videoLabel}">${escapeHtml(label)}</p>` +
+    `<p style="${STYLES.videoTitle}">${escapeHtml(title)}</p>` +
+    `</div>`;
+};
+
+const renderFooterCta = (options: WechatHtmlExportOptions): string | null => {
+  const title = (options.footerCtaTitle || '').trim();
+  const body = (options.footerCtaBody || '').trim();
+  if (!title && !body) return null;
+
+  const safeTitle = escapeHtml(title || '马上周末了，去创造点什么吧。');
+  const safeBody = escapeHtml(body || '若觉得内容有帮助，欢迎点赞、推荐、关注。');
+  return `<div style="${STYLES.footerCta}">` +
+    `<p style="${STYLES.footerCtaTitle}">${safeTitle}</p>` +
+    `<p style="${STYLES.footerCtaBody}">${safeBody}</p>` +
+    `</div>`;
 };
 
 const renderBlock = (node: MdNode, ctx: RenderContext): string | null => {
   switch (node.type) {
     case 'heading': {
-      const level = Math.max(1, Math.min(6, node.depth || 1));
-      const tag = `h${level}`;
-      const heading = `<${tag} style="${headingStyleByDepth(level)}">${renderInlineChildren(node.children, ctx)}</${tag}>`;
-      return withSection(heading, headingSectionByDepth(level));
+      const depth = Math.max(1, Math.min(6, node.depth || 1));
+      const title = collectTextFromChildren(node.children);
+      if (depth === 2) return renderSectionHeader(title, ctx);
+      if (depth >= 3) return `<p style="${STYLES.paragraph}"><strong style="${STYLES.strong}">${escapeHtml(title)}</strong></p>`;
+      if (depth === 1) return `<h1 style="${STYLES.heroTitle}">${escapeHtml(title)}</h1>`;
+      return null;
     }
     case 'paragraph': {
-      const onlyChild = (node.children || [])[0];
-      if ((node.children || []).length === 1 && onlyChild?.type === 'image') {
-        return renderImageBlock(onlyChild);
+      const children = node.children || [];
+      if (children.length === 1 && children[0]?.type === 'image') {
+        return renderImageCard(children[0]);
       }
-      const paragraphStyle = ctx.paragraphCount === 0 ? STYLES.paragraphFirst : STYLES.paragraph;
-      ctx.paragraphCount += 1;
-      return withSection(`<p style="${paragraphStyle}">${renderInlineChildren(node.children, ctx)}</p>`, STYLES.blockSection);
+      return `<p style="${STYLES.paragraph}">${renderInlineChildren(children, ctx)}</p>`;
     }
     case 'image':
-      return renderImageBlock(node);
+      return renderImageCard(node);
     case 'list':
       return renderList(node, ctx, false);
     case 'blockquote':
-      return renderQuote(node, ctx);
-    case 'thematicBreak':
-      return withSection(`<hr style="${STYLES.separator}" />`, STYLES.hrSection);
-    case 'code':
-      return withSection(`<pre style="${STYLES.codeBlock}">${escapeHtml(node.value || '')}</pre>`, STYLES.blockSection);
+      return renderCallout(node);
     case 'table':
       return renderTable(node, ctx);
-    case 'html':
-      return withSection(
-        `<p style="${ctx.paragraphCount === 0 ? STYLES.paragraphFirst : STYLES.paragraph}">${escapeHtml(node.value || '')}</p>`,
-        STYLES.blockSection
-      );
+    case 'thematicBreak':
+      return `<hr style="${STYLES.hr}" />`;
+    case 'code': {
+      const lang = (node.lang || '').trim().toLowerCase();
+      if (lang === 'video') return renderVideoCard(node.value || '');
+      if (lang === 'cta') {
+        const lines = (node.value || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        const title = lines[0] || '马上周末了，去创造点什么吧。';
+        const body = lines.slice(1).map((line) => escapeHtml(line)).join('<br>') || '若觉得内容有帮助，欢迎点赞、推荐、关注。';
+        return `<div style="${STYLES.footerCta}">` +
+          `<p style="${STYLES.footerCtaTitle}">${escapeHtml(title)}</p>` +
+          `<p style="${STYLES.footerCtaBody}">${body}</p>` +
+          `</div>`;
+      }
+      return `<pre style="${STYLES.codeBlock}">${escapeHtml(node.value || '')}</pre>`;
+    }
     default:
       return null;
   }
 };
 
+const takeHeroTitle = (nodes: MdNode[], options: WechatHtmlExportOptions): { title: string; remaining: MdNode[] } => {
+  const remaining = [...nodes];
+  let title = (options.articleTitle || '').trim();
+
+  if (!title && remaining[0]?.type === 'heading' && (remaining[0].depth || 1) === 1) {
+    title = collectTextFromChildren(remaining[0].children);
+    remaining.shift();
+  }
+
+  return { title, remaining };
+};
+
 export function convertMarkdownToWechatHtml(markdown: string, options: WechatHtmlExportOptions = {}): string {
   const tree = remark().use(remarkGfm).parse(markdown || '') as MdNode;
   const rootChildren = Array.isArray(tree.children) ? tree.children : [];
+  const styleType = safeStyleType(options.styleType);
+
   const ctx: RenderContext = {
-    styleType: safeStyleType(options.styleType),
-    paragraphCount: 0,
+    sectionIndex: 0,
   };
 
-  const blocks: string[] = [];
-  for (const child of rootChildren) {
-    const block = renderBlock(child, ctx);
-    if (!block) continue;
-    blocks.push(withStyleMark(block, ctx.styleType));
+  const { title, remaining } = takeHeroTitle(rootChildren, options);
+  const bodyBlocks: string[] = [];
+
+  for (const node of remaining) {
+    const html = renderBlock(node, ctx);
+    if (!html) continue;
+    bodyBlocks.push(html);
   }
 
-  if (blocks.length === 0) {
-    const empty = withSection(`<p style="${STYLES.paragraphFirst}"> </p>`, STYLES.blockSection);
-    return withStyleMark(empty, ctx.styleType);
+  const cta = renderFooterCta(options);
+  if (cta) {
+    bodyBlocks.push(cta);
   }
 
-  return blocks.join('\n');
+  const heroHtml = title ? renderHero(title, options) : '';
+  const bodyHtml = bodyBlocks.join('\n\n');
+  const rootHtml = `<section style="${ROOT_STYLE}">\n${heroHtml}${heroHtml && bodyHtml ? '\n\n' : ''}${bodyHtml}\n</section>`;
+
+  const finalStyleMark = `<p style="display: none;">\n  <mp-style-type data-value="${styleType}"></mp-style-type>\n</p>`;
+
+  return `${rootHtml}\n\n${finalStyleMark}`;
 }

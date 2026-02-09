@@ -34,9 +34,25 @@ interface SettingsProps {
   onChangeStoragePath: (path: string) => Promise<void>;
   fontFamily: string;
   onChangeFontFamily: (fontFamily: string) => void;
+  wechatAiApiKey: string;
+  wechatAiModel: string;
+  onChangeWechatAiApiKey: (apiKey: string) => void;
+  onChangeWechatAiModel: (model: string) => void;
 }
 
-function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChangeFontFamily }: SettingsProps) {
+const DEFAULT_WECHAT_AI_MODEL = 'kimi-k2.5';
+
+function Settings({
+  onBack,
+  storagePath,
+  onChangeStoragePath,
+  fontFamily,
+  onChangeFontFamily,
+  wechatAiApiKey,
+  wechatAiModel,
+  onChangeWechatAiApiKey,
+  onChangeWechatAiModel,
+}: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<AppSettings>({
     launchAtStartup: true,
@@ -48,6 +64,9 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
   const [localFonts, setLocalFonts] = useState<string[]>([]);
   const [localFontsStatus, setLocalFontsStatus] = useState<'idle' | 'loading' | 'loaded' | 'unsupported' | 'error'>('idle');
   const [localFontsError, setLocalFontsError] = useState('');
+  const [wechatApiKeyInput, setWechatApiKeyInput] = useState(wechatAiApiKey || '');
+  const [wechatModelInput, setWechatModelInput] = useState(wechatAiModel || DEFAULT_WECHAT_AI_MODEL);
+  const [showWechatApiKey, setShowWechatApiKey] = useState(false);
 
   useEffect(() => {
     if (!storagePath) return;
@@ -57,6 +76,14 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
   useEffect(() => {
     setFontInput(fontFamily || '');
   }, [fontFamily]);
+
+  useEffect(() => {
+    setWechatApiKeyInput(wechatAiApiKey || '');
+  }, [wechatAiApiKey]);
+
+  useEffect(() => {
+    setWechatModelInput(wechatAiModel || DEFAULT_WECHAT_AI_MODEL);
+  }, [wechatAiModel]);
 
   const handleToggle = (key: keyof AppSettings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -103,6 +130,24 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
       .filter(font => font.toLowerCase().includes(query))
       .slice(0, 12);
   }, [fontInput, localFonts, localFontsStatus]);
+
+  const applyWechatApiKey = useCallback(() => {
+    onChangeWechatAiApiKey(wechatApiKeyInput);
+  }, [onChangeWechatAiApiKey, wechatApiKeyInput]);
+
+  const clearWechatApiKey = useCallback(() => {
+    setWechatApiKeyInput('');
+    onChangeWechatAiApiKey('');
+  }, [onChangeWechatAiApiKey]);
+
+  const applyWechatModel = useCallback(() => {
+    onChangeWechatAiModel(wechatModelInput);
+  }, [onChangeWechatAiModel, wechatModelInput]);
+
+  const resetWechatModel = useCallback(() => {
+    setWechatModelInput(DEFAULT_WECHAT_AI_MODEL);
+    onChangeWechatAiModel(DEFAULT_WECHAT_AI_MODEL);
+  }, [onChangeWechatAiModel]);
 
   const renderGeneralSettings = () => (
     <>
@@ -298,6 +343,111 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
     </>
   );
 
+  const renderEditorSettings = () => (
+    <>
+      <h1 className="settings-page-title">Editor</h1>
+      <p className="settings-page-description">
+        Configure AI-powered WeChat layout generation
+      </p>
+
+      <section className="settings-section">
+        <h3 className="settings-section-title">AI WeChat Layout</h3>
+
+        <div className="settings-item settings-item-column">
+          <div className="settings-item-info">
+            <span className="settings-item-label">Model</span>
+            <span className="settings-item-description">
+              Used by AI to generate WeChat-ready HTML
+            </span>
+          </div>
+          <div className="settings-font-controls">
+            <input
+              className="settings-input"
+              type="text"
+              placeholder={DEFAULT_WECHAT_AI_MODEL}
+              value={wechatModelInput}
+              onChange={(e) => setWechatModelInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                applyWechatModel();
+              }}
+              onBlur={applyWechatModel}
+            />
+            <button
+              className="settings-btn"
+              onClick={applyWechatModel}
+            >
+              Apply
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={resetWechatModel}
+              disabled={(wechatAiModel || DEFAULT_WECHAT_AI_MODEL) === DEFAULT_WECHAT_AI_MODEL}
+            >
+              Reset
+            </button>
+          </div>
+          <div className="settings-font-meta">
+            <span>Current: {wechatAiModel || DEFAULT_WECHAT_AI_MODEL}</span>
+          </div>
+        </div>
+
+        <div className="settings-item settings-item-column">
+          <div className="settings-item-info">
+            <span className="settings-item-label">Moonshot API Key</span>
+            <span className="settings-item-description">
+              Required before using AI WeChat layout in the editor menu
+            </span>
+          </div>
+          <div className="settings-font-controls">
+            <input
+              className="settings-input"
+              type={showWechatApiKey ? 'text' : 'password'}
+              placeholder="sk-..."
+              value={wechatApiKeyInput}
+              onChange={(e) => setWechatApiKeyInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                applyWechatApiKey();
+              }}
+              onBlur={applyWechatApiKey}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={() => setShowWechatApiKey((prev) => !prev)}
+              type="button"
+            >
+              {showWechatApiKey ? 'Hide' : 'Show'}
+            </button>
+            <button
+              className="settings-btn"
+              onClick={applyWechatApiKey}
+              type="button"
+            >
+              Save
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={clearWechatApiKey}
+              type="button"
+              disabled={!wechatAiApiKey}
+            >
+              Clear
+            </button>
+          </div>
+          <div className="settings-font-meta">
+            <span>{wechatAiApiKey ? 'Status: Configured' : 'Status: Not configured'}</span>
+            <span>• Stored locally on this device</span>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+
   const renderPlaceholder = (title: string, description: string) => (
     <>
       <h1 className="settings-page-title">{title}</h1>
@@ -317,7 +467,7 @@ function Settings({ onBack, storagePath, onChangeStoragePath, fontFamily, onChan
       case 'sync':
         return renderPlaceholder('Sync & Backup', 'Manage your sync and backup preferences');
       case 'editor':
-        return renderPlaceholder('Editor', 'Customize your editing experience');
+        return renderEditorSettings();
       case 'shortcuts':
         return renderPlaceholder('Keyboard Shortcuts', 'View and customize keyboard shortcuts');
       case 'about':

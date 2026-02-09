@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, clipboard } = require('electron');
 const path = require('path');
+const fsSync = require('fs');
 const fs = require('fs').promises;
 const os = require('os');
 const http = require('http');
@@ -10,6 +11,8 @@ const DEFAULT_NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
 
 // 当前存储路径（可以被修改）
 let currentNotesDir = DEFAULT_NOTES_DIR;
+const WECHAT_LAYOUT_SYSTEM_PROMPT_PATH = path.join(__dirname, 'prompts', 'wechat-layout-system-prompt.md');
+let cachedWechatLayoutSystemPrompt = null;
 
 // 判断是否在开发模式
 const isDev = !app.isPackaged;
@@ -238,6 +241,107 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
     </div>
   </body>
 </html>`;
+}
+
+function getWechatLayoutSystemPrompt() {
+  if (typeof cachedWechatLayoutSystemPrompt === 'string') {
+    return cachedWechatLayoutSystemPrompt;
+  }
+
+  try {
+    const content = fsSync.readFileSync(WECHAT_LAYOUT_SYSTEM_PROMPT_PATH, 'utf-8');
+    cachedWechatLayoutSystemPrompt = String(content || '').trim();
+    return cachedWechatLayoutSystemPrompt;
+  } catch (err) {
+    console.error('Failed to load WeChat layout system prompt:', err);
+    cachedWechatLayoutSystemPrompt = '';
+    return '';
+  }
+}
+
+function normalizeAiResponseContent(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (!part || typeof part !== 'object') return '';
+      if (typeof part.text === 'string') return part.text;
+      if (typeof part.content === 'string') return part.content;
+      return '';
+    })
+    .join('');
+}
+
+function stripMarkdownCodeFence(text) {
+  const trimmed = String(text || '').trim();
+  const fenced = trimmed.match(/^```(?:html)?\s*([\s\S]*?)\s*```$/i);
+  if (!fenced) return trimmed;
+  return fenced[1].trim();
+}
+
+function ensureWechatStyleMarker(html) {
+  const normalized = String(html || '').trim();
+  if (!normalized) {
+    return '<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>';
+  }
+
+  if (/<mp-style-type\b/i.test(normalized)) return normalized;
+  return `${normalized}\n\n<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>`;
+}
+
+async function requestMoonshotWechatHtml({ apiKey, model, title, markdown, systemPrompt }) {
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API is unavailable in main process');
+  }
+
+  const userPrompt = [
+    '请用「数字工具指南风」排版以下文章，并直接输出可粘贴到公众号后台的完整HTML。',
+    '输出要求：',
+    '1) 只能输出HTML，不要解释，不要Markdown代码块',
+    '2) 所有样式必须使用行内style',
+    '3) 文末必须包含 <p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>',
+    title ? `文章标题：${title}` : '',
+    'Markdown内容：',
+    markdown,
+  ].filter(Boolean).join('\n\n');
+
+  const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      thinking: { type: 'enabled' },
+    }),
+  });
+
+  const responseText = await response.text();
+  let payload = null;
+  try {
+    payload = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const errorMessage = payload?.error?.message || payload?.message || `Moonshot request failed (${response.status})`;
+    throw new Error(errorMessage);
+  }
+
+  const rawContent = normalizeAiResponseContent(payload?.choices?.[0]?.message?.content);
+  if (!rawContent) {
+    throw new Error('Moonshot returned empty content');
+  }
+
+  return ensureWechatStyleMarker(stripMarkdownCodeFence(rawContent));
 }
 
 // 创建窗口
@@ -534,6 +638,43 @@ ipcMain.handle('notes:exportPdf', async (event, data) => {
   }
 });
 
+ipcMain.handle('wechat:generateHtmlWithAi', async (event, data = {}) => {
+  try {
+    const apiKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
+    const model = typeof data.model === 'string' ? data.model.trim() : '';
+    const markdown = typeof data.markdown === 'string' ? data.markdown.trim() : '';
+    const title = typeof data.title === 'string' ? data.title.trim() : '';
+
+    if (!apiKey) {
+      return { success: false, error: 'Moonshot API key is not configured' };
+    }
+    if (!model) {
+      return { success: false, error: 'Moonshot model is not configured' };
+    }
+    if (!markdown) {
+      return { success: false, error: 'Note content is empty' };
+    }
+
+    const systemPrompt = getWechatLayoutSystemPrompt();
+    if (!systemPrompt) {
+      return { success: false, error: 'WeChat layout system prompt is missing' };
+    }
+
+    const html = await requestMoonshotWechatHtml({
+      apiKey,
+      model,
+      title,
+      markdown,
+      systemPrompt,
+    });
+
+    return { success: true, html };
+  } catch (err) {
+    console.error('Failed to generate WeChat HTML with AI:', err);
+    return { success: false, error: err?.message || String(err) };
+  }
+});
+
 // IPC 处理：选择存储目录
 ipcMain.handle('settings:selectDirectory', async () => {
   const result = await dialog.showOpenDialog({
@@ -545,6 +686,15 @@ ipcMain.handle('settings:selectDirectory', async () => {
 // IPC 处理：打开外部链接
 ipcMain.handle('shell:openExternal', async (event, url) => {
   await shell.openExternal(url);
+});
+
+ipcMain.handle('clipboard:writeText', async (event, text) => {
+  try {
+    clipboard.writeText(typeof text === 'string' ? text : String(text ?? ''));
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
 });
 
 app.whenReady().then(() => {
