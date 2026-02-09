@@ -6,6 +6,7 @@ import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
 import { Copy, FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
+import { convertMarkdownToWechatHtml } from '../../utils/wechatHtmlExporter';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import './Editor.css';
@@ -560,15 +561,14 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       .trim();
   }, []);
 
-  const copyMarkdownSource = useCallback(async () => {
+  const copyTextToClipboard = useCallback(async (text: string): Promise<boolean> => {
     try {
-      await navigator.clipboard.writeText(content);
-      showToast('success', 'Markdown copied');
-      setIsMoreMenuOpen(false);
-    } catch (err) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
       try {
         const textarea = document.createElement('textarea');
-        textarea.value = content;
+        textarea.value = text;
         textarea.setAttribute('readonly', 'true');
         textarea.style.position = 'fixed';
         textarea.style.opacity = '0';
@@ -576,14 +576,37 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
         textarea.select();
         const ok = document.execCommand('copy');
         document.body.removeChild(textarea);
-        if (!ok) throw new Error('Copy command failed');
-        showToast('success', 'Markdown copied');
-        setIsMoreMenuOpen(false);
+        return ok;
       } catch {
-        showToast('error', 'Failed to copy markdown');
+        return false;
       }
     }
-  }, [content, showToast]);
+  }, []);
+
+  const copyMarkdownSource = useCallback(async () => {
+    const ok = await copyTextToClipboard(content);
+    if (!ok) {
+      showToast('error', 'Failed to copy markdown');
+      return;
+    }
+    showToast('success', 'Markdown copied');
+    setIsMoreMenuOpen(false);
+  }, [content, copyTextToClipboard, showToast]);
+
+  const copyWechatHtml = useCallback(async () => {
+    try {
+      const wechatHtml = convertMarkdownToWechatHtml(content, { styleType: 3 });
+      const ok = await copyTextToClipboard(wechatHtml);
+      if (!ok) {
+        showToast('error', 'Failed to copy WeChat HTML');
+        return;
+      }
+      showToast('success', 'WeChat HTML copied');
+      setIsMoreMenuOpen(false);
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to export WeChat HTML');
+    }
+  }, [content, copyTextToClipboard, showToast]);
 
   const exportCurrentNoteToPdf = useCallback(async () => {
     if (!note) return;
@@ -854,6 +877,17 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
                   >
                     <Copy size={16} />
                     <span>Copy Markdown</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="editor-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      void copyWechatHtml();
+                    }}
+                  >
+                    <Copy size={16} />
+                    <span>Copy WeChat HTML</span>
                   </button>
                   <button
                     type="button"
