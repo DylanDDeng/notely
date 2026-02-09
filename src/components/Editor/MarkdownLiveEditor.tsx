@@ -37,8 +37,23 @@ const headingTextDecorations = [
 ] as const;
 
 const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
+const THEMATIC_BREAK_RE = /^ {0,3}(?:\*(?:[ \t]*\*){2,}|-(?:[ \t]*-){2,}|_(?:[ \t]*_){2,})[ \t]*$/;
+const HYPHEN_THEMATIC_BREAK_RE = /^ {0,3}-(?:[ \t]*-){2,}[ \t]*$/;
 
 const isVideoSource = (value: string): boolean => VIDEO_SOURCE_PATTERN.test(value.trim());
+
+const hasVisibleText = (value: string): boolean => value.trim().length > 0;
+
+const isThematicBreakLine = (lineText: string, previousLineText: string): boolean => {
+  if (!THEMATIC_BREAK_RE.test(lineText)) return false;
+
+  // Keep "Title\n---" behavior consistent with Markdown setext headings.
+  if (HYPHEN_THEMATIC_BREAK_RE.test(lineText) && hasVisibleText(previousLineText)) {
+    return false;
+  }
+
+  return true;
+};
 
 const normalizeUrl = (value: string): string => {
   const trimmed = value.trim();
@@ -168,6 +183,28 @@ class MarkdownListMarkerWidget extends WidgetType {
   }
 }
 
+class MarkdownHrWidget extends WidgetType {
+  eq() {
+    return true;
+  }
+
+  toDOM() {
+    const wrapper = document.createElement('span');
+    wrapper.className = 'cm-md-hr-widget';
+    wrapper.setAttribute('aria-hidden', 'true');
+
+    const line = document.createElement('span');
+    line.className = 'cm-md-hr-widget-line';
+    wrapper.appendChild(line);
+
+    return wrapper;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
 const buildLivePreviewDecorations = (
   view: EditorView,
   onOpenImagePreview?: (url: string) => void,
@@ -182,11 +219,22 @@ const buildLivePreviewDecorations = (
   for (let lineNo = 1; lineNo <= doc.lines; lineNo += 1) {
     const line = doc.line(lineNo);
     const text = line.text;
+    const previousLineText = lineNo > 1 ? doc.line(lineNo - 1).text : '';
     const isActiveLine = lineNo === focusedLineNo;
     const trimmed = text.trimStart();
     const isFenceLine = /^(```|~~~)/.test(trimmed);
 
     if (!isActiveLine && !inFence && text.length > 0) {
+      if (isThematicBreakLine(text, previousLineText)) {
+        ranges.push(
+          Decoration.replace({
+            widget: new MarkdownHrWidget(),
+            inclusive: false,
+          }).range(line.from, line.to)
+        );
+        continue;
+      }
+
       const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
       if (heading) {
         const level = heading[2].length;

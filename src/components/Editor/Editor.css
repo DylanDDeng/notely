@@ -384,6 +384,19 @@
   letter-spacing: 0.02em;
 }
 
+.editor-live-cm .cm-md-hr-widget {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+  pointer-events: none;
+}
+
+.editor-live-cm .cm-md-hr-widget-line {
+  display: block;
+  width: 100%;
+  border-top: 1px solid #E5E7EB;
+}
+
 .editor-live-cm .cm-line.cm-md-quote-line {
   border-left: 4px solid #E5E7EB;
   padding-left: 12px;
