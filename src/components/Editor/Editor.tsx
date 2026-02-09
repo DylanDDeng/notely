@@ -16,6 +16,8 @@ interface EditorProps {
   isLoading: boolean;
 }
 
+type EditorMode = 'live' | 'source' | 'preview';
+
 const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
 
 const isVideoSource = (url: string): boolean => VIDEO_SOURCE_PATTERN.test(url.trim());
@@ -54,7 +56,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [htmlContent, setHtmlContent] = useState('');
-  const [isEditing, setIsEditing] = useState(true);
+  const [editorMode, setEditorMode] = useState<EditorMode>('live');
   const [hasChanges, setHasChanges] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -90,6 +92,9 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     includePageNumbers: true,
   });
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const isPreviewMode = editorMode === 'preview';
+  const isSourceMode = editorMode === 'source';
+  const isEditing = !isPreviewMode;
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -452,16 +457,16 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   }, [content, flushSaveForNote, note, tags, title]);
 
   useEffect(() => {
-    if (!isEditing) return;
+    if (isPreviewMode) return;
     if (!pendingSelectionRef.current) return;
 
     requestAnimationFrame(() => {
       applyPendingSelectionToLiveEditor();
     });
-  }, [applyPendingSelectionToLiveEditor, content, isEditing]);
+  }, [applyPendingSelectionToLiveEditor, content, isPreviewMode]);
 
   useEffect(() => {
-    if (isEditing) return;
+    if (!isPreviewMode) return;
     const pendingScroll = pendingScrollRestoreRef.current;
     if (pendingScroll === null) return;
     const container = editorContentRef.current;
@@ -516,27 +521,34 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
     };
-  }, [isEditing, htmlContent]);
+  }, [htmlContent, isPreviewMode]);
 
-  const exitEditing = useCallback(async () => {
+  const switchToPreview = useCallback(async () => {
     pendingScrollRestoreRef.current = liveEditorRef.current?.scrollDOM.scrollTop ?? editorContentRef.current?.scrollTop ?? 0;
     await renderMarkdown(content);
-    setIsEditing(false);
+    setEditorMode('preview');
   }, [content, renderMarkdown]);
 
+  const switchToEditMode = useCallback((mode: 'live' | 'source') => {
+    if (isPreviewMode) {
+      pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
+    }
+    setEditorMode(mode);
+  }, [isPreviewMode]);
+
   useEffect(() => {
-    if (!isEditing) return;
+    if (isPreviewMode) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        void exitEditing();
+        void switchToPreview();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [isEditing, exitEditing]);
+  }, [isPreviewMode, switchToPreview]);
 
   const sanitizePdfFileName = useCallback((value: string): string => {
     const trimmed = value.trim();
@@ -677,7 +689,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     const target = e.target as HTMLElement | null;
     if (!target) {
       pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
-      setIsEditing(true);
+      setEditorMode('live');
       return;
     }
 
@@ -713,8 +725,8 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
     }
     pendingSelectionRef.current = { index, scrollTop };
 
-    // Otherwise, start editing
-    setIsEditing(true);
+    // Preview click always returns to live mode.
+    setEditorMode('live');
   };
 
   if (isLoading) {
@@ -743,7 +755,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
   const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
 
   return (
-    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'}`}>
+    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'} ${isSourceMode ? 'is-source' : 'is-live'}`}>
       {/* Header */}
       <div className="editor-header">
         <div className="editor-container editor-header-inner">
@@ -764,15 +776,38 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             )}
           </div>
           <div className="editor-actions">
-            <button
-              className="editor-mode-btn"
-              onClick={isEditing ? () => { void exitEditing(); } : () => {
-                pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
-                setIsEditing(true);
-              }}
-            >
-              {isEditing ? 'Preview' : 'Live'}
-            </button>
+            <div className="editor-mode-group" role="tablist" aria-label="Editor mode">
+              <button
+                type="button"
+                className={`editor-mode-segment ${editorMode === 'live' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={editorMode === 'live'}
+                onClick={() => switchToEditMode('live')}
+              >
+                Live
+              </button>
+              <button
+                type="button"
+                className={`editor-mode-segment ${editorMode === 'source' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={editorMode === 'source'}
+                onClick={() => switchToEditMode('source')}
+              >
+                Source
+              </button>
+              <button
+                type="button"
+                className={`editor-mode-segment ${editorMode === 'preview' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={editorMode === 'preview'}
+                onClick={() => {
+                  if (isPreviewMode) return;
+                  void switchToPreview();
+                }}
+              >
+                Preview
+              </button>
+            </div>
             <button
               type="button"
               className={`editor-action-btn ${isPinned ? 'active' : ''}`}
@@ -884,6 +919,7 @@ function Editor({ note, onSave, isLoading }: EditorProps) {
             <MarkdownLiveEditor
               value={content}
               onChange={handleContentChange}
+              mode={isSourceMode ? 'source' : 'live'}
               onEditorReady={(view) => {
                 liveEditorRef.current = view;
                 requestAnimationFrame(() => {

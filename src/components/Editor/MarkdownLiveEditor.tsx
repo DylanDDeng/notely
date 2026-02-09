@@ -11,6 +11,7 @@ interface MarkdownLiveEditorProps {
   onEditorReady?: (view: EditorView) => void;
   onOpenExternal?: (url: string) => void;
   onOpenImagePreview?: (url: string) => void;
+  mode?: 'live' | 'source';
 }
 
 const hiddenMarker = Decoration.mark({ class: 'cm-md-hidden-marker' });
@@ -337,8 +338,19 @@ function MarkdownLiveEditor({
   onEditorReady,
   onOpenExternal,
   onOpenImagePreview,
+  mode = 'live',
 }: MarkdownLiveEditorProps) {
   const extensions = useMemo<Extension[]>(() => {
+    const baseExtensions: Extension[] = [
+      markdown(),
+      EditorView.lineWrapping,
+      placeholder('Start writing...'),
+    ];
+
+    if (mode === 'source') {
+      return baseExtensions;
+    }
+
     const livePreviewPlugin = createLivePreviewPlugin(onOpenImagePreview);
     const domHandlers = EditorView.domEventHandlers({
       mousedown: (event, view) => {
@@ -380,12 +392,12 @@ function MarkdownLiveEditor({
       },
     });
 
-    return [markdown(), EditorView.lineWrapping, placeholder('Start writing...'), livePreviewPlugin, domHandlers];
-  }, [onOpenExternal, onOpenImagePreview]);
+    return [...baseExtensions, livePreviewPlugin, domHandlers];
+  }, [mode, onOpenExternal, onOpenImagePreview]);
 
   return (
     <CodeMirror
-      className="editor-live-cm"
+      className={mode === 'source' ? 'editor-source-cm' : 'editor-live-cm'}
       value={value}
       onChange={onChange}
       extensions={extensions}
