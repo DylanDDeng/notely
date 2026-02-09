@@ -41,6 +41,7 @@ interface SettingsProps {
 }
 
 const DEFAULT_WECHAT_AI_MODEL = 'kimi-k2.5';
+const BUILT_IN_WECHAT_THEMES = ['Digital Tools Guide'];
 
 function Settings({
   onBack,
@@ -347,17 +348,26 @@ function Settings({
     <>
       <h1 className="settings-page-title">Editor</h1>
       <p className="settings-page-description">
-        Configure AI-powered WeChat layout generation
+        Configure WeChat layout generation and themes
       </p>
 
       <section className="settings-section">
-        <h3 className="settings-section-title">AI WeChat Layout</h3>
+        <h3 className="settings-section-title">WeChat Layout Themes</h3>
+
+        <div className="settings-item">
+          <div className="settings-item-info">
+            <span className="settings-item-label">Built-in themes</span>
+            <span className="settings-item-description">
+              {BUILT_IN_WECHAT_THEMES.join(', ')}
+            </span>
+          </div>
+        </div>
 
         <div className="settings-item settings-item-column">
           <div className="settings-item-info">
             <span className="settings-item-label">Model</span>
             <span className="settings-item-description">
-              Used by AI to generate WeChat-ready HTML
+              Used to generate selected WeChat layout theme from the editor dialog
             </span>
           </div>
           <div className="settings-font-controls">
@@ -397,7 +407,7 @@ function Settings({
           <div className="settings-item-info">
             <span className="settings-item-label">Moonshot API Key</span>
             <span className="settings-item-description">
-              Required before using AI WeChat layout in the editor menu
+              Required before using Generate WeChat Layout in the editor menu
             </span>
           </div>
           <div className="settings-font-controls">

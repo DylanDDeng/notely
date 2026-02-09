@@ -907,6 +907,174 @@
   cursor: not-allowed;
 }
 
+.editor-theme-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.editor-theme-modal {
+  width: min(520px, 100%);
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 16px;
+  box-shadow: 0 34px 90px rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-theme-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.editor-theme-header-text h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.editor-theme-header-text p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.editor-theme-close {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  padding: 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.editor-theme-close:hover {
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--text-primary);
+}
+
+.editor-theme-close:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-theme-body {
+  padding: 16px 18px 8px;
+}
+
+.editor-theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.editor-theme-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.42);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editor-theme-option:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.editor-theme-option.active {
+  border-color: rgba(51, 65, 85, 0.45);
+  background: rgba(51, 65, 85, 0.1);
+  box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.14);
+}
+
+.editor-theme-option input {
+  margin-top: 2px;
+}
+
+.editor-theme-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-theme-option-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.editor-theme-option-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.editor-theme-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.64);
+}
+
+.editor-theme-btn {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.editor-theme-btn.secondary {
+  background: rgba(255, 255, 255, 0.44);
+  color: var(--text-secondary);
+}
+
+.editor-theme-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.editor-theme-btn.primary {
+  background: linear-gradient(135deg, var(--ui-gradient-start) 0%, var(--ui-gradient-end) 100%);
+  border-color: rgba(51, 65, 85, 0.32);
+  color: #FFFFFF;
+}
+
+.editor-theme-btn.primary:hover {
+  filter: brightness(1.04);
+}
+
+.editor-theme-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .editor-toast {
   position: fixed;
   right: 20px;

@@ -74,6 +74,7 @@ export interface GenerateWechatHtmlWithAiRequest {
   title?: string;
   apiKey: string;
   model: string;
+  themeId: string;
 }
 
 export interface GenerateWechatHtmlWithAiResult {

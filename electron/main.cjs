@@ -11,8 +11,14 @@ const DEFAULT_NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
 
 // 当前存储路径（可以被修改）
 let currentNotesDir = DEFAULT_NOTES_DIR;
-const WECHAT_LAYOUT_SYSTEM_PROMPT_PATH = path.join(__dirname, 'prompts', 'wechat-layout-system-prompt.md');
-let cachedWechatLayoutSystemPrompt = null;
+const WECHAT_LAYOUT_THEMES = Object.freeze({
+  'digital-tools-guide': {
+    name: 'Digital Tools Guide',
+    promptPath: path.join(__dirname, 'prompts', 'wechat-layout-system-prompt.md'),
+  },
+});
+const DEFAULT_WECHAT_LAYOUT_THEME_ID = 'digital-tools-guide';
+const cachedWechatLayoutSystemPrompt = Object.create(null);
 
 // 判断是否在开发模式
 const isDev = !app.isPackaged;
@@ -243,18 +249,27 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
 </html>`;
 }
 
-function getWechatLayoutSystemPrompt() {
-  if (typeof cachedWechatLayoutSystemPrompt === 'string') {
-    return cachedWechatLayoutSystemPrompt;
+function getWechatThemeConfig(themeId) {
+  const key = typeof themeId === 'string' && themeId.trim() ? themeId.trim() : DEFAULT_WECHAT_LAYOUT_THEME_ID;
+  return WECHAT_LAYOUT_THEMES[key] ? { id: key, ...WECHAT_LAYOUT_THEMES[key] } : null;
+}
+
+function getWechatLayoutSystemPrompt(themeId) {
+  const theme = getWechatThemeConfig(themeId);
+  if (!theme) return '';
+
+  if (typeof cachedWechatLayoutSystemPrompt[theme.id] === 'string') {
+    return cachedWechatLayoutSystemPrompt[theme.id];
   }
 
   try {
-    const content = fsSync.readFileSync(WECHAT_LAYOUT_SYSTEM_PROMPT_PATH, 'utf-8');
-    cachedWechatLayoutSystemPrompt = String(content || '').trim();
-    return cachedWechatLayoutSystemPrompt;
+    const content = fsSync.readFileSync(theme.promptPath, 'utf-8');
+    const prompt = String(content || '').trim();
+    cachedWechatLayoutSystemPrompt[theme.id] = prompt;
+    return prompt;
   } catch (err) {
-    console.error('Failed to load WeChat layout system prompt:', err);
-    cachedWechatLayoutSystemPrompt = '';
+    console.error(`Failed to load WeChat layout system prompt (${theme.id}):`, err);
+    cachedWechatLayoutSystemPrompt[theme.id] = '';
     return '';
   }
 }
@@ -297,7 +312,7 @@ async function requestMoonshotWechatHtml({ apiKey, model, title, markdown, syste
   }
 
   const userPrompt = [
-    '请用「数字工具指南风」排版以下文章，并直接输出可粘贴到公众号后台的完整HTML。',
+    '请根据系统提示词中的当前主题规范，排版以下文章，并直接输出可粘贴到公众号后台的完整HTML。',
     '输出要求：',
     '1) 只能输出HTML，不要解释，不要Markdown代码块',
     '2) 所有样式必须使用行内style',
@@ -644,6 +659,8 @@ ipcMain.handle('wechat:generateHtmlWithAi', async (event, data = {}) => {
     const model = typeof data.model === 'string' ? data.model.trim() : '';
     const markdown = typeof data.markdown === 'string' ? data.markdown.trim() : '';
     const title = typeof data.title === 'string' ? data.title.trim() : '';
+    const requestedThemeId = typeof data.themeId === 'string' ? data.themeId.trim() : '';
+    const theme = getWechatThemeConfig(requestedThemeId || DEFAULT_WECHAT_LAYOUT_THEME_ID);
 
     if (!apiKey) {
       return { success: false, error: 'Moonshot API key is not configured' };
@@ -654,10 +671,13 @@ ipcMain.handle('wechat:generateHtmlWithAi', async (event, data = {}) => {
     if (!markdown) {
       return { success: false, error: 'Note content is empty' };
     }
+    if (!theme) {
+      return { success: false, error: 'Unsupported WeChat layout theme' };
+    }
 
-    const systemPrompt = getWechatLayoutSystemPrompt();
+    const systemPrompt = getWechatLayoutSystemPrompt(theme.id);
     if (!systemPrompt) {
-      return { success: false, error: 'WeChat layout system prompt is missing' };
+      return { success: false, error: `WeChat layout system prompt is missing for theme "${theme.name}"` };
     }
 
     const html = await requestMoonshotWechatHtml({

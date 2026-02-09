@@ -19,8 +19,23 @@ interface EditorProps {
 }
 
 type EditorMode = 'live' | 'source' | 'preview';
+type WechatLayoutTheme = {
+  id: string;
+  name: string;
+  description: string;
+};
 
 const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
+const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
+  {
+    id: 'digital-tools-guide',
+    name: 'Digital Tools Guide',
+    description: 'Clean white theme with structured section badges and lightweight cards.',
+  },
+];
+const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
+const getWechatLayoutThemeById = (themeId: string): WechatLayoutTheme =>
+  WECHAT_LAYOUT_THEMES.find((theme) => theme.id === themeId) ?? WECHAT_LAYOUT_THEMES[0];
 
 const isVideoSource = (url: string): boolean => VIDEO_SOURCE_PATTERN.test(url.trim());
 
@@ -84,6 +99,8 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
 
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
+  const [selectedWechatThemeId, setSelectedWechatThemeId] = useState(DEFAULT_WECHAT_LAYOUT_THEME_ID);
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingWechatHtml, setIsGeneratingWechatHtml] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportPdfOptions>({
@@ -127,6 +144,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   useEffect(() => {
     setIsMoreMenuOpen(false);
     setIsExportOpen(false);
+    setIsThemePickerOpen(false);
   }, [note?.id]);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
@@ -613,30 +631,29 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
     setIsMoreMenuOpen(false);
   }, [content, copyTextToClipboard, showToast]);
 
-  const generateWechatHtmlWithAi = useCallback(async () => {
+  const generateWechatHtmlWithAi = useCallback(async (themeId: string) => {
     const apiKey = wechatAiApiKey.trim();
     const model = wechatAiModel.trim();
+    const theme = getWechatLayoutThemeById(themeId);
 
     if (!apiKey || !model) {
-      showToast('error', 'Set Moonshot API key and model in Settings > Editor first');
-      setIsMoreMenuOpen(false);
+      showToast('error', 'Set Moonshot API key and model in Settings > Editor > WeChat Layout Themes first');
       return;
     }
 
     const markdown = content.trim();
     if (!markdown) {
       showToast('error', 'Current note is empty');
-      setIsMoreMenuOpen(false);
       return;
     }
 
     if (isGeneratingWechatHtml) return;
     setIsGeneratingWechatHtml(true);
-    showToast('info', 'Generating WeChat HTML with AI...');
+    showToast('info', `Generating WeChat layout (${theme.name})...`);
 
     try {
       if (typeof window.electronAPI.generateWechatHtmlWithAi !== 'function') {
-        throw new Error('AI WeChat channel is unavailable. Please restart the app.');
+        throw new Error('WeChat layout channel is unavailable. Please restart the app.');
       }
 
       const result = await window.electronAPI.generateWechatHtmlWithAi({
@@ -644,10 +661,11 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
         title: title.trim() || undefined,
         apiKey,
         model,
+        themeId: theme.id,
       });
 
       if (!result.success || !result.html) {
-        throw new Error(result.error || 'Failed to generate WeChat HTML');
+        throw new Error(result.error || 'Failed to generate WeChat layout');
       }
 
       const ok = await copyTextToClipboard(result.html);
@@ -656,14 +674,15 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
         return;
       }
 
-      showToast('success', 'AI WeChat HTML generated and copied');
+      showToast('success', `WeChat layout generated and copied (${theme.name})`);
       setIsMoreMenuOpen(false);
+      setIsThemePickerOpen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/No handler registered for ['"]wechat:generateHtmlWithAi['"]/i.test(message)) {
         showToast('error', 'Main process is outdated. Restart Notely and try again.');
       } else {
-        showToast('error', message || 'Failed to generate AI WeChat HTML');
+        showToast('error', message || 'Failed to generate WeChat layout');
       }
     } finally {
       setIsGeneratingWechatHtml(false);
@@ -944,13 +963,14 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                     type="button"
                     className="editor-more-item"
                     role="menuitem"
-                    disabled={isGeneratingWechatHtml}
                     onClick={() => {
-                      void generateWechatHtmlWithAi();
+                      setSelectedWechatThemeId((prev) => getWechatLayoutThemeById(prev).id);
+                      setIsThemePickerOpen(true);
+                      setIsMoreMenuOpen(false);
                     }}
                   >
                     <Copy size={16} />
-                    <span>{isGeneratingWechatHtml ? 'Generating AI WeChat HTML…' : 'Generate WeChat HTML (AI)'}</span>
+                    <span>Generate WeChat Layout...</span>
                   </button>
                   <button
                     type="button"
@@ -1061,6 +1081,85 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
             alt=""
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {isThemePickerOpen && (
+        <div
+          className="editor-theme-overlay"
+          onClick={() => {
+            if (isGeneratingWechatHtml) return;
+            setIsThemePickerOpen(false);
+          }}
+        >
+          <div
+            className="editor-theme-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Generate WeChat Layout"
+          >
+            <div className="editor-theme-header">
+              <div className="editor-theme-header-text">
+                <h2>Generate WeChat Layout</h2>
+                <p>Select a theme before generating and copying HTML</p>
+              </div>
+              <button
+                type="button"
+                className="editor-theme-close"
+                onClick={() => setIsThemePickerOpen(false)}
+                disabled={isGeneratingWechatHtml}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="editor-theme-body">
+              <div className="editor-theme-list">
+                {WECHAT_LAYOUT_THEMES.map((theme) => {
+                  const active = selectedWechatThemeId === theme.id;
+                  return (
+                    <label key={theme.id} className={`editor-theme-option ${active ? 'active' : ''}`}>
+                      <input
+                        type="radio"
+                        name="wechat-theme"
+                        value={theme.id}
+                        checked={active}
+                        onChange={() => setSelectedWechatThemeId(theme.id)}
+                        disabled={isGeneratingWechatHtml}
+                      />
+                      <span className="editor-theme-option-content">
+                        <span className="editor-theme-option-name">{theme.name}</span>
+                        <span className="editor-theme-option-desc">{theme.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="editor-theme-footer">
+              <button
+                type="button"
+                className="editor-theme-btn secondary"
+                onClick={() => setIsThemePickerOpen(false)}
+                disabled={isGeneratingWechatHtml}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="editor-theme-btn primary"
+                onClick={() => {
+                  void generateWechatHtmlWithAi(selectedWechatThemeId);
+                }}
+                disabled={isGeneratingWechatHtml}
+              >
+                {isGeneratingWechatHtml ? 'Generating…' : 'Generate & Copy'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
