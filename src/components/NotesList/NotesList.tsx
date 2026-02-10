@@ -73,6 +73,8 @@ function NotesList({
   const title = FILTER_TITLES[activeFilter] || 
     (activeFilter.startsWith('tag:') ? activeFilter.replace('tag:', '') : 'Notes');
   const [contextMenu, setContextMenu] = useState<{ note: Note; x: number; y: number } | null>(null);
+  const showPanelToggle = notesView !== 'grid';
+  const isPanelCollapsed = showPanelToggle && isCollapsed;
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -94,20 +96,22 @@ function NotesList({
   }, [contextMenu]);
 
   return (
-    <div className={`notes-list ${notesView === 'grid' ? 'grid-view' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
+    <div className={`notes-list ${notesView === 'grid' ? 'grid-view' : ''} ${isPanelCollapsed ? 'collapsed' : ''}`}>
       {/* Header */}
       <div className="notes-list-header">
         <h2 className="notes-list-title">{title}</h2>
         <div className="notes-list-actions">
-          <button
-            type="button"
-            className="action-btn panel-toggle-btn"
-            title={isCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
-            aria-label={isCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
-            onClick={onToggleCollapsed}
-          >
-            {isCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
-          </button>
+          {showPanelToggle && (
+            <button
+              type="button"
+              className="action-btn panel-toggle-btn"
+              title={isCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
+              aria-label={isCollapsed ? 'Expand notes panel' : 'Collapse notes panel'}
+              onClick={onToggleCollapsed}
+            >
+              {isCollapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
+            </button>
+          )}
           <button
             type="button"
             className={`action-btn ${sortOrder === 'asc' ? 'active' : ''}`}
