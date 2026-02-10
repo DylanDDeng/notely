@@ -37,6 +37,11 @@ const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
     name: 'Digital Tools Guide',
     description: 'Clean white theme with structured section badges and lightweight cards.',
   },
+  {
+    id: 'minimal-linework-black-red',
+    name: 'Minimal Linework (Black/Red)',
+    description: 'Minimal black-red layout with thin separators and generous whitespace.',
+  },
 ];
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
 const getWechatLayoutThemeById = (themeId: string): WechatLayoutTheme =>

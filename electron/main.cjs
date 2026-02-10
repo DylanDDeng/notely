@@ -16,6 +16,10 @@ const WECHAT_LAYOUT_THEMES = Object.freeze({
     name: 'Digital Tools Guide',
     promptPath: path.join(__dirname, 'prompts', 'wechat-layout-system-prompt.md'),
   },
+  'minimal-linework-black-red': {
+    name: 'Minimal Linework (Black/Red)',
+    promptPath: path.join(__dirname, 'prompts', 'wechat-layout-minimal-linework-black-red-system-prompt.md'),
+  },
 });
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = 'digital-tools-guide';
 const cachedWechatLayoutSystemPrompt = Object.create(null);
@@ -250,8 +254,14 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
 }
 
 function getWechatThemeConfig(themeId) {
-  const key = typeof themeId === 'string' && themeId.trim() ? themeId.trim() : DEFAULT_WECHAT_LAYOUT_THEME_ID;
-  return WECHAT_LAYOUT_THEMES[key] ? { id: key, ...WECHAT_LAYOUT_THEMES[key] } : null;
+  const requestedKey = typeof themeId === 'string' && themeId.trim() ? themeId.trim() : DEFAULT_WECHAT_LAYOUT_THEME_ID;
+  const resolvedKey = WECHAT_LAYOUT_THEMES[requestedKey] ? requestedKey : DEFAULT_WECHAT_LAYOUT_THEME_ID;
+
+  if (!WECHAT_LAYOUT_THEMES[requestedKey] && requestedKey !== DEFAULT_WECHAT_LAYOUT_THEME_ID) {
+    console.warn(`Unsupported WeChat layout theme "${requestedKey}", falling back to "${DEFAULT_WECHAT_LAYOUT_THEME_ID}"`);
+  }
+
+  return WECHAT_LAYOUT_THEMES[resolvedKey] ? { id: resolvedKey, ...WECHAT_LAYOUT_THEMES[resolvedKey] } : null;
 }
 
 function getWechatLayoutSystemPrompt(themeId) {

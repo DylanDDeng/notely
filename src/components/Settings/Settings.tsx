@@ -41,7 +41,10 @@ interface SettingsProps {
 }
 
 const DEFAULT_WECHAT_AI_MODEL = 'kimi-k2.5';
-const BUILT_IN_WECHAT_THEMES = ['Digital Tools Guide'];
+const BUILT_IN_WECHAT_THEMES = [
+  'Digital Tools Guide',
+  'Minimal Linework (Black/Red)',
+];
 
 function Settings({
   onBack,
