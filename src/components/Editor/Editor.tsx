@@ -1133,7 +1133,6 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
             {isWechatPreviewPanelOpen && (
               <div className="editor-wechat-panel-body">
                 <div className="editor-wechat-toolbar">
-                  <span className="editor-wechat-device">Mobile Preview · 390px</span>
                   {wechatTheme && <span className="editor-wechat-theme">{wechatTheme.name}</span>}
                 </div>
 
