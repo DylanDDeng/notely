@@ -1128,6 +1128,19 @@
   padding: 16px 18px 8px;
 }
 
+.editor-theme-section + .editor-theme-section {
+  margin-top: 14px;
+}
+
+.editor-theme-section-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
 .editor-theme-list {
   display: flex;
   flex-direction: column;
@@ -1157,6 +1170,11 @@
   box-shadow: 0 0 0 3px rgba(51, 65, 85, 0.14);
 }
 
+.editor-theme-option.disabled {
+  opacity: 0.66;
+  cursor: not-allowed;
+}
+
 .editor-theme-option input {
   margin-top: 2px;
 }
@@ -1176,6 +1194,11 @@
 .editor-theme-option-desc {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.editor-theme-option-hint {
+  font-size: 11px;
+  color: #B45309;
 }
 
 .editor-theme-footer {

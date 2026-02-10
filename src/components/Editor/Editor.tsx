@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
 import { EditorView } from '@codemirror/view';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
@@ -6,7 +6,7 @@ import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight, Copy, FileDown, MoreHorizontal, Pin, Star, Wand2, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
-import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
+import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData, WechatAiProvider } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import './Editor.css';
 
@@ -14,8 +14,10 @@ interface EditorProps {
   note: EditorNote | null;
   onSave: (note: SaveNoteData) => Promise<void>;
   isLoading: boolean;
-  wechatAiApiKey: string;
-  wechatAiModel: string;
+  wechatMoonshotApiKey: string;
+  wechatMoonshotModel: string;
+  wechatOpenRouterApiKey: string;
+  wechatOpenRouterModel: string;
 }
 
 type EditorMode = 'live' | 'source' | 'preview';
@@ -28,6 +30,15 @@ type WechatPreviewState = {
   html: string;
   themeId: string;
   sourceContent: string;
+};
+type WechatGenerationModelOption = {
+  id: string;
+  provider: WechatAiProvider;
+  label: string;
+  description: string;
+  apiKey: string;
+  model: string;
+  configured: boolean;
 };
 
 const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
@@ -44,6 +55,7 @@ const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
   },
 ];
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
+const DEFAULT_WECHAT_MODEL_OPTION_ID = 'moonshot';
 const getWechatLayoutThemeById = (themeId: string): WechatLayoutTheme =>
   WECHAT_LAYOUT_THEMES.find((theme) => theme.id === themeId) ?? WECHAT_LAYOUT_THEMES[0];
 
@@ -103,7 +115,15 @@ const buildWechatPreviewSrcDoc = (html: string): string => `<!doctype html>
   <body>${html}</body>
 </html>`;
 
-function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: EditorProps) {
+function Editor({
+  note,
+  onSave,
+  isLoading,
+  wechatMoonshotApiKey,
+  wechatMoonshotModel,
+  wechatOpenRouterApiKey,
+  wechatOpenRouterModel,
+}: EditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -139,6 +159,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
   const [selectedWechatThemeId, setSelectedWechatThemeId] = useState(DEFAULT_WECHAT_LAYOUT_THEME_ID);
+  const [selectedWechatModelOptionId, setSelectedWechatModelOptionId] = useState(DEFAULT_WECHAT_MODEL_OPTION_ID);
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingWechatHtml, setIsGeneratingWechatHtml] = useState(false);
   const [exportOptions, setExportOptions] = useState<ExportPdfOptions>({
@@ -153,6 +174,44 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   const isPreviewMode = editorMode === 'preview';
   const isSourceMode = editorMode === 'source';
   const isEditing = editorMode === 'live' || editorMode === 'source';
+  const wechatGenerationModelOptions = useMemo<WechatGenerationModelOption[]>(() => {
+    const moonshotApiKey = wechatMoonshotApiKey.trim();
+    const moonshotModel = wechatMoonshotModel.trim();
+    const openRouterApiKey = wechatOpenRouterApiKey.trim();
+    const openRouterModel = wechatOpenRouterModel.trim();
+
+    return [
+      {
+        id: 'moonshot',
+        provider: 'moonshot',
+        label: 'Moonshot',
+        description: moonshotModel ? `Model: ${moonshotModel}` : 'Model not configured',
+        apiKey: moonshotApiKey,
+        model: moonshotModel,
+        configured: Boolean(moonshotApiKey && moonshotModel),
+      },
+      {
+        id: 'openrouter',
+        provider: 'openrouter',
+        label: 'OpenRouter',
+        description: openRouterModel ? `Model: ${openRouterModel}` : 'Model not configured',
+        apiKey: openRouterApiKey,
+        model: openRouterModel,
+        configured: Boolean(openRouterApiKey && openRouterModel),
+      },
+    ];
+  }, [wechatMoonshotApiKey, wechatMoonshotModel, wechatOpenRouterApiKey, wechatOpenRouterModel]);
+
+  const selectedWechatGenerationModelOption = useMemo(() => {
+    return wechatGenerationModelOptions.find((option) => option.id === selectedWechatModelOptionId) ?? wechatGenerationModelOptions[0];
+  }, [selectedWechatModelOptionId, wechatGenerationModelOptions]);
+
+  useEffect(() => {
+    if (!wechatGenerationModelOptions.length) return;
+    const selectedExists = wechatGenerationModelOptions.some((option) => option.id === selectedWechatModelOptionId);
+    if (selectedExists) return;
+    setSelectedWechatModelOptionId(wechatGenerationModelOptions[0].id);
+  }, [selectedWechatModelOptionId, wechatGenerationModelOptions]);
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -691,12 +750,13 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   }, [copyTextToClipboard, showToast, wechatPreview]);
 
   const generateWechatHtmlWithAi = useCallback(async (themeId: string) => {
-    const apiKey = wechatAiApiKey.trim();
-    const model = wechatAiModel.trim();
     const theme = getWechatLayoutThemeById(themeId);
+    const modelOption = selectedWechatGenerationModelOption;
+    const apiKey = modelOption?.apiKey.trim() ?? '';
+    const model = modelOption?.model.trim() ?? '';
 
-    if (!apiKey || !model) {
-      showToast('error', 'Set Moonshot API key and model in Settings > Editor > WeChat Layout Themes first');
+    if (!modelOption || !apiKey || !model) {
+      showToast('error', 'Set API key and model in Settings > Editor > WeChat Layout Themes first');
       return;
     }
 
@@ -708,7 +768,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
 
     if (isGeneratingWechatHtml) return;
     setIsGeneratingWechatHtml(true);
-    showToast('info', `Generating WeChat layout (${theme.name})...`);
+    showToast('info', `Generating WeChat layout (${theme.name}) with ${modelOption.label}...`);
 
     try {
       if (typeof window.electronAPI.generateWechatHtmlWithAi !== 'function') {
@@ -718,6 +778,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
       const result = await window.electronAPI.generateWechatHtmlWithAi({
         markdown,
         title: title.trim() || undefined,
+        provider: modelOption.provider,
         apiKey,
         model,
         themeId: theme.id,
@@ -742,11 +803,11 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
 
       const ok = await copyTextToClipboard(result.html);
       if (!ok) {
-        showToast('error', `Generated WeChat layout (${theme.name}), but auto-copy failed. Use Copy HTML in preview panel.`);
+        showToast('error', `Generated WeChat layout (${theme.name}) with ${modelOption.label}, but auto-copy failed. Use Copy HTML in preview panel.`);
         return;
       }
 
-      showToast('success', `Generated WeChat layout (${theme.name}) and copied to clipboard`);
+      showToast('success', `Generated WeChat layout (${theme.name}) with ${modelOption.label} and copied to clipboard`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/No handler registered for ['"]wechat:generateHtmlWithAi['"]/i.test(message)) {
@@ -757,7 +818,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
     } finally {
       setIsGeneratingWechatHtml(false);
     }
-  }, [content, copyTextToClipboard, isGeneratingWechatHtml, note, showToast, title, wechatAiApiKey, wechatAiModel]);
+  }, [content, copyTextToClipboard, isGeneratingWechatHtml, note, selectedWechatGenerationModelOption, showToast, title]);
 
   const exportCurrentNoteToPdf = useCallback(async () => {
     if (!note) return;
@@ -1035,6 +1096,13 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                     role="menuitem"
                     onClick={() => {
                       setSelectedWechatThemeId((prev) => getWechatLayoutThemeById(prev).id);
+                      setSelectedWechatModelOptionId((prev) => {
+                        const selected = wechatGenerationModelOptions.find((option) => option.id === prev);
+                        if (selected?.configured) return selected.id;
+                        return wechatGenerationModelOptions.find((option) => option.configured)?.id
+                          ?? wechatGenerationModelOptions[0]?.id
+                          ?? DEFAULT_WECHAT_MODEL_OPTION_ID;
+                      });
                       setIsThemePickerOpen(true);
                       setIsMoreMenuOpen(false);
                     }}
@@ -1221,7 +1289,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
             <div className="editor-theme-header">
               <div className="editor-theme-header-text">
                 <h2>Generate WeChat Layout</h2>
-                <p>Select a theme before generating and copying HTML</p>
+                <p>Select a theme and model before generating and copying HTML</p>
               </div>
               <button
                 type="button"
@@ -1235,26 +1303,59 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
             </div>
 
             <div className="editor-theme-body">
-              <div className="editor-theme-list">
-                {WECHAT_LAYOUT_THEMES.map((theme) => {
-                  const active = selectedWechatThemeId === theme.id;
-                  return (
-                    <label key={theme.id} className={`editor-theme-option ${active ? 'active' : ''}`}>
-                      <input
-                        type="radio"
-                        name="wechat-theme"
-                        value={theme.id}
-                        checked={active}
-                        onChange={() => setSelectedWechatThemeId(theme.id)}
-                        disabled={isGeneratingWechatHtml}
-                      />
-                      <span className="editor-theme-option-content">
-                        <span className="editor-theme-option-name">{theme.name}</span>
-                        <span className="editor-theme-option-desc">{theme.description}</span>
-                      </span>
-                    </label>
-                  );
-                })}
+              <div className="editor-theme-section">
+                <h3 className="editor-theme-section-title">Theme</h3>
+                <div className="editor-theme-list">
+                  {WECHAT_LAYOUT_THEMES.map((theme) => {
+                    const active = selectedWechatThemeId === theme.id;
+                    return (
+                      <label key={theme.id} className={`editor-theme-option ${active ? 'active' : ''}`}>
+                        <input
+                          type="radio"
+                          name="wechat-theme"
+                          value={theme.id}
+                          checked={active}
+                          onChange={() => setSelectedWechatThemeId(theme.id)}
+                          disabled={isGeneratingWechatHtml}
+                        />
+                        <span className="editor-theme-option-content">
+                          <span className="editor-theme-option-name">{theme.name}</span>
+                          <span className="editor-theme-option-desc">{theme.description}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="editor-theme-section">
+                <h3 className="editor-theme-section-title">Model</h3>
+                <div className="editor-theme-list">
+                  {wechatGenerationModelOptions.map((option) => {
+                    const active = selectedWechatModelOptionId === option.id;
+                    const disabled = isGeneratingWechatHtml || !option.configured;
+                    const optionClassName = `editor-theme-option ${active ? 'active' : ''} ${option.configured ? '' : 'disabled'}`.trim();
+                    return (
+                      <label key={option.id} className={optionClassName}>
+                        <input
+                          type="radio"
+                          name="wechat-model"
+                          value={option.id}
+                          checked={active}
+                          onChange={() => setSelectedWechatModelOptionId(option.id)}
+                          disabled={disabled}
+                        />
+                        <span className="editor-theme-option-content">
+                          <span className="editor-theme-option-name">{option.label}</span>
+                          <span className="editor-theme-option-desc">{option.description}</span>
+                          {!option.configured && (
+                            <span className="editor-theme-option-hint">Configure API key and model in Settings first</span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -1273,7 +1374,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                 onClick={() => {
                   void generateWechatHtmlWithAi(selectedWechatThemeId);
                 }}
-                disabled={isGeneratingWechatHtml}
+                disabled={isGeneratingWechatHtml || !selectedWechatGenerationModelOption?.configured}
               >
                 {isGeneratingWechatHtml ? 'Generating…' : 'Generate & Copy'}
               </button>

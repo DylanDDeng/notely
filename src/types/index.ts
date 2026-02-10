@@ -72,6 +72,7 @@ export interface ExportNotePdfResult {
 export interface GenerateWechatHtmlWithAiRequest {
   markdown: string;
   title?: string;
+  provider: WechatAiProvider;
   apiKey: string;
   model: string;
   themeId: string;
@@ -88,7 +89,10 @@ export interface WriteClipboardTextResult {
   error?: string;
 }
 
+export type WechatAiProvider = 'moonshot' | 'openrouter';
+
 export interface WechatAiConfig {
+  provider: WechatAiProvider;
   apiKey: string;
   model: string;
 }

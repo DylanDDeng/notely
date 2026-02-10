@@ -34,13 +34,18 @@ interface SettingsProps {
   onChangeStoragePath: (path: string) => Promise<void>;
   fontFamily: string;
   onChangeFontFamily: (fontFamily: string) => void;
-  wechatAiApiKey: string;
-  wechatAiModel: string;
-  onChangeWechatAiApiKey: (apiKey: string) => void;
-  onChangeWechatAiModel: (model: string) => void;
+  wechatMoonshotApiKey: string;
+  wechatMoonshotModel: string;
+  onChangeWechatMoonshotApiKey: (apiKey: string) => void;
+  onChangeWechatMoonshotModel: (model: string) => void;
+  wechatOpenRouterApiKey: string;
+  wechatOpenRouterModel: string;
+  onChangeWechatOpenRouterApiKey: (apiKey: string) => void;
+  onChangeWechatOpenRouterModel: (model: string) => void;
 }
 
-const DEFAULT_WECHAT_AI_MODEL = 'kimi-k2.5';
+const DEFAULT_WECHAT_MOONSHOT_MODEL = 'kimi-k2.5';
+const DEFAULT_WECHAT_OPENROUTER_MODEL = 'google/gemini-3-pro-preview';
 const BUILT_IN_WECHAT_THEMES = [
   'Digital Tools Guide',
   'Minimal Linework (Black/Red)',
@@ -52,10 +57,14 @@ function Settings({
   onChangeStoragePath,
   fontFamily,
   onChangeFontFamily,
-  wechatAiApiKey,
-  wechatAiModel,
-  onChangeWechatAiApiKey,
-  onChangeWechatAiModel,
+  wechatMoonshotApiKey,
+  wechatMoonshotModel,
+  onChangeWechatMoonshotApiKey,
+  onChangeWechatMoonshotModel,
+  wechatOpenRouterApiKey,
+  wechatOpenRouterModel,
+  onChangeWechatOpenRouterApiKey,
+  onChangeWechatOpenRouterModel,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<AppSettings>({
@@ -68,9 +77,12 @@ function Settings({
   const [localFonts, setLocalFonts] = useState<string[]>([]);
   const [localFontsStatus, setLocalFontsStatus] = useState<'idle' | 'loading' | 'loaded' | 'unsupported' | 'error'>('idle');
   const [localFontsError, setLocalFontsError] = useState('');
-  const [wechatApiKeyInput, setWechatApiKeyInput] = useState(wechatAiApiKey || '');
-  const [wechatModelInput, setWechatModelInput] = useState(wechatAiModel || DEFAULT_WECHAT_AI_MODEL);
-  const [showWechatApiKey, setShowWechatApiKey] = useState(false);
+  const [wechatMoonshotApiKeyInput, setWechatMoonshotApiKeyInput] = useState(wechatMoonshotApiKey || '');
+  const [wechatMoonshotModelInput, setWechatMoonshotModelInput] = useState(wechatMoonshotModel || DEFAULT_WECHAT_MOONSHOT_MODEL);
+  const [showWechatMoonshotApiKey, setShowWechatMoonshotApiKey] = useState(false);
+  const [wechatOpenRouterApiKeyInput, setWechatOpenRouterApiKeyInput] = useState(wechatOpenRouterApiKey || '');
+  const [wechatOpenRouterModelInput, setWechatOpenRouterModelInput] = useState(wechatOpenRouterModel || DEFAULT_WECHAT_OPENROUTER_MODEL);
+  const [showWechatOpenRouterApiKey, setShowWechatOpenRouterApiKey] = useState(false);
 
   useEffect(() => {
     if (!storagePath) return;
@@ -82,12 +94,20 @@ function Settings({
   }, [fontFamily]);
 
   useEffect(() => {
-    setWechatApiKeyInput(wechatAiApiKey || '');
-  }, [wechatAiApiKey]);
+    setWechatMoonshotApiKeyInput(wechatMoonshotApiKey || '');
+  }, [wechatMoonshotApiKey]);
 
   useEffect(() => {
-    setWechatModelInput(wechatAiModel || DEFAULT_WECHAT_AI_MODEL);
-  }, [wechatAiModel]);
+    setWechatMoonshotModelInput(wechatMoonshotModel || DEFAULT_WECHAT_MOONSHOT_MODEL);
+  }, [wechatMoonshotModel]);
+
+  useEffect(() => {
+    setWechatOpenRouterApiKeyInput(wechatOpenRouterApiKey || '');
+  }, [wechatOpenRouterApiKey]);
+
+  useEffect(() => {
+    setWechatOpenRouterModelInput(wechatOpenRouterModel || DEFAULT_WECHAT_OPENROUTER_MODEL);
+  }, [wechatOpenRouterModel]);
 
   const handleToggle = (key: keyof AppSettings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -135,23 +155,41 @@ function Settings({
       .slice(0, 12);
   }, [fontInput, localFonts, localFontsStatus]);
 
-  const applyWechatApiKey = useCallback(() => {
-    onChangeWechatAiApiKey(wechatApiKeyInput);
-  }, [onChangeWechatAiApiKey, wechatApiKeyInput]);
+  const applyWechatMoonshotApiKey = useCallback(() => {
+    onChangeWechatMoonshotApiKey(wechatMoonshotApiKeyInput);
+  }, [onChangeWechatMoonshotApiKey, wechatMoonshotApiKeyInput]);
 
-  const clearWechatApiKey = useCallback(() => {
-    setWechatApiKeyInput('');
-    onChangeWechatAiApiKey('');
-  }, [onChangeWechatAiApiKey]);
+  const clearWechatMoonshotApiKey = useCallback(() => {
+    setWechatMoonshotApiKeyInput('');
+    onChangeWechatMoonshotApiKey('');
+  }, [onChangeWechatMoonshotApiKey]);
 
-  const applyWechatModel = useCallback(() => {
-    onChangeWechatAiModel(wechatModelInput);
-  }, [onChangeWechatAiModel, wechatModelInput]);
+  const applyWechatMoonshotModel = useCallback(() => {
+    onChangeWechatMoonshotModel(wechatMoonshotModelInput);
+  }, [onChangeWechatMoonshotModel, wechatMoonshotModelInput]);
 
-  const resetWechatModel = useCallback(() => {
-    setWechatModelInput(DEFAULT_WECHAT_AI_MODEL);
-    onChangeWechatAiModel(DEFAULT_WECHAT_AI_MODEL);
-  }, [onChangeWechatAiModel]);
+  const resetWechatMoonshotModel = useCallback(() => {
+    setWechatMoonshotModelInput(DEFAULT_WECHAT_MOONSHOT_MODEL);
+    onChangeWechatMoonshotModel(DEFAULT_WECHAT_MOONSHOT_MODEL);
+  }, [onChangeWechatMoonshotModel]);
+
+  const applyWechatOpenRouterApiKey = useCallback(() => {
+    onChangeWechatOpenRouterApiKey(wechatOpenRouterApiKeyInput);
+  }, [onChangeWechatOpenRouterApiKey, wechatOpenRouterApiKeyInput]);
+
+  const clearWechatOpenRouterApiKey = useCallback(() => {
+    setWechatOpenRouterApiKeyInput('');
+    onChangeWechatOpenRouterApiKey('');
+  }, [onChangeWechatOpenRouterApiKey]);
+
+  const applyWechatOpenRouterModel = useCallback(() => {
+    onChangeWechatOpenRouterModel(wechatOpenRouterModelInput);
+  }, [onChangeWechatOpenRouterModel, wechatOpenRouterModelInput]);
+
+  const resetWechatOpenRouterModel = useCallback(() => {
+    setWechatOpenRouterModelInput(DEFAULT_WECHAT_OPENROUTER_MODEL);
+    onChangeWechatOpenRouterModel(DEFAULT_WECHAT_OPENROUTER_MODEL);
+  }, [onChangeWechatOpenRouterModel]);
 
   const renderGeneralSettings = () => (
     <>
@@ -368,41 +406,41 @@ function Settings({
 
         <div className="settings-item settings-item-column">
           <div className="settings-item-info">
-            <span className="settings-item-label">Model</span>
+            <span className="settings-item-label">Moonshot model</span>
             <span className="settings-item-description">
-              Used to generate selected WeChat layout theme from the editor dialog
+              This model appears in the Generate WeChat Layout dialog
             </span>
           </div>
           <div className="settings-font-controls">
             <input
               className="settings-input"
               type="text"
-              placeholder={DEFAULT_WECHAT_AI_MODEL}
-              value={wechatModelInput}
-              onChange={(e) => setWechatModelInput(e.target.value)}
+              placeholder={DEFAULT_WECHAT_MOONSHOT_MODEL}
+              value={wechatMoonshotModelInput}
+              onChange={(e) => setWechatMoonshotModelInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
-                applyWechatModel();
+                applyWechatMoonshotModel();
               }}
-              onBlur={applyWechatModel}
+              onBlur={applyWechatMoonshotModel}
             />
             <button
               className="settings-btn"
-              onClick={applyWechatModel}
+              onClick={applyWechatMoonshotModel}
             >
               Apply
             </button>
             <button
               className="settings-btn settings-btn-secondary"
-              onClick={resetWechatModel}
-              disabled={(wechatAiModel || DEFAULT_WECHAT_AI_MODEL) === DEFAULT_WECHAT_AI_MODEL}
+              onClick={resetWechatMoonshotModel}
+              disabled={(wechatMoonshotModel || DEFAULT_WECHAT_MOONSHOT_MODEL) === DEFAULT_WECHAT_MOONSHOT_MODEL}
             >
               Reset
             </button>
           </div>
           <div className="settings-font-meta">
-            <span>Current: {wechatAiModel || DEFAULT_WECHAT_AI_MODEL}</span>
+            <span>Current: {wechatMoonshotModel || DEFAULT_WECHAT_MOONSHOT_MODEL}</span>
           </div>
         </div>
 
@@ -416,44 +454,136 @@ function Settings({
           <div className="settings-font-controls">
             <input
               className="settings-input"
-              type={showWechatApiKey ? 'text' : 'password'}
+              type={showWechatMoonshotApiKey ? 'text' : 'password'}
               placeholder="sk-..."
-              value={wechatApiKeyInput}
-              onChange={(e) => setWechatApiKeyInput(e.target.value)}
+              value={wechatMoonshotApiKeyInput}
+              onChange={(e) => setWechatMoonshotApiKeyInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
-                applyWechatApiKey();
+                applyWechatMoonshotApiKey();
               }}
-              onBlur={applyWechatApiKey}
+              onBlur={applyWechatMoonshotApiKey}
               autoComplete="off"
               spellCheck={false}
             />
             <button
               className="settings-btn settings-btn-secondary"
-              onClick={() => setShowWechatApiKey((prev) => !prev)}
+              onClick={() => setShowWechatMoonshotApiKey((prev) => !prev)}
               type="button"
             >
-              {showWechatApiKey ? 'Hide' : 'Show'}
+              {showWechatMoonshotApiKey ? 'Hide' : 'Show'}
             </button>
             <button
               className="settings-btn"
-              onClick={applyWechatApiKey}
+              onClick={applyWechatMoonshotApiKey}
               type="button"
             >
               Save
             </button>
             <button
               className="settings-btn settings-btn-secondary"
-              onClick={clearWechatApiKey}
+              onClick={clearWechatMoonshotApiKey}
               type="button"
-              disabled={!wechatAiApiKey}
+              disabled={!wechatMoonshotApiKey}
             >
               Clear
             </button>
           </div>
           <div className="settings-font-meta">
-            <span>{wechatAiApiKey ? 'Status: Configured' : 'Status: Not configured'}</span>
+            <span>{wechatMoonshotApiKey ? 'Status: Configured' : 'Status: Not configured'}</span>
+            <span>• Stored locally on this device</span>
+          </div>
+        </div>
+
+        <div className="settings-item settings-item-column">
+          <div className="settings-item-info">
+            <span className="settings-item-label">OpenRouter model</span>
+            <span className="settings-item-description">
+              Used when selecting OpenRouter inside the generation dialog
+            </span>
+          </div>
+          <div className="settings-font-controls">
+            <input
+              className="settings-input"
+              type="text"
+              placeholder={DEFAULT_WECHAT_OPENROUTER_MODEL}
+              value={wechatOpenRouterModelInput}
+              onChange={(e) => setWechatOpenRouterModelInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                applyWechatOpenRouterModel();
+              }}
+              onBlur={applyWechatOpenRouterModel}
+            />
+            <button
+              className="settings-btn"
+              onClick={applyWechatOpenRouterModel}
+            >
+              Apply
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={resetWechatOpenRouterModel}
+              disabled={(wechatOpenRouterModel || DEFAULT_WECHAT_OPENROUTER_MODEL) === DEFAULT_WECHAT_OPENROUTER_MODEL}
+            >
+              Reset
+            </button>
+          </div>
+          <div className="settings-font-meta">
+            <span>Current: {wechatOpenRouterModel || DEFAULT_WECHAT_OPENROUTER_MODEL}</span>
+          </div>
+        </div>
+
+        <div className="settings-item settings-item-column">
+          <div className="settings-item-info">
+            <span className="settings-item-label">OpenRouter API Key</span>
+            <span className="settings-item-description">
+              Required when generating WeChat layout with OpenRouter
+            </span>
+          </div>
+          <div className="settings-font-controls">
+            <input
+              className="settings-input"
+              type={showWechatOpenRouterApiKey ? 'text' : 'password'}
+              placeholder="sk-or-..."
+              value={wechatOpenRouterApiKeyInput}
+              onChange={(e) => setWechatOpenRouterApiKeyInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                applyWechatOpenRouterApiKey();
+              }}
+              onBlur={applyWechatOpenRouterApiKey}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={() => setShowWechatOpenRouterApiKey((prev) => !prev)}
+              type="button"
+            >
+              {showWechatOpenRouterApiKey ? 'Hide' : 'Show'}
+            </button>
+            <button
+              className="settings-btn"
+              onClick={applyWechatOpenRouterApiKey}
+              type="button"
+            >
+              Save
+            </button>
+            <button
+              className="settings-btn settings-btn-secondary"
+              onClick={clearWechatOpenRouterApiKey}
+              type="button"
+              disabled={!wechatOpenRouterApiKey}
+            >
+              Clear
+            </button>
+          </div>
+          <div className="settings-font-meta">
+            <span>{wechatOpenRouterApiKey ? 'Status: Configured' : 'Status: Not configured'}</span>
             <span>• Stored locally on this device</span>
           </div>
         </div>

@@ -23,6 +23,7 @@ const WECHAT_LAYOUT_THEMES = Object.freeze({
 });
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = 'digital-tools-guide';
 const cachedWechatLayoutSystemPrompt = Object.create(null);
+const SUPPORTED_WECHAT_AI_PROVIDERS = new Set(['moonshot', 'openrouter']);
 
 // 判断是否在开发模式
 const isDev = !app.isPackaged;
@@ -316,12 +317,8 @@ function ensureWechatStyleMarker(html) {
   return `${normalized}\n\n<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>`;
 }
 
-async function requestMoonshotWechatHtml({ apiKey, model, title, markdown, systemPrompt }) {
-  if (typeof fetch !== 'function') {
-    throw new Error('Fetch API is unavailable in main process');
-  }
-
-  const userPrompt = [
+function buildWechatLayoutUserPrompt({ title, markdown }) {
+  return [
     '请根据系统提示词中的当前主题规范，排版以下文章，并直接输出可粘贴到公众号后台的完整HTML。',
     '输出要求：',
     '1) 只能输出HTML，不要解释，不要Markdown代码块',
@@ -331,6 +328,14 @@ async function requestMoonshotWechatHtml({ apiKey, model, title, markdown, syste
     'Markdown内容：',
     markdown,
   ].filter(Boolean).join('\n\n');
+}
+
+async function requestMoonshotWechatHtml({ apiKey, model, title, markdown, systemPrompt }) {
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API is unavailable in main process');
+  }
+
+  const userPrompt = buildWechatLayoutUserPrompt({ title, markdown });
 
   const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
     method: 'POST',
@@ -364,6 +369,50 @@ async function requestMoonshotWechatHtml({ apiKey, model, title, markdown, syste
   const rawContent = normalizeAiResponseContent(payload?.choices?.[0]?.message?.content);
   if (!rawContent) {
     throw new Error('Moonshot returned empty content');
+  }
+
+  return ensureWechatStyleMarker(stripMarkdownCodeFence(rawContent));
+}
+
+async function requestOpenRouterWechatHtml({ apiKey, model, title, markdown, systemPrompt }) {
+  if (typeof fetch !== 'function') {
+    throw new Error('Fetch API is unavailable in main process');
+  }
+
+  const userPrompt = buildWechatLayoutUserPrompt({ title, markdown });
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      reasoning: { enabled: true },
+    }),
+  });
+
+  const responseText = await response.text();
+  let payload = null;
+  try {
+    payload = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const errorMessage = payload?.error?.message || payload?.message || `OpenRouter request failed (${response.status})`;
+    throw new Error(errorMessage);
+  }
+
+  const rawContent = normalizeAiResponseContent(payload?.choices?.[0]?.message?.content);
+  if (!rawContent) {
+    throw new Error('OpenRouter returned empty content');
   }
 
   return ensureWechatStyleMarker(stripMarkdownCodeFence(rawContent));
@@ -665,18 +714,28 @@ ipcMain.handle('notes:exportPdf', async (event, data) => {
 
 ipcMain.handle('wechat:generateHtmlWithAi', async (event, data = {}) => {
   try {
+    const providerValue = typeof data.provider === 'string' ? data.provider.trim().toLowerCase() : '';
+    if (!providerValue) {
+      return { success: false, error: 'WeChat AI provider is missing. Please restart Notely and try again.' };
+    }
+    if (!SUPPORTED_WECHAT_AI_PROVIDERS.has(providerValue)) {
+      return { success: false, error: `Unsupported WeChat AI provider "${providerValue}"` };
+    }
+
+    const provider = providerValue;
     const apiKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
     const model = typeof data.model === 'string' ? data.model.trim() : '';
     const markdown = typeof data.markdown === 'string' ? data.markdown.trim() : '';
     const title = typeof data.title === 'string' ? data.title.trim() : '';
     const requestedThemeId = typeof data.themeId === 'string' ? data.themeId.trim() : '';
     const theme = getWechatThemeConfig(requestedThemeId || DEFAULT_WECHAT_LAYOUT_THEME_ID);
+    const providerLabel = provider === 'openrouter' ? 'OpenRouter' : 'Moonshot';
 
     if (!apiKey) {
-      return { success: false, error: 'Moonshot API key is not configured' };
+      return { success: false, error: `${providerLabel} API key is not configured` };
     }
     if (!model) {
-      return { success: false, error: 'Moonshot model is not configured' };
+      return { success: false, error: `${providerLabel} model is not configured` };
     }
     if (!markdown) {
       return { success: false, error: 'Note content is empty' };
@@ -690,13 +749,21 @@ ipcMain.handle('wechat:generateHtmlWithAi', async (event, data = {}) => {
       return { success: false, error: `WeChat layout system prompt is missing for theme "${theme.name}"` };
     }
 
-    const html = await requestMoonshotWechatHtml({
-      apiKey,
-      model,
-      title,
-      markdown,
-      systemPrompt,
-    });
+    const html = provider === 'openrouter'
+      ? await requestOpenRouterWechatHtml({
+          apiKey,
+          model,
+          title,
+          markdown,
+          systemPrompt,
+        })
+      : await requestMoonshotWechatHtml({
+          apiKey,
+          model,
+          title,
+          markdown,
+          systemPrompt,
+        });
 
     return { success: true, html };
   } catch (err) {

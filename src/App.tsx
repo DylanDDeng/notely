@@ -22,9 +22,14 @@ const STORAGE_PATH_KEY = 'notes:storagePath';
 const FONT_FAMILY_KEY = 'notes:fontFamily';
 const NOTES_SORT_ORDER_KEY = 'notes:notesSortOrder';
 const MIDDLE_PANE_COLLAPSED_KEY = 'notes:middlePaneCollapsed';
-const WECHAT_AI_API_KEY = 'notes:wechatAi:apiKey';
-const WECHAT_AI_MODEL = 'notes:wechatAi:model';
-const DEFAULT_WECHAT_AI_MODEL = 'kimi-k2.5';
+const LEGACY_WECHAT_AI_API_KEY = 'notes:wechatAi:apiKey';
+const LEGACY_WECHAT_AI_MODEL = 'notes:wechatAi:model';
+const WECHAT_MOONSHOT_API_KEY = 'notes:wechatAi:moonshot:apiKey';
+const WECHAT_MOONSHOT_MODEL = 'notes:wechatAi:moonshot:model';
+const WECHAT_OPENROUTER_API_KEY = 'notes:wechatAi:openrouter:apiKey';
+const WECHAT_OPENROUTER_MODEL = 'notes:wechatAi:openrouter:model';
+const DEFAULT_WECHAT_MOONSHOT_MODEL = 'kimi-k2.5';
+const DEFAULT_WECHAT_OPENROUTER_MODEL = 'google/gemini-3-pro-preview';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const DAILY_NOTE_FILENAME_RE = /^\d{4}-\d{2}-\d{2}\.md$/i;
@@ -73,40 +78,86 @@ const saveFontFamily = (fontFamily: string) => {
   localStorage.setItem(FONT_FAMILY_KEY, trimmed);
 };
 
-const getSavedWechatAiApiKey = (): string => {
+const getSavedWechatMoonshotApiKey = (): string => {
   try {
-    return localStorage.getItem(WECHAT_AI_API_KEY) || '';
+    return localStorage.getItem(WECHAT_MOONSHOT_API_KEY) || localStorage.getItem(LEGACY_WECHAT_AI_API_KEY) || '';
   } catch {
     return '';
   }
 };
 
-const saveWechatAiApiKey = (apiKey: string) => {
+const saveWechatMoonshotApiKey = (apiKey: string) => {
   const trimmed = apiKey.trim();
   try {
     if (!trimmed) {
-      localStorage.removeItem(WECHAT_AI_API_KEY);
+      localStorage.removeItem(WECHAT_MOONSHOT_API_KEY);
+      localStorage.removeItem(LEGACY_WECHAT_AI_API_KEY);
       return;
     }
-    localStorage.setItem(WECHAT_AI_API_KEY, trimmed);
+    localStorage.setItem(WECHAT_MOONSHOT_API_KEY, trimmed);
+    localStorage.setItem(LEGACY_WECHAT_AI_API_KEY, trimmed);
   } catch {
     // ignore
   }
 };
 
-const getSavedWechatAiModel = (): string => {
+const getSavedWechatMoonshotModel = (): string => {
   try {
-    return localStorage.getItem(WECHAT_AI_MODEL) || DEFAULT_WECHAT_AI_MODEL;
+    return (
+      localStorage.getItem(WECHAT_MOONSHOT_MODEL) ||
+      localStorage.getItem(LEGACY_WECHAT_AI_MODEL) ||
+      DEFAULT_WECHAT_MOONSHOT_MODEL
+    );
   } catch {
-    return DEFAULT_WECHAT_AI_MODEL;
+    return DEFAULT_WECHAT_MOONSHOT_MODEL;
   }
 };
 
-const saveWechatAiModel = (model: string) => {
+const saveWechatMoonshotModel = (model: string) => {
   const trimmed = model.trim();
-  const next = trimmed || DEFAULT_WECHAT_AI_MODEL;
+  const next = trimmed || DEFAULT_WECHAT_MOONSHOT_MODEL;
   try {
-    localStorage.setItem(WECHAT_AI_MODEL, next);
+    localStorage.setItem(WECHAT_MOONSHOT_MODEL, next);
+    localStorage.setItem(LEGACY_WECHAT_AI_MODEL, next);
+  } catch {
+    // ignore
+  }
+};
+
+const getSavedWechatOpenRouterApiKey = (): string => {
+  try {
+    return localStorage.getItem(WECHAT_OPENROUTER_API_KEY) || '';
+  } catch {
+    return '';
+  }
+};
+
+const saveWechatOpenRouterApiKey = (apiKey: string) => {
+  const trimmed = apiKey.trim();
+  try {
+    if (!trimmed) {
+      localStorage.removeItem(WECHAT_OPENROUTER_API_KEY);
+      return;
+    }
+    localStorage.setItem(WECHAT_OPENROUTER_API_KEY, trimmed);
+  } catch {
+    // ignore
+  }
+};
+
+const getSavedWechatOpenRouterModel = (): string => {
+  try {
+    return localStorage.getItem(WECHAT_OPENROUTER_MODEL) || DEFAULT_WECHAT_OPENROUTER_MODEL;
+  } catch {
+    return DEFAULT_WECHAT_OPENROUTER_MODEL;
+  }
+};
+
+const saveWechatOpenRouterModel = (model: string) => {
+  const trimmed = model.trim();
+  const next = trimmed || DEFAULT_WECHAT_OPENROUTER_MODEL;
+  try {
+    localStorage.setItem(WECHAT_OPENROUTER_MODEL, next);
   } catch {
     // ignore
   }
@@ -142,8 +193,10 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isModalFullScreen, setIsModalFullScreen] = useState(false);
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
-  const [wechatAiApiKey, setWechatAiApiKey] = useState<string>(() => getSavedWechatAiApiKey());
-  const [wechatAiModel, setWechatAiModel] = useState<string>(() => getSavedWechatAiModel());
+  const [wechatMoonshotApiKey, setWechatMoonshotApiKey] = useState<string>(() => getSavedWechatMoonshotApiKey());
+  const [wechatMoonshotModel, setWechatMoonshotModel] = useState<string>(() => getSavedWechatMoonshotModel());
+  const [wechatOpenRouterApiKey, setWechatOpenRouterApiKey] = useState<string>(() => getSavedWechatOpenRouterApiKey());
+  const [wechatOpenRouterModel, setWechatOpenRouterModel] = useState<string>(() => getSavedWechatOpenRouterModel());
   const [selectedKanbanId, setSelectedKanbanId] = useState<string | null>(null);
   const [isMiddlePaneCollapsed, setIsMiddlePaneCollapsed] = useState<boolean>(() => getSavedMiddlePaneCollapsed());
   const [notesSortOrder, setNotesSortOrder] = useState<NotesSortOrder>(() => {
@@ -460,16 +513,28 @@ function App() {
     saveFontFamily(trimmed);
   }, []);
 
-  const handleChangeWechatAiApiKey = useCallback((apiKey: string) => {
+  const handleChangeWechatMoonshotApiKey = useCallback((apiKey: string) => {
     const value = apiKey.trim();
-    setWechatAiApiKey(value);
-    saveWechatAiApiKey(value);
+    setWechatMoonshotApiKey(value);
+    saveWechatMoonshotApiKey(value);
   }, []);
 
-  const handleChangeWechatAiModel = useCallback((model: string) => {
-    const value = model.trim() || DEFAULT_WECHAT_AI_MODEL;
-    setWechatAiModel(value);
-    saveWechatAiModel(value);
+  const handleChangeWechatMoonshotModel = useCallback((model: string) => {
+    const value = model.trim() || DEFAULT_WECHAT_MOONSHOT_MODEL;
+    setWechatMoonshotModel(value);
+    saveWechatMoonshotModel(value);
+  }, []);
+
+  const handleChangeWechatOpenRouterApiKey = useCallback((apiKey: string) => {
+    const value = apiKey.trim();
+    setWechatOpenRouterApiKey(value);
+    saveWechatOpenRouterApiKey(value);
+  }, []);
+
+  const handleChangeWechatOpenRouterModel = useCallback((model: string) => {
+    const value = model.trim() || DEFAULT_WECHAT_OPENROUTER_MODEL;
+    setWechatOpenRouterModel(value);
+    saveWechatOpenRouterModel(value);
   }, []);
 
   const handleOpenDailyNote = useCallback(async (date: Date) => {
@@ -811,10 +876,14 @@ function App() {
           onChangeStoragePath={handleChangeStoragePath}
           fontFamily={appFontFamily}
           onChangeFontFamily={handleChangeFontFamily}
-          wechatAiApiKey={wechatAiApiKey}
-          wechatAiModel={wechatAiModel}
-          onChangeWechatAiApiKey={handleChangeWechatAiApiKey}
-          onChangeWechatAiModel={handleChangeWechatAiModel}
+          wechatMoonshotApiKey={wechatMoonshotApiKey}
+          wechatMoonshotModel={wechatMoonshotModel}
+          onChangeWechatMoonshotApiKey={handleChangeWechatMoonshotApiKey}
+          onChangeWechatMoonshotModel={handleChangeWechatMoonshotModel}
+          wechatOpenRouterApiKey={wechatOpenRouterApiKey}
+          wechatOpenRouterModel={wechatOpenRouterModel}
+          onChangeWechatOpenRouterApiKey={handleChangeWechatOpenRouterApiKey}
+          onChangeWechatOpenRouterModel={handleChangeWechatOpenRouterModel}
         />
       </div>
     );
@@ -858,8 +927,10 @@ function App() {
               note={currentNote}
               onSave={handleSaveNote}
               isLoading={isLoading && !currentNote}
-              wechatAiApiKey={wechatAiApiKey}
-              wechatAiModel={wechatAiModel}
+              wechatMoonshotApiKey={wechatMoonshotApiKey}
+              wechatMoonshotModel={wechatMoonshotModel}
+              wechatOpenRouterApiKey={wechatOpenRouterApiKey}
+              wechatOpenRouterModel={wechatOpenRouterModel}
             />
           )}
           <NoteModal
@@ -895,8 +966,10 @@ function App() {
             note={calendarEditorNote}
             onSave={handleSaveNote}
             isLoading={isLoading && !calendarEditorNote}
-            wechatAiApiKey={wechatAiApiKey}
-            wechatAiModel={wechatAiModel}
+            wechatMoonshotApiKey={wechatMoonshotApiKey}
+            wechatMoonshotModel={wechatMoonshotModel}
+            wechatOpenRouterApiKey={wechatOpenRouterApiKey}
+            wechatOpenRouterModel={wechatOpenRouterModel}
           />
         </>
       ) : (
@@ -922,8 +995,10 @@ function App() {
               note={currentNote}
               onSave={handleSaveNote}
               isLoading={isLoading && !currentNote}
-              wechatAiApiKey={wechatAiApiKey}
-              wechatAiModel={wechatAiModel}
+              wechatMoonshotApiKey={wechatMoonshotApiKey}
+              wechatMoonshotModel={wechatMoonshotModel}
+              wechatOpenRouterApiKey={wechatOpenRouterApiKey}
+              wechatOpenRouterModel={wechatOpenRouterModel}
             />
           )}
           <NoteModal
