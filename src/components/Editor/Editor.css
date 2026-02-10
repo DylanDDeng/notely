@@ -751,10 +751,12 @@
 }
 
 .editor-wechat-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+  min-height: 30px;
 }
 
 .editor-wechat-theme {
@@ -771,6 +773,36 @@
   text-align: center;
   background: rgba(248, 250, 252, 0.92);
   color: var(--text-secondary);
+}
+
+.editor-wechat-copy-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.editor-wechat-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(100, 116, 139, 0.48);
+  color: var(--text-primary);
+}
+
+.editor-wechat-copy-btn:focus-visible {
+  outline: 2px solid rgba(51, 65, 85, 0.4);
+  outline-offset: 2px;
 }
 
 .editor-wechat-stale {
@@ -1241,7 +1273,16 @@
   }
 
   .editor-wechat-toolbar {
+    position: static;
     justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .editor-wechat-copy-btn {
+    position: static;
+    transform: none;
   }
 
   .editor-wechat-phone {

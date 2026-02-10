@@ -4,7 +4,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Copy, FileDown, MoreHorizontal, Pin, Star, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, FileDown, MoreHorizontal, Pin, Star, Wand2, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
@@ -674,6 +674,22 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
     setIsMoreMenuOpen(false);
   }, [content, copyTextToClipboard, showToast]);
 
+  const copyWechatHtml = useCallback(async () => {
+    const html = wechatPreview?.html ?? '';
+    if (!html) {
+      showToast('error', 'No generated WeChat HTML');
+      return;
+    }
+
+    const ok = await copyTextToClipboard(html);
+    if (!ok) {
+      showToast('error', 'Failed to copy WeChat HTML');
+      return;
+    }
+
+    showToast('success', 'WeChat HTML copied');
+  }, [copyTextToClipboard, showToast, wechatPreview]);
+
   const generateWechatHtmlWithAi = useCallback(async (themeId: string) => {
     const apiKey = wechatAiApiKey.trim();
     const model = wechatAiModel.trim();
@@ -726,11 +742,11 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
 
       const ok = await copyTextToClipboard(result.html);
       if (!ok) {
-        showToast('error', `Generated layout (${theme.name}), but failed to copy`);
+        showToast('error', `Generated WeChat layout (${theme.name}), but auto-copy failed. Use Copy HTML in preview panel.`);
         return;
       }
 
-      showToast('success', `Generated and copied (${theme.name})`);
+      showToast('success', `Generated WeChat layout (${theme.name}) and copied to clipboard`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/No handler registered for ['"]wechat:generateHtmlWithAi['"]/i.test(message)) {
@@ -1023,8 +1039,8 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                       setIsMoreMenuOpen(false);
                     }}
                   >
-                    <Copy size={16} />
-                    <span>Generate WeChat Layout...</span>
+                    <Wand2 size={16} />
+                    <span>Generate &amp; Copy WeChat Layout...</span>
                   </button>
                   <button
                     type="button"
@@ -1134,6 +1150,17 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
               <div className="editor-wechat-panel-body">
                 <div className="editor-wechat-toolbar">
                   {wechatTheme && <span className="editor-wechat-theme">{wechatTheme.name}</span>}
+                  <button
+                    type="button"
+                    className="editor-wechat-copy-btn"
+                    onClick={() => {
+                      void copyWechatHtml();
+                    }}
+                    title="Copy generated WeChat HTML"
+                  >
+                    <Copy size={14} />
+                    <span>Copy HTML</span>
+                  </button>
                 </div>
 
                 {isWechatPreviewStale && (
