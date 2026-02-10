@@ -18,11 +18,16 @@ interface EditorProps {
   wechatAiModel: string;
 }
 
-type EditorMode = 'live' | 'source' | 'preview';
+type EditorMode = 'live' | 'source' | 'preview' | 'wechat';
 type WechatLayoutTheme = {
   id: string;
   name: string;
   description: string;
+};
+type WechatPreviewState = {
+  html: string;
+  themeId: string;
+  sourceContent: string;
 };
 
 const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
@@ -68,11 +73,37 @@ const transformMediaEmbeds = (html: string): string => {
   return changed ? doc.body.innerHTML : html;
 };
 
+const buildWechatPreviewSrcDoc = (html: string): string => `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base target="_blank" />
+    <style>
+      :root { color-scheme: light; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+      }
+      body {
+        min-height: 100vh;
+      }
+      img {
+        max-width: 100%;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>${html}</body>
+</html>`;
+
 function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: EditorProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [htmlContent, setHtmlContent] = useState('');
+  const [wechatPreview, setWechatPreview] = useState<WechatPreviewState | null>(null);
   const [editorMode, setEditorMode] = useState<EditorMode>('live');
   const [hasChanges, setHasChanges] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -86,6 +117,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
       { title: string; content: string; tags: string[]; date?: string; token: number; filename: string; preserveModifiedAt?: boolean }
     >
   >({});
+  const wechatPreviewCacheRef = useRef<Record<string, WechatPreviewState>>({});
   const editorContentRef = useRef<HTMLDivElement>(null);
   const liveEditorRef = useRef<EditorView | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -113,8 +145,10 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   });
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const isPreviewMode = editorMode === 'preview';
+  const isWechatMode = editorMode === 'wechat';
   const isSourceMode = editorMode === 'source';
-  const isEditing = !isPreviewMode;
+  const isEditing = editorMode === 'live' || editorMode === 'source';
+  const isMarkdownPreviewMode = isPreviewMode;
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -220,6 +254,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   // 加载笔记（并在切换时 flush 未保存的草稿）
   useEffect(() => {
     if (note) {
+      setWechatPreview(wechatPreviewCacheRef.current[note.id] ?? null);
       const cached = draftCacheRef.current[note.id];
       if (cached) {
         setTitle(cached.title || 'Untitled');
@@ -241,6 +276,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
       setContent('');
       setTags([]);
       setHtmlContent('');
+      setWechatPreview(null);
       setHasChanges(false);
       setLightboxSrc(null);
     }
@@ -478,13 +514,13 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   }, [content, flushSaveForNote, note, tags, title]);
 
   useEffect(() => {
-    if (isPreviewMode) return;
+    if (!isEditing) return;
     if (!pendingSelectionRef.current) return;
 
     requestAnimationFrame(() => {
       applyPendingSelectionToLiveEditor();
     });
-  }, [applyPendingSelectionToLiveEditor, content, isPreviewMode]);
+  }, [applyPendingSelectionToLiveEditor, content, isEditing]);
 
   useEffect(() => {
     if (!isPreviewMode) return;
@@ -558,7 +594,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   }, [isPreviewMode]);
 
   useEffect(() => {
-    if (isPreviewMode) return;
+    if (!isEditing) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -569,7 +605,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [isPreviewMode, switchToPreview]);
+  }, [isEditing, switchToPreview]);
 
   const sanitizePdfFileName = useCallback((value: string): string => {
     const trimmed = value.trim();
@@ -668,15 +704,26 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
         throw new Error(result.error || 'Failed to generate WeChat layout');
       }
 
+      const previewState: WechatPreviewState = {
+        html: result.html,
+        themeId: theme.id,
+        sourceContent: content,
+      };
+      if (note) {
+        wechatPreviewCacheRef.current[note.id] = previewState;
+      }
+      setWechatPreview(previewState);
+      setEditorMode('wechat');
+      setIsMoreMenuOpen(false);
+      setIsThemePickerOpen(false);
+
       const ok = await copyTextToClipboard(result.html);
       if (!ok) {
-        showToast('error', 'Generated AI HTML, but failed to copy');
+        showToast('error', `Generated layout (${theme.name}), but failed to copy`);
         return;
       }
 
-      showToast('success', `WeChat layout generated and copied (${theme.name})`);
-      setIsMoreMenuOpen(false);
-      setIsThemePickerOpen(false);
+      showToast('success', `Generated and copied (${theme.name})`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/No handler registered for ['"]wechat:generateHtmlWithAi['"]/i.test(message)) {
@@ -687,7 +734,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
     } finally {
       setIsGeneratingWechatHtml(false);
     }
-  }, [content, copyTextToClipboard, isGeneratingWechatHtml, showToast, title, wechatAiApiKey, wechatAiModel]);
+  }, [content, copyTextToClipboard, isGeneratingWechatHtml, note, showToast, title, wechatAiApiKey, wechatAiModel]);
 
   const exportCurrentNoteToPdf = useCallback(async () => {
     if (!note) return;
@@ -857,9 +904,12 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   const isFavorite = tags.includes('favorite');
   const mainTag = tags.find(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
   const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
+  const wechatTheme = wechatPreview ? getWechatLayoutThemeById(wechatPreview.themeId) : null;
+  const isWechatPreviewStale = Boolean(wechatPreview && wechatPreview.sourceContent !== content);
+  const wechatPreviewSrcDoc = wechatPreview ? buildWechatPreviewSrcDoc(wechatPreview.html) : '';
 
   return (
-    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'} ${isSourceMode ? 'is-source' : 'is-live'}`}>
+    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'} ${isSourceMode ? 'is-source' : 'is-live'} ${isWechatMode ? 'is-wechat' : ''}`}>
       {/* Header */}
       <div className="editor-header">
         <div className="editor-container editor-header-inner">
@@ -905,11 +955,20 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                 role="tab"
                 aria-selected={editorMode === 'preview'}
                 onClick={() => {
-                  if (isPreviewMode) return;
+                  if (isMarkdownPreviewMode) return;
                   void switchToPreview();
                 }}
               >
                 Preview
+              </button>
+              <button
+                type="button"
+                className={`editor-mode-segment ${editorMode === 'wechat' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={editorMode === 'wechat'}
+                onClick={() => setEditorMode('wechat')}
+              >
+                WeChat
               </button>
             </div>
             <button
@@ -1029,7 +1088,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
       <div
         className="editor-content"
         ref={editorContentRef}
-        onClick={isEditing ? undefined : handlePreviewClick}
+        onClick={isMarkdownPreviewMode ? handlePreviewClick : undefined}
       >
         <div className="editor-container editor-content-inner">
           {isEditing ? (
@@ -1050,7 +1109,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                 setLightboxSrc(url);
               }}
             />
-          ) : (
+          ) : isMarkdownPreviewMode ? (
             <div
               className="editor-preview"
               ref={previewRef}
@@ -1058,6 +1117,33 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                 __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
               }}
             />
+          ) : (
+            <div className="editor-wechat-preview">
+              <div className="editor-wechat-toolbar">
+                <span className="editor-wechat-device">Mobile Preview · 390px</span>
+                {wechatTheme && <span className="editor-wechat-theme">{wechatTheme.name}</span>}
+              </div>
+
+              {isWechatPreviewStale && (
+                <p className="editor-wechat-stale">Markdown changed after generation. Regenerate to refresh the WeChat layout.</p>
+              )}
+
+              {wechatPreview ? (
+                <div className="editor-wechat-phone">
+                  <iframe
+                    className="editor-wechat-frame"
+                    title="WeChat layout preview"
+                    srcDoc={wechatPreviewSrcDoc}
+                    sandbox=""
+                  />
+                </div>
+              ) : (
+                <div className="editor-wechat-empty">
+                  <p>No generated WeChat layout yet.</p>
+                  <p>Open More -&gt; Generate WeChat Layout... to generate and copy HTML.</p>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
