@@ -4,7 +4,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { Copy, FileDown, MoreHorizontal, Pin, Share2, Star, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, FileDown, MoreHorizontal, Pin, Star, X } from 'lucide-react';
 import { getTagColor } from '../../utils/noteUtils';
 import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
@@ -18,7 +18,7 @@ interface EditorProps {
   wechatAiModel: string;
 }
 
-type EditorMode = 'live' | 'source' | 'preview' | 'wechat';
+type EditorMode = 'live' | 'source' | 'preview';
 type WechatLayoutTheme = {
   id: string;
   name: string;
@@ -129,6 +129,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const SAVE_DEBOUNCE_MS = 800;
 
+  const [isWechatPreviewPanelOpen, setIsWechatPreviewPanelOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
@@ -145,10 +146,8 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   });
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const isPreviewMode = editorMode === 'preview';
-  const isWechatMode = editorMode === 'wechat';
   const isSourceMode = editorMode === 'source';
   const isEditing = editorMode === 'live' || editorMode === 'source';
-  const isMarkdownPreviewMode = isPreviewMode;
 
   // Lightbox keyboard controls
   useEffect(() => {
@@ -254,7 +253,9 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   // 加载笔记（并在切换时 flush 未保存的草稿）
   useEffect(() => {
     if (note) {
-      setWechatPreview(wechatPreviewCacheRef.current[note.id] ?? null);
+      const cachedWechatPreview = wechatPreviewCacheRef.current[note.id] ?? null;
+      setWechatPreview(cachedWechatPreview);
+      setIsWechatPreviewPanelOpen(Boolean(cachedWechatPreview));
       const cached = draftCacheRef.current[note.id];
       if (cached) {
         setTitle(cached.title || 'Untitled');
@@ -277,6 +278,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
       setTags([]);
       setHtmlContent('');
       setWechatPreview(null);
+      setIsWechatPreviewPanelOpen(false);
       setHasChanges(false);
       setLightboxSrc(null);
     }
@@ -713,7 +715,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
         wechatPreviewCacheRef.current[note.id] = previewState;
       }
       setWechatPreview(previewState);
-      setEditorMode('wechat');
+      setIsWechatPreviewPanelOpen(true);
       setIsMoreMenuOpen(false);
       setIsThemePickerOpen(false);
 
@@ -909,7 +911,7 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
   const wechatPreviewSrcDoc = wechatPreview ? buildWechatPreviewSrcDoc(wechatPreview.html) : '';
 
   return (
-    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'} ${isSourceMode ? 'is-source' : 'is-live'} ${isWechatMode ? 'is-wechat' : ''}`}>
+    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'} ${isSourceMode ? 'is-source' : 'is-live'}`}>
       {/* Header */}
       <div className="editor-header">
         <div className="editor-container editor-header-inner">
@@ -955,20 +957,11 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                 role="tab"
                 aria-selected={editorMode === 'preview'}
                 onClick={() => {
-                  if (isMarkdownPreviewMode) return;
+                  if (isPreviewMode) return;
                   void switchToPreview();
                 }}
               >
                 Preview
-              </button>
-              <button
-                type="button"
-                className={`editor-mode-segment ${editorMode === 'wechat' ? 'active' : ''}`}
-                role="tab"
-                aria-selected={editorMode === 'wechat'}
-                onClick={() => setEditorMode('wechat')}
-              >
-                WeChat
               </button>
             </div>
             <button
@@ -990,9 +983,6 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
               title={isFavorite ? '取消收藏' : '收藏'}
             >
               <Star size={18} />
-            </button>
-            <button className="editor-action-btn">
-              <Share2 size={18} />
             </button>
             <div className="editor-more" ref={moreMenuRef}>
               <button
@@ -1085,50 +1075,67 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
       </div>
 
       {/* Content */}
-      <div
-        className="editor-content"
-        ref={editorContentRef}
-        onClick={isMarkdownPreviewMode ? handlePreviewClick : undefined}
-      >
-        <div className="editor-container editor-content-inner">
-          {isEditing ? (
-            <MarkdownLiveEditor
-              value={content}
-              onChange={handleContentChange}
-              mode={isSourceMode ? 'source' : 'live'}
-              onEditorReady={(view) => {
-                liveEditorRef.current = view;
-                requestAnimationFrame(() => {
-                  applyPendingSelectionToLiveEditor();
-                });
-              }}
-              onOpenExternal={(url) => {
-                void window.electronAPI.openExternal(url);
-              }}
-              onOpenImagePreview={(url) => {
-                setLightboxSrc(url);
-              }}
-            />
-          ) : isMarkdownPreviewMode ? (
-            <div
-              className="editor-preview"
-              ref={previewRef}
-              dangerouslySetInnerHTML={{ 
-                __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>' 
-              }}
-            />
-          ) : (
-            <div className="editor-wechat-preview">
-              <div className="editor-wechat-toolbar">
-                <span className="editor-wechat-device">Mobile Preview · 390px</span>
-                {wechatTheme && <span className="editor-wechat-theme">{wechatTheme.name}</span>}
-              </div>
+      <div className={`editor-content-shell ${wechatPreview ? 'has-wechat-panel' : ''}`}>
+        <div
+          className="editor-content"
+          ref={editorContentRef}
+          onClick={isPreviewMode ? handlePreviewClick : undefined}
+        >
+          <div className="editor-container editor-content-inner">
+            {isEditing ? (
+              <MarkdownLiveEditor
+                value={content}
+                onChange={handleContentChange}
+                mode={isSourceMode ? 'source' : 'live'}
+                onEditorReady={(view) => {
+                  liveEditorRef.current = view;
+                  requestAnimationFrame(() => {
+                    applyPendingSelectionToLiveEditor();
+                  });
+                }}
+                onOpenExternal={(url) => {
+                  void window.electronAPI.openExternal(url);
+                }}
+                onOpenImagePreview={(url) => {
+                  setLightboxSrc(url);
+                }}
+              />
+            ) : (
+              <div
+                className="editor-preview"
+                ref={previewRef}
+                dangerouslySetInnerHTML={{
+                  __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>',
+                }}
+              />
+            )}
+          </div>
+        </div>
 
-              {isWechatPreviewStale && (
-                <p className="editor-wechat-stale">Markdown changed after generation. Regenerate to refresh the WeChat layout.</p>
-              )}
+        {wechatPreview && (
+          <aside className={`editor-wechat-panel ${isWechatPreviewPanelOpen ? 'open' : 'collapsed'}`}>
+            <button
+              type="button"
+              className="editor-wechat-panel-toggle"
+              onClick={() => setIsWechatPreviewPanelOpen((open) => !open)}
+              aria-label={isWechatPreviewPanelOpen ? 'Collapse WeChat preview' : 'Expand WeChat preview'}
+              aria-expanded={isWechatPreviewPanelOpen}
+              title={isWechatPreviewPanelOpen ? 'Collapse WeChat preview' : 'Expand WeChat preview'}
+            >
+              {isWechatPreviewPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
 
-              {wechatPreview ? (
+            {isWechatPreviewPanelOpen && (
+              <div className="editor-wechat-panel-body">
+                <div className="editor-wechat-toolbar">
+                  <span className="editor-wechat-device">Mobile Preview · 390px</span>
+                  {wechatTheme && <span className="editor-wechat-theme">{wechatTheme.name}</span>}
+                </div>
+
+                {isWechatPreviewStale && (
+                  <p className="editor-wechat-stale">Markdown changed after generation. Regenerate to refresh the WeChat layout.</p>
+                )}
+
                 <div className="editor-wechat-phone">
                   <iframe
                     className="editor-wechat-frame"
@@ -1137,15 +1144,10 @@ function Editor({ note, onSave, isLoading, wechatAiApiKey, wechatAiModel }: Edit
                     sandbox=""
                   />
                 </div>
-              ) : (
-                <div className="editor-wechat-empty">
-                  <p>No generated WeChat layout yet.</p>
-                  <p>Open More -&gt; Generate WeChat Layout... to generate and copy HTML.</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
 
       {lightboxSrc && (
