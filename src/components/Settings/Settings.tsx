@@ -626,7 +626,7 @@ function Settings({
       <aside className="settings-sidebar">
         <div className="settings-header">
           <button className="settings-back-btn" onClick={onBack}>
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
           </button>
           <h2 className="settings-title">Settings</h2>
         </div>
