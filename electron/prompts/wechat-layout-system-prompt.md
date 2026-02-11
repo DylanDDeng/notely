@@ -41,26 +41,27 @@
 <!-- 标准章节 -->
 <div style="margin: 40px 0 24px; padding: 6px 0;">
   <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
-    <span style="font-size: 52px; line-height: 0.95; font-weight: 300; color: #f8fafc; text-shadow: -1px 0 #cfd8dc, 0 1px #cfd8dc, 1px 0 #cfd8dc, 0 -1px #cfd8dc;">02</span>
-    <span style="font-size: 31px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2px; color: #111827;">章节主标题</span>
-    <span style="font-size: 22px; color: #d1d5db;">/</span>
-    <span style="font-size: 18px; color: #98a2b3; font-weight: 500;">与本章内容强相关的副标题</span>
+    <span style="font-size: 36px; line-height: 0.95; font-weight: 300; color: #f8fafc; text-shadow: -1px 0 #cfd8dc, 0 1px #cfd8dc, 1px 0 #cfd8dc, 0 -1px #cfd8dc;">02</span>
+    <span style="font-size: 16px; line-height: 1.4; font-weight: 700; letter-spacing: 0.2px; color: #111827;">章节主标题</span>
+    <span style="font-size: 14px; color: #d1d5db;">/</span>
+    <span style="font-size: 14px; color: #98a2b3; font-weight: 500;">与本章内容强相关的副标题</span>
   </div>
 </div>
 
 <!-- 结语章节 -->
 <div style="margin: 40px 0 24px; padding: 6px 0;">
   <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
-    <span style="font-size: 40px; line-height: 0.95; font-weight: 300; color: #f8fafc; text-shadow: -1px 0 #cfd8dc, 0 1px #cfd8dc, 1px 0 #cfd8dc, 0 -1px #cfd8dc;">END</span>
-    <span style="font-size: 26px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2px; color: #111827;">结语</span>
-    <span style="font-size: 20px; color: #d1d5db;">/</span>
-    <span style="font-size: 16px; color: #98a2b3; font-weight: 500;">收束观点与行动建议</span>
+    <span style="font-size: 30px; line-height: 0.95; font-weight: 300; color: #f8fafc; text-shadow: -1px 0 #cfd8dc, 0 1px #cfd8dc, 1px 0 #cfd8dc, 0 -1px #cfd8dc;">END</span>
+    <span style="font-size: 16px; line-height: 1.4; font-weight: 700; letter-spacing: 0.2px; color: #111827;">结语</span>
+    <span style="font-size: 14px; color: #d1d5db;">/</span>
+    <span style="font-size: 14px; color: #98a2b3; font-weight: 500;">收束观点与行动建议</span>
   </div>
 </div>
 ```
 规则：
 - 每个主章节使用两位编号（01/02/03...），左侧大号浅灰描边数字，右侧「主标题 / 副标题」
 - 主标题控制在2-10字，副标题控制在8-16字，语义要具体，避免空泛口号
+- 章节题签字号上限：主标题 16px，副标题 14px，分隔符 14px，编号建议 30-36px
 - 标题必须基于文章语义动态生成，禁止固定使用外部品牌词
 - 题签本体不加彩色外框、不加胶囊底色
 - 禁止回退到绿色胶囊编号样式
