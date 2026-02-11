@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AppSettings, SettingsMenuItem } from '../../types';
+import { truncatePath } from '../../utils/pathUtils';
 import './Settings.css';
 
 const SETTINGS_MENU: SettingsMenuItem[] = [
@@ -253,7 +254,7 @@ function Settings({
         <div className="settings-item">
           <div className="settings-item-info">
             <span className="settings-item-label">Default save location</span>
-            <span className="settings-item-description">{settings.saveLocation}</span>
+            <span className="settings-item-description" title={settings.saveLocation}>{truncatePath(settings.saveLocation)}</span>
           </div>
           <button className="settings-btn" onClick={handleChangeSaveLocation}>Change</button>
         </div>
