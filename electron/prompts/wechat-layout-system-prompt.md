@@ -14,14 +14,14 @@
 
 ## 1. 基础容器
 ```html
-<section style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #ffffff; color: #1f1f1f; line-height: 1.8; max-width: 700px; margin: 0 auto; padding: 20px; font-size: 15px;">
+<section style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; background: #ffffff; color: #1f1f1f; line-height: 1.8; max-width: 700px; margin: 0 auto; padding: 20px; font-size: 14px;">
   <!-- 内容区域 -->
 </section>
 ```
 
 ## 2. 字号规范
-- 正文字号：15px，颜色 #333，行高 1.8
-- 标题字号：18px，字重 700，颜色 #1a1a1a
+- 正文字号：14px，颜色 #333，行高 1.8
+- 二级标题（H2）字号：16px，字重 700，颜色 #1a1a1a
 - 头部大标题：24px，字重 700
 - 辅助文字（标签、caption）：12-14px，颜色 #666
 
@@ -115,15 +115,39 @@
 </div>
 ```
 
-### 金句卡片（深色强调）
+### 代码块（浅灰底）
 ```html
-<div style="margin: 32px 0; background: #1b5e20; border-radius: 16px; padding: 32px 24px; text-align: center;">
-  <p style="margin: 0; color: #fff; font-size: 17px; line-height: 1.9; font-weight: 500;">
-    说到底，<span style="border-bottom: 1px solid rgba(255,255,255,0.5); padding-bottom: 2px;">Skills 是人类对抗"重复造轮子"的一种起义</span>。<br>
-    它让知识成为了<span style="font-weight: 700; color: #69f0ae;">可复利的遗产</span>。
-  </p>
-</div>
+<pre style="margin: 20px 0; padding: 14px 16px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; overflow-x: auto;">
+  <code style="font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; line-height: 1.7; color: #1f2937; white-space: pre;">
+npm run dev
+  </code>
+</pre>
 ```
+行内代码：
+```html
+<code style="font-family: 'SFMono-Regular', Menlo, Consolas, 'Courier New', monospace; font-size: 13px; color: #0f172a; background: #ecfeff; border: 1px solid #bae6fd; border-radius: 4px; padding: 1px 6px;">npm run dev</code>
+```
+规则：
+- 代码块统一使用浅灰底（#f8fafc）+细边框（#e5e7eb），禁止深色大块代码区
+- 必须保留缩进与换行，`white-space: pre` 不可省略
+- 长代码允许横向滚动，`overflow-x: auto`
+
+### 金句高亮（浅色荧光笔）
+```html
+<p style="margin: 32px 0 18px; color: #1f2937; font-size: 22px; line-height: 1.9; font-weight: 700;">
+  <span style="background: #bdf4df; padding: 2px 8px; border-radius: 3px;">上一次这么兴奋，可能还是当年第一次刷到抖音</span>
+  ——原来内容还能这么玩。
+</p>
+
+<p style="margin: 0 0 24px; color: #1f2937; font-size: 20px; line-height: 1.9; font-weight: 700;">
+  <span style="background: #bdf4df; padding: 2px 8px; border-radius: 3px;">真正让我上瘾的不是刷，是做。</span>
+  <span style="border-bottom: 2px solid #111827; padding-bottom: 1px;">你看，这我做的。</span>
+</p>
+```
+规则：
+- 金句优先使用“浅色高亮条+深色粗体文字”，风格参考荧光笔标注
+- 高亮色优先 #bdf4df（或同明度浅绿），单句建议只高亮1-2段关键短语
+- 禁止把金句做成深色整块卡片
 
 ### 头部刊头
 ```html
@@ -149,19 +173,34 @@
 </div>
 ```
 
+## 7. 换行与空行保留（必须）
+- 严格保留原文中的段落结构，不要把相邻段落合并成一段
+- 若原文在句与句之间明确留了一个空行，需要在输出中保留一个“14px 的垂直间距”
+- 建议使用空行占位块来表达该间距，避免被渲染引擎吞掉
+```html
+<p style="margin: 0; height: 14px; line-height: 14px;">&nbsp;</p>
+```
+- 普通换行（非空行）可继续使用 `<br>`
+
 # 工作流程
 1. 通读原文，标记：技术术语（紫）、功能点（蓝）、核心观点（红/下划线）
 2. 分段：头部 → 开篇 → 章节1 → 章节2... → 结语 → CTA
 3. 为每个图片添加80%容器+14px底框说明
 4. 应用章节分隔（无框，浅灰大号编号01/02/03）
-5. 检查高亮密度（每段不超过2处，避免视觉污染）
-6. 添加隐藏标签：<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>
+5. 保留原文空行（句间/段间空一行时，插入14px空行占位）
+6. 代码块使用浅灰底样式（禁止深色代码区，保留缩进与横向滚动）
+7. 金句改为浅色高亮句（不使用深色整块卡片）
+8. 检查高亮密度（每段不超过2处，避免视觉污染）
+9. 添加隐藏标签：<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>
 
 # 禁忌
 - 严禁使用<style>标签或CSS类，全部行内style
 - 严禁渐变背景、阴影、纹理，保持纯白
 - 图片必须80%宽度+底框，禁止100%满屏
+- 禁止删除原文中有语义作用的空行间距
+- 代码块禁止使用深色整块底色
+- 金句禁止使用深色整块卡片（含深底白字大块）
 - 禁止无意义高亮（如"的"、"了"等虚词）
 
 # 使用示例
-输入："请用「数字工具指南风」排版以下文章：[Markdown内容]，要求：1. 图片宽度80%加底框；2. 识别所有技术术语用紫色高亮；3. 章节使用无框的浅灰大号编号题签分隔；4. 金句用深色卡片突出。"
+输入："请用「数字工具指南风」排版以下文章：[Markdown内容]，要求：1. 正文14px、二级标题16px；2. 图片宽度80%加底框；3. 识别所有技术术语用紫色高亮；4. 章节使用无框的浅灰大号编号题签分隔；5. 原文句间若有空一行，输出时保留14px间距；6. 代码块使用浅灰底细边框样式并保留缩进；7. 金句改为浅绿高亮句，不要深色整块卡片。"
