@@ -400,7 +400,7 @@ function Settings({
           <div className="settings-item-info">
             <span className="settings-item-label">Built-in themes</span>
             <span className="settings-item-description">
-              Available themes for WeChat layout generation
+              Available themes for WeChat layout
             </span>
           </div>
           <select className="settings-select" style={{ opacity: 1, cursor: 'default' }}>
