@@ -170,6 +170,9 @@
 
 .kanban-boards-list {
   padding: 10px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .kanban-boards-empty {
