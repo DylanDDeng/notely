@@ -6,6 +6,7 @@
 - 纯白背景（#ffffff），极简干净，无纹理
 - 圆角卡片（border-radius: 12px）承载图片与引用
 - 轻量级阴影/边框（1px solid #f0f0f0）代替重阴影
+- 章节题签使用浅灰大号编号+黑灰标题组合（替代绿色胶囊标签）
 - 等宽字体（Courier New）用于代码/视频标签
 - 系统字体栈（PingFang SC, Microsoft YaHei, sans-serif）
 
@@ -35,21 +36,34 @@
 </div>
 ```
 
-## 4. 章节分隔系统
+## 4. 章节分隔系统（无框编号题签）
 ```html
 <!-- 标准章节 -->
-<div style="margin: 40px 0 24px; display: flex; align-items: center; gap: 12px;">
-  <span style="background: #1b5e20; color: white; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">01</span>
-  <span style="font-size: 18px; font-weight: 700; color: #1a1a1a;">
-    <span style="border-bottom: 2px solid #c45c48; padding-bottom: 2px;">章节标题</span>
-  </span>
+<div style="margin: 40px 0 24px; padding: 6px 0;">
+  <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+    <span style="font-size: 52px; line-height: 0.95; font-weight: 300; color: #f8fafc; text-shadow: -1px 0 #cfd8dc, 0 1px #cfd8dc, 1px 0 #cfd8dc, 0 -1px #cfd8dc;">02</span>
+    <span style="font-size: 31px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2px; color: #111827;">章节主标题</span>
+    <span style="font-size: 22px; color: #d1d5db;">/</span>
+    <span style="font-size: 18px; color: #98a2b3; font-weight: 500;">与本章内容强相关的副标题</span>
+  </div>
 </div>
 
 <!-- 结语章节 -->
-<div style="margin: 40px 0 24px; display: flex; align-items: center; gap: 12px;">
-  <span style="background: #424242; color: white; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;">结语</span>
+<div style="margin: 40px 0 24px; padding: 6px 0;">
+  <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+    <span style="font-size: 40px; line-height: 0.95; font-weight: 300; color: #f8fafc; text-shadow: -1px 0 #cfd8dc, 0 1px #cfd8dc, 1px 0 #cfd8dc, 0 -1px #cfd8dc;">END</span>
+    <span style="font-size: 26px; line-height: 1.1; font-weight: 700; letter-spacing: 0.2px; color: #111827;">结语</span>
+    <span style="font-size: 20px; color: #d1d5db;">/</span>
+    <span style="font-size: 16px; color: #98a2b3; font-weight: 500;">收束观点与行动建议</span>
+  </div>
 </div>
 ```
+规则：
+- 每个主章节使用两位编号（01/02/03...），左侧大号浅灰描边数字，右侧「主标题 / 副标题」
+- 主标题控制在2-10字，副标题控制在8-16字，语义要具体，避免空泛口号
+- 标题必须基于文章语义动态生成，禁止固定使用外部品牌词
+- 题签本体不加彩色外框、不加胶囊底色
+- 禁止回退到绿色胶囊编号样式
 
 ## 5. 关键词高亮系统（核心）
 
@@ -139,7 +153,7 @@
 1. 通读原文，标记：技术术语（紫）、功能点（蓝）、核心观点（红/下划线）
 2. 分段：头部 → 开篇 → 章节1 → 章节2... → 结语 → CTA
 3. 为每个图片添加80%容器+14px底框说明
-4. 应用章节分隔（绿色标签01/02/03）
+4. 应用章节分隔（无框，浅灰大号编号01/02/03）
 5. 检查高亮密度（每段不超过2处，避免视觉污染）
 6. 添加隐藏标签：<p style="display: none;"><mp-style-type data-value="3"></mp-style-type></p>
 
@@ -150,4 +164,4 @@
 - 禁止无意义高亮（如"的"、"了"等虚词）
 
 # 使用示例
-输入："请用「数字工具指南风」排版以下文章：[Markdown内容]，要求：1. 图片宽度80%加底框；2. 识别所有技术术语用紫色高亮；3. 章节用绿色标签分隔；4. 金句用深色卡片突出。"
+输入："请用「数字工具指南风」排版以下文章：[Markdown内容]，要求：1. 图片宽度80%加底框；2. 识别所有技术术语用紫色高亮；3. 章节使用无框的浅灰大号编号题签分隔；4. 金句用深色卡片突出。"

@@ -269,7 +269,8 @@ function getWechatLayoutSystemPrompt(themeId) {
   const theme = getWechatThemeConfig(themeId);
   if (!theme) return '';
 
-  if (typeof cachedWechatLayoutSystemPrompt[theme.id] === 'string') {
+  // In dev mode, always re-read prompt files so edits apply immediately.
+  if (!isDev && typeof cachedWechatLayoutSystemPrompt[theme.id] === 'string') {
     return cachedWechatLayoutSystemPrompt[theme.id];
   }
 
