@@ -53,6 +53,11 @@ const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
     name: 'Minimal Linework (Black/Red)',
     description: 'Minimal black-red layout with thin separators and generous whitespace.',
   },
+  {
+    id: 'retro-corporate-archive',
+    name: 'Retro Corporate Archive',
+    description: 'Vintage annual-report style with beige paper tone, archive labels, and orange accents.',
+  },
 ];
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
 const DEFAULT_WECHAT_MODEL_OPTION_ID = 'moonshot';

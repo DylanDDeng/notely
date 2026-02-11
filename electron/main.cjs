@@ -20,6 +20,10 @@ const WECHAT_LAYOUT_THEMES = Object.freeze({
     name: 'Minimal Linework (Black/Red)',
     promptPath: path.join(__dirname, 'prompts', 'wechat-layout-minimal-linework-black-red-system-prompt.md'),
   },
+  'retro-corporate-archive': {
+    name: 'Retro Corporate Archive',
+    promptPath: path.join(__dirname, 'prompts', 'wechat-layout-retro-corporate-archive-system-prompt.md'),
+  },
 });
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = 'digital-tools-guide';
 const cachedWechatLayoutSystemPrompt = Object.create(null);

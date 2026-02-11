@@ -49,6 +49,7 @@ const DEFAULT_WECHAT_OPENROUTER_MODEL = 'google/gemini-3-pro-preview';
 const BUILT_IN_WECHAT_THEMES = [
   'Digital Tools Guide',
   'Minimal Linework (Black/Red)',
+  'Retro Corporate Archive',
 ];
 
 function Settings({
