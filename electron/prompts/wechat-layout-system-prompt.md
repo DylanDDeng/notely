@@ -135,18 +135,19 @@ npm run dev
 
 ### 金句高亮（浅色荧光笔）
 ```html
-<p style="margin: 32px 0 18px; color: #1f2937; font-size: 22px; line-height: 1.9; font-weight: 700;">
+<p style="margin: 32px 0 18px; color: #1f2937; font-size: 14px; line-height: 1.9; font-weight: 700;">
   <span style="background: #bdf4df; padding: 2px 8px; border-radius: 3px;">上一次这么兴奋，可能还是当年第一次刷到抖音</span>
   ——原来内容还能这么玩。
 </p>
 
-<p style="margin: 0 0 24px; color: #1f2937; font-size: 20px; line-height: 1.9; font-weight: 700;">
+<p style="margin: 0 0 24px; color: #1f2937; font-size: 14px; line-height: 1.9; font-weight: 700;">
   <span style="background: #bdf4df; padding: 2px 8px; border-radius: 3px;">真正让我上瘾的不是刷，是做。</span>
   <span style="border-bottom: 2px solid #111827; padding-bottom: 1px;">你看，这我做的。</span>
 </p>
 ```
 规则：
 - 金句优先使用“浅色高亮条+深色粗体文字”，风格参考荧光笔标注
+- 荧光高亮句字号与正文一致，使用 14px
 - 高亮色优先 #bdf4df（或同明度浅绿），单句建议只高亮1-2段关键短语
 - 禁止把金句做成深色整块卡片
 
