@@ -48,7 +48,7 @@ const DEFAULT_WECHAT_MOONSHOT_MODEL = 'kimi-k2.5';
 const DEFAULT_WECHAT_OPENROUTER_MODEL = 'google/gemini-3-pro-preview';
 const BUILT_IN_WECHAT_THEMES = [
   'Digital Tools Guide',
-  'Minimal Linework (Black/Red)',
+  'Minimal Linework',
   'Retro Corporate Archive',
 ];
 
@@ -400,9 +400,14 @@ function Settings({
           <div className="settings-item-info">
             <span className="settings-item-label">Built-in themes</span>
             <span className="settings-item-description">
-              {BUILT_IN_WECHAT_THEMES.join(', ')}
+              Available themes for WeChat layout generation
             </span>
           </div>
+          <select className="settings-select" style={{ opacity: 1, cursor: 'default' }}>
+            {BUILT_IN_WECHAT_THEMES.map(theme => (
+              <option key={theme}>{theme}</option>
+            ))}
+          </select>
         </div>
 
         <div className="settings-item settings-item-column">
