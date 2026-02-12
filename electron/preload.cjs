@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveNote: (data) => ipcRenderer.invoke('notes:save', data),
   createNote: (data) => ipcRenderer.invoke('notes:create', data),
   deleteNote: (filename) => ipcRenderer.invoke('notes:delete', filename),
+  listNoteHistory: (data) => ipcRenderer.invoke('notes:history:list', data),
+  readNoteHistoryVersion: (data) => ipcRenderer.invoke('notes:history:read', data),
   
   // 设置相关
   selectDirectory: () => ipcRenderer.invoke('settings:selectDirectory'),

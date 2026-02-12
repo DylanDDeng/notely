@@ -417,6 +417,7 @@ function App() {
   const handleSaveNote = useCallback(async (noteData: SaveNoteData) => {
     const now = new Date();
     const preserveModifiedAt = Boolean(noteData.preserveModifiedAt);
+    const forceFilename = typeof noteData.forceFilename === 'string' ? noteData.forceFilename.trim() : '';
     const previousFilename = noteData.filename;
     const previousNoteId =
       noteData.id ||
@@ -436,14 +437,20 @@ function App() {
       ...(isCalendarEntry ? { type: 'calendar' } : {}),
     };
     const fileContent = generateNoteContent(frontmatter, noteData.content);
-    const filename =
+    const filename = forceFilename || (
       isCalendarEntry && previousFilename
         ? previousFilename
-        : makeUniqueFilename(noteData.title, previousFilename);
+        : makeUniqueFilename(noteData.title, previousFilename)
+    );
     const nextNoteId = filename.replace(/\.md$/i, '');
     const isRenamed = Boolean(previousFilename && previousFilename !== filename);
 
-    const result = await window.electronAPI.saveNote({ filename, content: fileContent, preserveModifiedAt });
+    const result = await window.electronAPI.saveNote({
+      filename,
+      content: fileContent,
+      preserveModifiedAt,
+      historySource: noteData.historySource,
+    });
     if (!result.success) {
       throw new Error(result.error || 'Failed to save note');
     }

@@ -24,10 +24,19 @@ const WECHAT_LAYOUT_THEMES = Object.freeze({
     name: 'Retro Corporate Archive',
     promptPath: path.join(__dirname, 'prompts', 'wechat-layout-retro-corporate-archive-system-prompt.md'),
   },
+  'editorial-pick': {
+    name: 'Editorial Pick',
+    promptPath: path.join(__dirname, 'prompts', 'wechat-layout-editorial-pick-system-prompt.md'),
+  },
 });
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = 'digital-tools-guide';
 const cachedWechatLayoutSystemPrompt = Object.create(null);
 const SUPPORTED_WECHAT_AI_PROVIDERS = new Set(['moonshot', 'openrouter']);
+const NOTE_HISTORY_DIRNAME = '.history';
+const NOTE_HISTORY_INDEX_FILENAME = 'index.json';
+const NOTE_HISTORY_VERSIONS_DIRNAME = 'versions';
+const NOTE_HISTORY_MAX_VERSIONS = 80;
+const NOTE_HISTORY_SOURCES = new Set(['save', 'create', 'rollback']);
 
 // 判断是否在开发模式
 const isDev = !app.isPackaged;
@@ -39,6 +48,175 @@ async function ensureNotesDir() {
   } catch (err) {
     console.error('Failed to create notes directory:', err);
   }
+}
+
+function normalizeHistorySource(source) {
+  return NOTE_HISTORY_SOURCES.has(source) ? source : 'save';
+}
+
+function isValidHistoryVersionId(versionId) {
+  return typeof versionId === 'string' && /^[a-z0-9-]{6,96}$/i.test(versionId);
+}
+
+function getHistoryRootDir() {
+  return path.join(currentNotesDir, NOTE_HISTORY_DIRNAME);
+}
+
+function getHistoryKeyForFilename(filename) {
+  return encodeURIComponent(String(filename || '').trim());
+}
+
+function getNoteHistoryDir(filename) {
+  return path.join(getHistoryRootDir(), getHistoryKeyForFilename(filename));
+}
+
+function getNoteHistoryIndexPath(filename) {
+  return path.join(getNoteHistoryDir(filename), NOTE_HISTORY_INDEX_FILENAME);
+}
+
+function getNoteHistoryVersionsDir(filename) {
+  return path.join(getNoteHistoryDir(filename), NOTE_HISTORY_VERSIONS_DIRNAME);
+}
+
+function getNoteHistoryVersionPath(filename, versionId) {
+  return path.join(getNoteHistoryVersionsDir(filename), `${versionId}.md`);
+}
+
+function stripFrontmatterForPreview(content) {
+  const text = String(content || '');
+  if (!text.startsWith('---\n')) return text;
+  const end = text.indexOf('\n---\n', 4);
+  if (end < 0) return text;
+  return text.slice(end + 5);
+}
+
+function buildHistoryPreview(content) {
+  const source = stripFrontmatterForPreview(content);
+  const compact = source
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return compact.slice(0, 140);
+}
+
+function normalizeHistoryEntries(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const createdAt =
+        typeof item.createdAt === 'string' && !Number.isNaN(Date.parse(item.createdAt))
+          ? item.createdAt
+          : new Date().toISOString();
+      const id = typeof item.id === 'string' ? item.id.trim() : '';
+      if (!isValidHistoryVersionId(id)) return null;
+      return {
+        id,
+        createdAt,
+        source: normalizeHistorySource(item.source),
+        size: Number.isFinite(item.size) ? Number(item.size) : 0,
+        preview: typeof item.preview === 'string' ? item.preview : '',
+        ...(typeof item.fromVersionId === 'string' && item.fromVersionId ? { fromVersionId: item.fromVersionId } : {}),
+      };
+    })
+    .filter(Boolean);
+}
+
+async function readNoteHistoryIndex(filename) {
+  const indexPath = getNoteHistoryIndexPath(filename);
+  try {
+    const raw = await fs.readFile(indexPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return normalizeHistoryEntries(parsed);
+  } catch {
+    return [];
+  }
+}
+
+async function writeNoteHistoryIndex(filename, entries) {
+  const indexPath = getNoteHistoryIndexPath(filename);
+  await fs.writeFile(indexPath, JSON.stringify(entries, null, 2), 'utf-8');
+}
+
+async function readLatestHistoryContent(filename, entries) {
+  if (!entries.length) return null;
+  const latest = entries[entries.length - 1];
+  if (!latest || !isValidHistoryVersionId(latest.id)) return null;
+  try {
+    return await fs.readFile(getNoteHistoryVersionPath(filename, latest.id), 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
+async function recordNoteHistoryVersion({ filename, content, source = 'save', fromVersionId } = {}) {
+  const safeFilename = typeof filename === 'string' ? filename.trim() : '';
+  if (!safeFilename) return null;
+  if (typeof content !== 'string') return null;
+
+  const versionsDir = getNoteHistoryVersionsDir(safeFilename);
+  await fs.mkdir(versionsDir, { recursive: true });
+
+  const existingEntries = await readNoteHistoryIndex(safeFilename);
+  const latestContent = await readLatestHistoryContent(safeFilename, existingEntries);
+  if (latestContent === content) {
+    return existingEntries[existingEntries.length - 1] || null;
+  }
+
+  const versionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await fs.writeFile(getNoteHistoryVersionPath(safeFilename, versionId), content, 'utf-8');
+
+  const nextEntry = {
+    id: versionId,
+    createdAt: new Date().toISOString(),
+    source: normalizeHistorySource(source),
+    size: Buffer.byteLength(content, 'utf-8'),
+    preview: buildHistoryPreview(content),
+    ...(typeof fromVersionId === 'string' && fromVersionId ? { fromVersionId } : {}),
+  };
+
+  const nextEntries = [...existingEntries, nextEntry];
+  const overflowCount = Math.max(0, nextEntries.length - NOTE_HISTORY_MAX_VERSIONS);
+  const overflowEntries = overflowCount > 0 ? nextEntries.slice(0, overflowCount) : [];
+  const keptEntries = overflowCount > 0 ? nextEntries.slice(overflowCount) : nextEntries;
+
+  await writeNoteHistoryIndex(safeFilename, keptEntries);
+
+  await Promise.all(
+    overflowEntries.map(async (entry) => {
+      if (!entry?.id || !isValidHistoryVersionId(entry.id)) return;
+      try {
+        await fs.unlink(getNoteHistoryVersionPath(safeFilename, entry.id));
+      } catch {
+        // ignore stale cleanup errors
+      }
+    })
+  );
+
+  return nextEntry;
+}
+
+async function listNoteHistoryVersions({ filename, limit = 50 } = {}) {
+  const safeFilename = typeof filename === 'string' ? filename.trim() : '';
+  if (!safeFilename) return [];
+
+  const entries = await readNoteHistoryIndex(safeFilename);
+  const max = Number.isFinite(limit) ? Math.max(1, Math.min(Number(limit), 200)) : 50;
+  return entries
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, max);
+}
+
+async function readNoteHistoryVersionContent({ filename, versionId } = {}) {
+  const safeFilename = typeof filename === 'string' ? filename.trim() : '';
+  if (!safeFilename) throw new Error('Missing filename');
+  if (!isValidHistoryVersionId(versionId)) throw new Error('Invalid history version id');
+  return fs.readFile(getNoteHistoryVersionPath(safeFilename, versionId), 'utf-8');
 }
 
 // 检查端口是否可用
@@ -549,7 +727,7 @@ ipcMain.handle('notes:read', async (event, filename) => {
 });
 
 // IPC 处理：保存笔记
-ipcMain.handle('notes:save', async (event, { filename, content, preserveModifiedAt } = {}) => {
+ipcMain.handle('notes:save', async (event, { filename, content, preserveModifiedAt, historySource } = {}) => {
   try {
     await ensureNotesDir();
     const filepath = path.join(currentNotesDir, filename);
@@ -573,6 +751,16 @@ ipcMain.handle('notes:save', async (event, { filename, content, preserveModified
       }
     }
 
+    try {
+      await recordNoteHistoryVersion({
+        filename,
+        content,
+        source: normalizeHistorySource(historySource),
+      });
+    } catch (err) {
+      console.warn('Failed to record note history (save):', err?.message || String(err));
+    }
+
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -585,6 +773,17 @@ ipcMain.handle('notes:create', async (event, { filename, content }) => {
     await ensureNotesDir();
     const filepath = path.join(currentNotesDir, filename);
     await fs.writeFile(filepath, content, 'utf-8');
+
+    try {
+      await recordNoteHistoryVersion({
+        filename,
+        content,
+        source: 'create',
+      });
+    } catch (err) {
+      console.warn('Failed to record note history (create):', err?.message || String(err));
+    }
+
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -599,6 +798,28 @@ ipcMain.handle('notes:delete', async (event, filename) => {
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('notes:history:list', async (event, { filename, limit } = {}) => {
+  try {
+    const safeFilename = typeof filename === 'string' ? filename.trim() : '';
+    if (!safeFilename) {
+      return { success: false, error: 'Missing filename' };
+    }
+    const versions = await listNoteHistoryVersions({ filename: safeFilename, limit });
+    return { success: true, versions };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('notes:history:read', async (event, { filename, versionId } = {}) => {
+  try {
+    const content = await readNoteHistoryVersionContent({ filename, versionId });
+    return { success: true, content };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
   }
 });
 

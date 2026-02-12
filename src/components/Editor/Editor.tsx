@@ -4,9 +4,9 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Copy, FileDown, MoreHorizontal, Pin, Star, Wand2, X } from 'lucide-react';
-import { getTagColor } from '../../utils/noteUtils';
-import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, SaveNoteData, WechatAiProvider } from '../../types';
+import { ChevronLeft, ChevronRight, Copy, FileDown, History, MoreHorizontal, Pin, Star, Wand2, X } from 'lucide-react';
+import { getTagColor, parseNote } from '../../utils/noteUtils';
+import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, NoteHistoryVersion, SaveNoteData, WechatAiProvider } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import './Editor.css';
 
@@ -57,6 +57,11 @@ const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
     id: 'retro-corporate-archive',
     name: 'Retro Corporate Archive',
     description: 'Vintage annual-report style with beige paper tone, archive labels, and orange accents.',
+  },
+  {
+    id: 'editorial-pick',
+    name: 'Editorial Pick',
+    description: 'Warm beige tone with serif chapter numbers, magazine-style layout for deep reading.',
   },
 ];
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
@@ -162,6 +167,10 @@ function Editor({
   const [isWechatPreviewPanelOpen, setIsWechatPreviewPanelOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<NoteHistoryVersion[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [rollingBackVersionId, setRollingBackVersionId] = useState<string | null>(null);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
   const [selectedWechatThemeId, setSelectedWechatThemeId] = useState(DEFAULT_WECHAT_LAYOUT_THEME_ID);
   const [selectedWechatModelOptionId, setSelectedWechatModelOptionId] = useState(DEFAULT_WECHAT_MODEL_OPTION_ID);
@@ -246,6 +255,10 @@ function Editor({
   useEffect(() => {
     setIsMoreMenuOpen(false);
     setIsExportOpen(false);
+    setIsHistoryOpen(false);
+    setHistoryEntries([]);
+    setIsHistoryLoading(false);
+    setRollingBackVersionId(null);
     setIsThemePickerOpen(false);
   }, [note?.id]);
 
@@ -318,6 +331,99 @@ function Editor({
       void flushSaveForNote(note.id, note.filename);
     }, SAVE_DEBOUNCE_MS);
   }, [clearSaveDebounce, flushSaveForNote, note]);
+
+  const loadNoteHistory = useCallback(async () => {
+    if (!note) return;
+    if (typeof window.electronAPI.listNoteHistory !== 'function') {
+      showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      return;
+    }
+
+    setIsHistoryLoading(true);
+    try {
+      const result = await window.electronAPI.listNoteHistory({
+        filename: note.filename,
+        limit: 80,
+      });
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to load note history');
+      }
+      setHistoryEntries(result.versions ?? []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/No handler registered for ['"]notes:history:list['"]/i.test(message)) {
+        showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      } else {
+        showToast('error', message || 'Failed to load note history');
+      }
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [note, showToast]);
+
+  const rollbackToHistoryVersion = useCallback(async (versionId: string) => {
+    if (!note || !versionId) return;
+    if (rollingBackVersionId) return;
+    if (typeof window.electronAPI.readNoteHistoryVersion !== 'function') {
+      showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      return;
+    }
+
+    setRollingBackVersionId(versionId);
+    try {
+      await flushSaveForNote(note.id, note.filename);
+
+      const readResult = await window.electronAPI.readNoteHistoryVersion({
+        filename: note.filename,
+        versionId,
+      });
+      if (!readResult.success || typeof readResult.content !== 'string') {
+        throw new Error(readResult.error || 'Failed to read history version');
+      }
+
+      const parsed = parseNote(readResult.content, note.filename);
+      const rollbackPayload: SaveNoteData = {
+        id: note.id,
+        filename: note.filename,
+        forceFilename: note.filename,
+        title: parsed.title,
+        content: parsed.contentBody,
+        tags: parsed.tags,
+        date: parsed.date,
+        historySource: 'rollback',
+      };
+      await onSave(rollbackPayload);
+
+      delete draftCacheRef.current[note.id];
+      setTitle(parsed.title || 'Untitled');
+      setContent(parsed.contentBody || '');
+      setTags(parsed.tags || []);
+      setHasChanges(false);
+      setWechatPreview(null);
+      setIsWechatPreviewPanelOpen(false);
+      try {
+        const rendered = await remark()
+          .use(remarkGfm)
+          .use(remarkHtml)
+          .process(parsed.contentBody || '');
+        setHtmlContent(transformMediaEmbeds(String(rendered.value)));
+      } catch (renderErr) {
+        console.error('Failed to render rollback content:', renderErr);
+      }
+
+      showToast('success', 'Rolled back to selected version');
+      await loadNoteHistory();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/No handler registered for ['"]notes:history:read['"]/i.test(message)) {
+        showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      } else {
+        showToast('error', message || 'Failed to rollback');
+      }
+    } finally {
+      setRollingBackVersionId(null);
+    }
+  }, [flushSaveForNote, loadNoteHistory, note, onSave, rollingBackVersionId, showToast]);
 
   // 加载笔记（并在切换时 flush 未保存的草稿）
   useEffect(() => {
@@ -1100,6 +1206,19 @@ function Editor({
                     className="editor-more-item"
                     role="menuitem"
                     onClick={() => {
+                      setIsHistoryOpen(true);
+                      setIsMoreMenuOpen(false);
+                      void loadNoteHistory();
+                    }}
+                  >
+                    <History size={16} />
+                    <span>Version History...</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="editor-more-item"
+                    role="menuitem"
+                    onClick={() => {
                       setSelectedWechatThemeId((prev) => getWechatLayoutThemeById(prev).id);
                       setSelectedWechatModelOptionId((prev) => {
                         const selected = wechatGenerationModelOptions.find((option) => option.id === prev);
@@ -1273,6 +1392,88 @@ function Editor({
             alt=""
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {isHistoryOpen && (
+        <div
+          className="editor-history-overlay"
+          onClick={() => {
+            if (rollingBackVersionId) return;
+            setIsHistoryOpen(false);
+          }}
+        >
+          <div
+            className="editor-history-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Version History"
+          >
+            <div className="editor-history-header">
+              <div className="editor-history-header-text">
+                <h2>Version History</h2>
+                <p>Select a previous version and rollback in one click</p>
+              </div>
+              <button
+                type="button"
+                className="editor-history-close"
+                onClick={() => setIsHistoryOpen(false)}
+                disabled={Boolean(rollingBackVersionId)}
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="editor-history-body">
+              {isHistoryLoading ? (
+                <p className="editor-history-empty">Loading versions…</p>
+              ) : historyEntries.length === 0 ? (
+                <p className="editor-history-empty">No versions yet. Save this note to create the first snapshot.</p>
+              ) : (
+                <div className="editor-history-list">
+                  {historyEntries.map((entry) => {
+                    const sourceLabel = entry.source === 'rollback'
+                      ? 'Rollback'
+                      : entry.source === 'create'
+                        ? 'Created'
+                        : 'Saved';
+                    const isRollingBack = rollingBackVersionId === entry.id;
+                    const sizeInKb = Math.max(1, Math.ceil((entry.size || 0) / 1024));
+                    return (
+                      <div key={entry.id} className="editor-history-item">
+                        <div className="editor-history-item-main">
+                          <div className="editor-history-item-top">
+                            <span className="editor-history-item-time">
+                              {format(new Date(entry.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                            </span>
+                            <span className={`editor-history-item-source ${entry.source}`}>
+                              {sourceLabel}
+                            </span>
+                          </div>
+                          <p className="editor-history-item-preview">
+                            {entry.preview || 'No preview available'}
+                          </p>
+                          <span className="editor-history-item-meta">{sizeInKb} KB</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="editor-history-rollback-btn"
+                          onClick={() => {
+                            void rollbackToHistoryVersion(entry.id);
+                          }}
+                          disabled={Boolean(rollingBackVersionId)}
+                        >
+                          {isRollingBack ? 'Restoring…' : 'Rollback'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

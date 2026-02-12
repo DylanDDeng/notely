@@ -90,6 +90,28 @@ export interface WriteClipboardTextResult {
 }
 
 export type WechatAiProvider = 'moonshot' | 'openrouter';
+export type NoteHistorySource = 'save' | 'create' | 'rollback';
+
+export interface NoteHistoryVersion {
+  id: string;
+  createdAt: string;
+  source: NoteHistorySource;
+  size: number;
+  preview: string;
+  fromVersionId?: string;
+}
+
+export interface ListNoteHistoryResult {
+  success: boolean;
+  versions?: NoteHistoryVersion[];
+  error?: string;
+}
+
+export interface ReadNoteHistoryVersionResult {
+  success: boolean;
+  content?: string;
+  error?: string;
+}
 
 export interface WechatAiConfig {
   provider: WechatAiProvider;
@@ -117,11 +139,13 @@ export interface EditorNote {
 export interface SaveNoteData {
   id?: string;
   filename?: string;
+  forceFilename?: string;
   title: string;
   content: string;
   tags: string[];
   date?: string;
   preserveModifiedAt?: boolean;
+  historySource?: NoteHistorySource;
 }
 
 /**
@@ -154,9 +178,11 @@ export interface ElectronAPI {
   // 笔记相关
   getAllNotes: () => Promise<RawNote[]>;
   readNote: (filename: string) => Promise<{ success: boolean; content?: string; error?: string }>;
-  saveNote: (data: { filename: string; content: string; preserveModifiedAt?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  saveNote: (data: { filename: string; content: string; preserveModifiedAt?: boolean; historySource?: NoteHistorySource }) => Promise<{ success: boolean; error?: string }>;
   createNote: (data: { filename: string; content: string }) => Promise<{ success: boolean; error?: string }>;
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
+  listNoteHistory: (data: { filename: string; limit?: number }) => Promise<ListNoteHistoryResult>;
+  readNoteHistoryVersion: (data: { filename: string; versionId: string }) => Promise<ReadNoteHistoryVersionResult>;
   
   // 设置相关
   selectDirectory: () => Promise<string | null>;

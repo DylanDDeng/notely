@@ -59,6 +59,7 @@ const BUILT_IN_WECHAT_THEMES = [
   'Digital Tools Guide',
   'Minimal Linework',
   'Retro Corporate Archive',
+  'Editorial Pick',
 ];
 
 function Settings({

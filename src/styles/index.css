@@ -535,11 +535,13 @@
 }
 
 [data-theme="dark"] .editor-export-overlay,
+[data-theme="dark"] .editor-history-overlay,
 [data-theme="dark"] .editor-theme-overlay {
   background: rgba(0, 0, 0, 0.7);
 }
 
 [data-theme="dark"] .editor-export-modal,
+[data-theme="dark"] .editor-history-modal,
 [data-theme="dark"] .editor-theme-modal {
   background: rgba(18, 18, 18, 0.98);
   border-color: rgba(255, 255, 255, 0.1);
@@ -547,17 +549,20 @@
 }
 
 [data-theme="dark"] .editor-export-header,
+[data-theme="dark"] .editor-history-header,
 [data-theme="dark"] .editor-theme-header {
   background: rgba(10, 10, 10, 0.8);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="dark"] .editor-export-header-text h2,
+[data-theme="dark"] .editor-history-header-text h2,
 [data-theme="dark"] .editor-theme-header-text h2 {
   color: #ffffff;
 }
 
 [data-theme="dark"] .editor-export-close,
+[data-theme="dark"] .editor-history-close,
 [data-theme="dark"] .editor-theme-close {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.1);
@@ -565,6 +570,7 @@
 }
 
 [data-theme="dark"] .editor-export-close:hover,
+[data-theme="dark"] .editor-history-close:hover,
 [data-theme="dark"] .editor-theme-close:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
@@ -586,6 +592,7 @@
 }
 
 [data-theme="dark"] .editor-export-btn.secondary,
+[data-theme="dark"] .editor-history-rollback-btn,
 [data-theme="dark"] .editor-theme-btn.secondary {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.1);
@@ -593,8 +600,37 @@
 }
 
 [data-theme="dark"] .editor-export-btn.secondary:hover,
+[data-theme="dark"] .editor-history-rollback-btn:hover,
 [data-theme="dark"] .editor-theme-btn.secondary:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .editor-history-item {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .editor-history-item-time {
+  color: #ffffff;
+}
+
+[data-theme="dark"] .editor-history-item-preview {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .editor-history-item-source.save {
+  background: rgba(59, 130, 246, 0.25);
+  color: #bfdbfe;
+}
+
+[data-theme="dark"] .editor-history-item-source.create {
+  background: rgba(34, 197, 94, 0.25);
+  color: #bbf7d0;
+}
+
+[data-theme="dark"] .editor-history-item-source.rollback {
+  background: rgba(234, 88, 12, 0.28);
+  color: #fed7aa;
 }
 
 [data-theme="dark"] .editor-export-btn.primary,
