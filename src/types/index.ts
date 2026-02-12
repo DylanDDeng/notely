@@ -98,6 +98,8 @@ export interface NoteHistoryVersion {
   source: NoteHistorySource;
   size: number;
   preview: string;
+  label: string;
+  pinned: boolean;
   fromVersionId?: string;
 }
 
@@ -110,6 +112,12 @@ export interface ListNoteHistoryResult {
 export interface ReadNoteHistoryVersionResult {
   success: boolean;
   content?: string;
+  error?: string;
+}
+
+export interface UpdateNoteHistoryVersionResult {
+  success: boolean;
+  version?: NoteHistoryVersion;
   error?: string;
 }
 
@@ -183,6 +191,7 @@ export interface ElectronAPI {
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
   listNoteHistory: (data: { filename: string; limit?: number }) => Promise<ListNoteHistoryResult>;
   readNoteHistoryVersion: (data: { filename: string; versionId: string }) => Promise<ReadNoteHistoryVersionResult>;
+  updateNoteHistoryVersion: (data: { filename: string; versionId: string; label?: string; pinned?: boolean }) => Promise<UpdateNoteHistoryVersionResult>;
   
   // 设置相关
   selectDirectory: () => Promise<string | null>;

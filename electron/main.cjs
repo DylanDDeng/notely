@@ -120,6 +120,8 @@ function normalizeHistoryEntries(raw) {
         source: normalizeHistorySource(item.source),
         size: Number.isFinite(item.size) ? Number(item.size) : 0,
         preview: typeof item.preview === 'string' ? item.preview : '',
+        label: typeof item.label === 'string' ? item.label : '',
+        pinned: Boolean(item.pinned),
         ...(typeof item.fromVersionId === 'string' && item.fromVersionId ? { fromVersionId: item.fromVersionId } : {}),
       };
     })
@@ -140,6 +142,12 @@ async function readNoteHistoryIndex(filename) {
 async function writeNoteHistoryIndex(filename, entries) {
   const indexPath = getNoteHistoryIndexPath(filename);
   await fs.writeFile(indexPath, JSON.stringify(entries, null, 2), 'utf-8');
+}
+
+function sortHistoryEntriesChronological(entries) {
+  return entries
+    .slice()
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
 async function readLatestHistoryContent(filename, entries) {
@@ -176,13 +184,22 @@ async function recordNoteHistoryVersion({ filename, content, source = 'save', fr
     source: normalizeHistorySource(source),
     size: Buffer.byteLength(content, 'utf-8'),
     preview: buildHistoryPreview(content),
+    label: '',
+    pinned: false,
     ...(typeof fromVersionId === 'string' && fromVersionId ? { fromVersionId } : {}),
   };
 
   const nextEntries = [...existingEntries, nextEntry];
-  const overflowCount = Math.max(0, nextEntries.length - NOTE_HISTORY_MAX_VERSIONS);
-  const overflowEntries = overflowCount > 0 ? nextEntries.slice(0, overflowCount) : [];
-  const keptEntries = overflowCount > 0 ? nextEntries.slice(overflowCount) : nextEntries;
+  const pinnedEntries = nextEntries.filter((entry) => entry.pinned);
+  const unpinnedEntries = nextEntries.filter((entry) => !entry.pinned);
+  const unpinnedKeepCount = Math.max(0, NOTE_HISTORY_MAX_VERSIONS - pinnedEntries.length);
+  const keptUnpinnedEntries =
+    unpinnedKeepCount > 0
+      ? unpinnedEntries.slice(Math.max(0, unpinnedEntries.length - unpinnedKeepCount))
+      : [];
+  const keptIds = new Set([...pinnedEntries, ...keptUnpinnedEntries].map((entry) => entry.id));
+  const keptEntries = sortHistoryEntriesChronological(nextEntries.filter((entry) => keptIds.has(entry.id)));
+  const overflowEntries = nextEntries.filter((entry) => !keptIds.has(entry.id));
 
   await writeNoteHistoryIndex(safeFilename, keptEntries);
 
@@ -210,6 +227,32 @@ async function listNoteHistoryVersions({ filename, limit = 50 } = {}) {
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, max);
+}
+
+async function updateNoteHistoryVersionMeta({ filename, versionId, label, pinned } = {}) {
+  const safeFilename = typeof filename === 'string' ? filename.trim() : '';
+  if (!safeFilename) throw new Error('Missing filename');
+  if (!isValidHistoryVersionId(versionId)) throw new Error('Invalid history version id');
+
+  const entries = await readNoteHistoryIndex(safeFilename);
+  const targetIndex = entries.findIndex((entry) => entry.id === versionId);
+  if (targetIndex < 0) {
+    throw new Error('History version not found');
+  }
+
+  const nextEntries = entries.slice();
+  const target = { ...nextEntries[targetIndex] };
+
+  if (typeof label === 'string') {
+    target.label = label.trim().slice(0, 100);
+  }
+  if (typeof pinned === 'boolean') {
+    target.pinned = pinned;
+  }
+
+  nextEntries[targetIndex] = target;
+  await writeNoteHistoryIndex(safeFilename, nextEntries);
+  return target;
 }
 
 async function readNoteHistoryVersionContent({ filename, versionId } = {}) {
@@ -818,6 +861,15 @@ ipcMain.handle('notes:history:read', async (event, { filename, versionId } = {})
   try {
     const content = await readNoteHistoryVersionContent({ filename, versionId });
     return { success: true, content };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('notes:history:update', async (event, { filename, versionId, label, pinned } = {}) => {
+  try {
+    const version = await updateNoteHistoryVersionMeta({ filename, versionId, label, pinned });
+    return { success: true, version };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
   }

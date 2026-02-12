@@ -6,7 +6,7 @@ import remarkHtml from 'remark-html';
 import { format } from 'date-fns';
 import { ChevronLeft, ChevronRight, Copy, FileDown, History, MoreHorizontal, Pin, Star, Wand2, X } from 'lucide-react';
 import { getTagColor, parseNote } from '../../utils/noteUtils';
-import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, NoteHistoryVersion, SaveNoteData, WechatAiProvider } from '../../types';
+import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, NoteHistorySource, NoteHistoryVersion, SaveNoteData, WechatAiProvider } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import './Editor.css';
 
@@ -40,6 +40,13 @@ type WechatGenerationModelOption = {
   model: string;
   configured: boolean;
 };
+type HistoryFilter = 'all' | NoteHistorySource;
+type HistoryDiffLine = {
+  type: 'context' | 'add' | 'remove';
+  text: string;
+  oldLine: number | null;
+  newLine: number | null;
+};
 
 const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
 const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
@@ -66,6 +73,17 @@ const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
 ];
 const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
 const DEFAULT_WECHAT_MODEL_OPTION_ID = 'moonshot';
+const HISTORY_FILTER_OPTIONS: Array<{ id: HistoryFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'save', label: 'Save' },
+  { id: 'create', label: 'Create' },
+  { id: 'rollback', label: 'Rollback' },
+];
+const HISTORY_SOURCE_LABELS: Record<NoteHistorySource, string> = {
+  save: 'Saved',
+  create: 'Created',
+  rollback: 'Rollback',
+};
 const getWechatLayoutThemeById = (themeId: string): WechatLayoutTheme =>
   WECHAT_LAYOUT_THEMES.find((theme) => theme.id === themeId) ?? WECHAT_LAYOUT_THEMES[0];
 
@@ -125,6 +143,67 @@ const buildWechatPreviewSrcDoc = (html: string): string => `<!doctype html>
   <body>${html}</body>
 </html>`;
 
+const splitLines = (text: string): string[] => {
+  const normalized = String(text || '').replace(/\r/g, '');
+  if (!normalized) return [];
+  return normalized.split('\n');
+};
+
+const buildHistoryDiff = (previousText: string, currentText: string): HistoryDiffLine[] => {
+  const previousLines = splitLines(previousText);
+  const currentLines = splitLines(currentText);
+  const lines: HistoryDiffLine[] = [];
+
+  let prevIndex = 0;
+  let currIndex = 0;
+  let prevLineNumber = 1;
+  let currLineNumber = 1;
+
+  while (prevIndex < previousLines.length || currIndex < currentLines.length) {
+    const prevLine = prevIndex < previousLines.length ? previousLines[prevIndex] : null;
+    const currLine = currIndex < currentLines.length ? currentLines[currIndex] : null;
+
+    if (prevLine !== null && currLine !== null && prevLine === currLine) {
+      lines.push({ type: 'context', text: prevLine, oldLine: prevLineNumber, newLine: currLineNumber });
+      prevIndex += 1;
+      currIndex += 1;
+      prevLineNumber += 1;
+      currLineNumber += 1;
+      continue;
+    }
+
+    const prevNext = prevIndex + 1 < previousLines.length ? previousLines[prevIndex + 1] : null;
+    const currNext = currIndex + 1 < currentLines.length ? currentLines[currIndex + 1] : null;
+
+    if (prevLine !== null && prevNext === currLine) {
+      lines.push({ type: 'remove', text: prevLine, oldLine: prevLineNumber, newLine: null });
+      prevIndex += 1;
+      prevLineNumber += 1;
+      continue;
+    }
+
+    if (currLine !== null && currNext === prevLine) {
+      lines.push({ type: 'add', text: currLine, oldLine: null, newLine: currLineNumber });
+      currIndex += 1;
+      currLineNumber += 1;
+      continue;
+    }
+
+    if (prevLine !== null) {
+      lines.push({ type: 'remove', text: prevLine, oldLine: prevLineNumber, newLine: null });
+      prevIndex += 1;
+      prevLineNumber += 1;
+    }
+    if (currLine !== null) {
+      lines.push({ type: 'add', text: currLine, oldLine: null, newLine: currLineNumber });
+      currIndex += 1;
+      currLineNumber += 1;
+    }
+  }
+
+  return lines;
+};
+
 function Editor({
   note,
   onSave,
@@ -170,6 +249,12 @@ function Editor({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<NoteHistoryVersion[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
+  const [selectedHistoryVersionId, setSelectedHistoryVersionId] = useState<string | null>(null);
+  const [selectedHistoryContent, setSelectedHistoryContent] = useState('');
+  const [isHistoryVersionLoading, setIsHistoryVersionLoading] = useState(false);
+  const [historyLabelDrafts, setHistoryLabelDrafts] = useState<Record<string, string>>({});
+  const [savingHistoryMetaId, setSavingHistoryMetaId] = useState<string | null>(null);
   const [rollingBackVersionId, setRollingBackVersionId] = useState<string | null>(null);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
   const [selectedWechatThemeId, setSelectedWechatThemeId] = useState(DEFAULT_WECHAT_LAYOUT_THEME_ID);
@@ -185,6 +270,7 @@ function Editor({
     includePageNumbers: true,
   });
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const historyVersionContentCacheRef = useRef<Record<string, string>>({});
   const isPreviewMode = editorMode === 'preview';
   const isSourceMode = editorMode === 'source';
   const isEditing = editorMode === 'live' || editorMode === 'source';
@@ -258,7 +344,14 @@ function Editor({
     setIsHistoryOpen(false);
     setHistoryEntries([]);
     setIsHistoryLoading(false);
+    setHistoryFilter('all');
+    setSelectedHistoryVersionId(null);
+    setSelectedHistoryContent('');
+    setIsHistoryVersionLoading(false);
+    setHistoryLabelDrafts({});
+    setSavingHistoryMetaId(null);
     setRollingBackVersionId(null);
+    historyVersionContentCacheRef.current = {};
     setIsThemePickerOpen(false);
   }, [note?.id]);
 
@@ -332,6 +425,79 @@ function Editor({
     }, SAVE_DEBOUNCE_MS);
   }, [clearSaveDebounce, flushSaveForNote, note]);
 
+  const readHistoryVersionBody = useCallback(async (versionId: string): Promise<string | null> => {
+    if (!note || !versionId) return null;
+    if (typeof window.electronAPI.readNoteHistoryVersion !== 'function') {
+      showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      return null;
+    }
+
+    const cached = historyVersionContentCacheRef.current[versionId];
+    if (typeof cached === 'string') return cached;
+
+    try {
+      const readResult = await window.electronAPI.readNoteHistoryVersion({
+        filename: note.filename,
+        versionId,
+      });
+      if (!readResult.success || typeof readResult.content !== 'string') {
+        throw new Error(readResult.error || 'Failed to read history version');
+      }
+      const parsed = parseNote(readResult.content, note.filename);
+      const body = parsed.contentBody || '';
+      historyVersionContentCacheRef.current[versionId] = body;
+      return body;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/No handler registered for ['"]notes:history:read['"]/i.test(message)) {
+        showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      } else {
+        showToast('error', message || 'Failed to read history version');
+      }
+      return null;
+    }
+  }, [note, showToast]);
+
+  const updateHistoryVersionMeta = useCallback(async (versionId: string, changes: { label?: string; pinned?: boolean }) => {
+    if (!note || !versionId) return false;
+    if (typeof window.electronAPI.updateNoteHistoryVersion !== 'function') {
+      showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      return false;
+    }
+
+    setSavingHistoryMetaId(versionId);
+    try {
+      const result = await window.electronAPI.updateNoteHistoryVersion({
+        filename: note.filename,
+        versionId,
+        ...changes,
+      });
+      if (!result.success || !result.version) {
+        throw new Error(result.error || 'Failed to update history version');
+      }
+      const updatedVersion = result.version;
+
+      setHistoryEntries((prev) => prev.map((entry) => (
+        entry.id === updatedVersion.id ? updatedVersion : entry
+      )));
+      setHistoryLabelDrafts((prev) => ({
+        ...prev,
+        [updatedVersion.id]: updatedVersion.label || '',
+      }));
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/No handler registered for ['"]notes:history:update['"]/i.test(message)) {
+        showToast('error', 'Main process is outdated. Restart Notely and try again.');
+      } else {
+        showToast('error', message || 'Failed to update history version');
+      }
+      return false;
+    } finally {
+      setSavingHistoryMetaId(null);
+    }
+  }, [note, showToast]);
+
   const loadNoteHistory = useCallback(async () => {
     if (!note) return;
     if (typeof window.electronAPI.listNoteHistory !== 'function') {
@@ -343,12 +509,16 @@ function Editor({
     try {
       const result = await window.electronAPI.listNoteHistory({
         filename: note.filename,
-        limit: 80,
+        limit: 120,
       });
       if (!result.success) {
         throw new Error(result.error || 'Failed to load note history');
       }
-      setHistoryEntries(result.versions ?? []);
+      const versions = result.versions ?? [];
+      setHistoryEntries(versions);
+      setHistoryLabelDrafts(
+        Object.fromEntries(versions.map((entry) => [entry.id, entry.label || '']))
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/No handler registered for ['"]notes:history:list['"]/i.test(message)) {
@@ -360,6 +530,104 @@ function Editor({
       setIsHistoryLoading(false);
     }
   }, [note, showToast]);
+
+  const filteredHistoryEntries = useMemo(() => {
+    const filtered = historyFilter === 'all'
+      ? historyEntries
+      : historyEntries.filter((entry) => entry.source === historyFilter);
+    return filtered.slice().sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [historyEntries, historyFilter]);
+
+  const selectedHistoryEntry = useMemo(() => {
+    if (!selectedHistoryVersionId) return null;
+    return historyEntries.find((entry) => entry.id === selectedHistoryVersionId) ?? null;
+  }, [historyEntries, selectedHistoryVersionId]);
+
+  const selectedHistoryLabelDraft = useMemo(() => {
+    if (!selectedHistoryEntry) return '';
+    return historyLabelDrafts[selectedHistoryEntry.id] ?? selectedHistoryEntry.label ?? '';
+  }, [historyLabelDrafts, selectedHistoryEntry]);
+
+  const isSelectedHistoryLabelDirty = useMemo(() => {
+    if (!selectedHistoryEntry) return false;
+    const currentLabel = (selectedHistoryEntry.label || '').trim();
+    const draftLabel = selectedHistoryLabelDraft.trim();
+    return currentLabel !== draftLabel;
+  }, [selectedHistoryEntry, selectedHistoryLabelDraft]);
+
+  const historyDiffLines = useMemo(() => {
+    if (!selectedHistoryVersionId) return [];
+    return buildHistoryDiff(selectedHistoryContent, content);
+  }, [content, selectedHistoryContent, selectedHistoryVersionId]);
+
+  const historyDiffStats = useMemo(() => {
+    return historyDiffLines.reduce(
+      (acc, line) => {
+        if (line.type === 'add') acc.additions += 1;
+        if (line.type === 'remove') acc.removals += 1;
+        return acc;
+      },
+      { additions: 0, removals: 0 }
+    );
+  }, [historyDiffLines]);
+  const selectedHistorySourceLabel = selectedHistoryEntry ? HISTORY_SOURCE_LABELS[selectedHistoryEntry.source] : '';
+  const selectedHistorySizeInKb = selectedHistoryEntry
+    ? Math.max(1, Math.ceil((selectedHistoryEntry.size || 0) / 1024))
+    : 0;
+  const isSelectedHistoryMetaSaving = selectedHistoryEntry ? savingHistoryMetaId === selectedHistoryEntry.id : false;
+  const isSelectedHistoryRollingBack = selectedHistoryEntry ? rollingBackVersionId === selectedHistoryEntry.id : false;
+
+  const saveSelectedHistoryLabel = useCallback(async () => {
+    if (!selectedHistoryEntry) return;
+    if (!isSelectedHistoryLabelDirty) return;
+    await updateHistoryVersionMeta(selectedHistoryEntry.id, {
+      label: selectedHistoryLabelDraft,
+    });
+  }, [isSelectedHistoryLabelDirty, selectedHistoryEntry, selectedHistoryLabelDraft, updateHistoryVersionMeta]);
+
+  const toggleHistoryEntryPinned = useCallback(async (entry: NoteHistoryVersion) => {
+    await updateHistoryVersionMeta(entry.id, {
+      pinned: !entry.pinned,
+    });
+  }, [updateHistoryVersionMeta]);
+
+  useEffect(() => {
+    if (!isHistoryOpen) return;
+    if (!filteredHistoryEntries.length) {
+      setSelectedHistoryVersionId(null);
+      setSelectedHistoryContent('');
+      return;
+    }
+    const selectedStillVisible = selectedHistoryVersionId
+      ? filteredHistoryEntries.some((entry) => entry.id === selectedHistoryVersionId)
+      : false;
+    if (!selectedStillVisible) {
+      setSelectedHistoryVersionId(filteredHistoryEntries[0].id);
+    }
+  }, [filteredHistoryEntries, isHistoryOpen, selectedHistoryVersionId]);
+
+  useEffect(() => {
+    if (!isHistoryOpen || !selectedHistoryVersionId) {
+      setIsHistoryVersionLoading(false);
+      return;
+    }
+    let cancelled = false;
+
+    setIsHistoryVersionLoading(true);
+    void (async () => {
+      const nextContent = await readHistoryVersionBody(selectedHistoryVersionId);
+      if (cancelled) return;
+      setSelectedHistoryContent(nextContent || '');
+      setIsHistoryVersionLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHistoryOpen, readHistoryVersionBody, selectedHistoryVersionId]);
 
   const rollbackToHistoryVersion = useCallback(async (versionId: string) => {
     if (!note || !versionId) return;
@@ -394,6 +662,7 @@ function Editor({
       };
       await onSave(rollbackPayload);
 
+      historyVersionContentCacheRef.current[versionId] = parsed.contentBody || '';
       delete draftCacheRef.current[note.id];
       setTitle(parsed.title || 'Untitled');
       setContent(parsed.contentBody || '');
@@ -401,6 +670,8 @@ function Editor({
       setHasChanges(false);
       setWechatPreview(null);
       setIsWechatPreviewPanelOpen(false);
+      setSelectedHistoryVersionId(versionId);
+      setSelectedHistoryContent(parsed.contentBody || '');
       try {
         const rendered = await remark()
           .use(remarkGfm)
@@ -1413,7 +1684,22 @@ function Editor({
             <div className="editor-history-header">
               <div className="editor-history-header-text">
                 <h2>Version History</h2>
-                <p>Select a previous version and rollback in one click</p>
+                <p>Compare snapshots, label key versions, and rollback in one click</p>
+                <div className="editor-history-filters" role="tablist" aria-label="History source filter">
+                  {HISTORY_FILTER_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={historyFilter === option.id}
+                      className={`editor-history-filter-btn ${historyFilter === option.id ? 'active' : ''}`}
+                      onClick={() => setHistoryFilter(option.id)}
+                      disabled={isHistoryLoading || Boolean(rollingBackVersionId)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 type="button"
@@ -1431,45 +1717,154 @@ function Editor({
                 <p className="editor-history-empty">Loading versions…</p>
               ) : historyEntries.length === 0 ? (
                 <p className="editor-history-empty">No versions yet. Save this note to create the first snapshot.</p>
+              ) : filteredHistoryEntries.length === 0 ? (
+                <p className="editor-history-empty">No versions match this filter yet.</p>
               ) : (
-                <div className="editor-history-list">
-                  {historyEntries.map((entry) => {
-                    const sourceLabel = entry.source === 'rollback'
-                      ? 'Rollback'
-                      : entry.source === 'create'
-                        ? 'Created'
-                        : 'Saved';
-                    const isRollingBack = rollingBackVersionId === entry.id;
-                    const sizeInKb = Math.max(1, Math.ceil((entry.size || 0) / 1024));
-                    return (
-                      <div key={entry.id} className="editor-history-item">
-                        <div className="editor-history-item-main">
-                          <div className="editor-history-item-top">
-                            <span className="editor-history-item-time">
-                              {format(new Date(entry.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                            </span>
-                            <span className={`editor-history-item-source ${entry.source}`}>
-                              {sourceLabel}
-                            </span>
+                <div className="editor-history-layout">
+                  <div className="editor-history-list-pane">
+                    <div className="editor-history-list">
+                      {filteredHistoryEntries.map((entry) => {
+                        const sourceLabel = HISTORY_SOURCE_LABELS[entry.source];
+                        const isSelected = selectedHistoryVersionId === entry.id;
+                        const sizeInKb = Math.max(1, Math.ceil((entry.size || 0) / 1024));
+                        const labelDraft = (historyLabelDrafts[entry.id] ?? entry.label ?? '').trim();
+                        return (
+                          <div key={entry.id} className={`editor-history-item ${isSelected ? 'selected' : ''}`}>
+                            <button
+                              type="button"
+                              className="editor-history-item-select"
+                              onClick={() => setSelectedHistoryVersionId(entry.id)}
+                            >
+                              <div className="editor-history-item-main">
+                                <div className="editor-history-item-top">
+                                  <span className="editor-history-item-time">
+                                    {format(new Date(entry.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                                  </span>
+                                  <span className={`editor-history-item-source ${entry.source}`}>
+                                    {sourceLabel}
+                                  </span>
+                                </div>
+                                <p className="editor-history-item-preview">
+                                  {labelDraft || entry.preview || 'No preview available'}
+                                </p>
+                                <span className="editor-history-item-meta">{sizeInKb} KB</span>
+                              </div>
+                            </button>
+                            <button
+                              type="button"
+                              className={`editor-history-pin-btn ${entry.pinned ? 'active' : ''}`}
+                              aria-pressed={entry.pinned}
+                              title={entry.pinned ? 'Unpin version' : 'Pin version'}
+                              onClick={() => {
+                                void toggleHistoryEntryPinned(entry);
+                              }}
+                              disabled={Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
+                            >
+                              <Pin size={14} />
+                            </button>
                           </div>
-                          <p className="editor-history-item-preview">
-                            {entry.preview || 'No preview available'}
-                          </p>
-                          <span className="editor-history-item-meta">{sizeInKb} KB</span>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="editor-history-detail-pane">
+                    {!selectedHistoryEntry ? (
+                      <p className="editor-history-empty">Select a version from the list to compare and rollback.</p>
+                    ) : (
+                      <>
+                        <div className="editor-history-detail-head">
+                          <div className="editor-history-detail-main">
+                            <span className={`editor-history-item-source ${selectedHistoryEntry.source}`}>
+                              {selectedHistorySourceLabel}
+                            </span>
+                            <span className="editor-history-item-time">
+                              {format(new Date(selectedHistoryEntry.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                            </span>
+                            <span className="editor-history-item-meta">{selectedHistorySizeInKb} KB</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={`editor-history-pin-btn ${selectedHistoryEntry.pinned ? 'active' : ''}`}
+                            aria-pressed={selectedHistoryEntry.pinned}
+                            title={selectedHistoryEntry.pinned ? 'Unpin version' : 'Pin version'}
+                            onClick={() => {
+                              void toggleHistoryEntryPinned(selectedHistoryEntry);
+                            }}
+                            disabled={Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
+                          >
+                            <Pin size={14} />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="editor-history-rollback-btn"
-                          onClick={() => {
-                            void rollbackToHistoryVersion(entry.id);
-                          }}
-                          disabled={Boolean(rollingBackVersionId)}
-                        >
-                          {isRollingBack ? 'Restoring…' : 'Rollback'}
-                        </button>
-                      </div>
-                    );
-                  })}
+
+                        <div className="editor-history-label-row">
+                          <input
+                            type="text"
+                            className="editor-history-label-input"
+                            value={selectedHistoryLabelDraft}
+                            onChange={(event) => {
+                              const nextLabel = event.target.value.slice(0, 100);
+                              setHistoryLabelDrafts((prev) => ({
+                                ...prev,
+                                [selectedHistoryEntry.id]: nextLabel,
+                              }));
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return;
+                              event.preventDefault();
+                              void saveSelectedHistoryLabel();
+                            }}
+                            placeholder="Version label (optional)"
+                            maxLength={100}
+                            disabled={Boolean(rollingBackVersionId)}
+                          />
+                          <button
+                            type="button"
+                            className="editor-history-action-btn secondary"
+                            onClick={() => {
+                              void saveSelectedHistoryLabel();
+                            }}
+                            disabled={Boolean(rollingBackVersionId) || !isSelectedHistoryLabelDirty || isSelectedHistoryMetaSaving}
+                          >
+                            {isSelectedHistoryMetaSaving ? 'Saving…' : 'Save Label'}
+                          </button>
+                          <button
+                            type="button"
+                            className="editor-history-action-btn primary"
+                            onClick={() => {
+                              void rollbackToHistoryVersion(selectedHistoryEntry.id);
+                            }}
+                            disabled={Boolean(rollingBackVersionId)}
+                          >
+                            {isSelectedHistoryRollingBack ? 'Restoring…' : 'Rollback'}
+                          </button>
+                        </div>
+
+                        <div className="editor-history-diff-summary">
+                          {historyDiffStats.additions === 0 && historyDiffStats.removals === 0
+                            ? 'No content changes compared with current draft.'
+                            : `Compared with current draft: +${historyDiffStats.additions} / -${historyDiffStats.removals}`}
+                        </div>
+
+                        <div className="editor-history-diff">
+                          {isHistoryVersionLoading ? (
+                            <p className="editor-history-empty">Loading selected version…</p>
+                          ) : (
+                            historyDiffLines.map((line, index) => (
+                              <div key={`${line.oldLine ?? 'o'}-${line.newLine ?? 'n'}-${index}`} className={`editor-history-diff-line ${line.type}`}>
+                                <span className="editor-history-diff-number">{line.oldLine ?? ''}</span>
+                                <span className="editor-history-diff-number">{line.newLine ?? ''}</span>
+                                <span className="editor-history-diff-marker">
+                                  {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ''}
+                                </span>
+                                <span className="editor-history-diff-text">{line.text || ' '}</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
