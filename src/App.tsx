@@ -17,6 +17,7 @@ type ViewType = 'welcome' | 'main' | 'settings';
 type FilterType = 'all' | 'calendar' | 'favorites' | 'archive' | 'trash' | string;
 type NotesView = 'list' | 'grid';
 type NotesSortOrder = 'desc' | 'asc';
+type Theme = 'light' | 'dark' | 'system';
 
 const STORAGE_PATH_KEY = 'notes:storagePath';
 const FONT_FAMILY_KEY = 'notes:fontFamily';
@@ -33,6 +34,7 @@ const DEFAULT_WECHAT_OPENROUTER_MODEL = 'google/gemini-3-pro-preview';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const DAILY_NOTE_FILENAME_RE = /^\d{4}-\d{2}-\d{2}\.md$/i;
+const THEME_KEY = 'notes:theme';
 
 const toYmd = (date: Date): string => {
   const year = date.getFullYear();
@@ -179,6 +181,32 @@ const saveMiddlePaneCollapsed = (collapsed: boolean) => {
   }
 };
 
+const getSavedTheme = (): Theme => {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark' || saved === 'system') {
+      return saved;
+    }
+  } catch {
+    // ignore
+  }
+  return 'system';
+};
+
+const saveTheme = (theme: Theme) => {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    // ignore
+  }
+};
+
+const applyTheme = (theme: Theme) => {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const effectiveTheme = theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
+  document.documentElement.setAttribute('data-theme', effectiveTheme);
+};
+
 function App() {
   const [view, setView] = useState<ViewType>('welcome');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -199,6 +227,7 @@ function App() {
   const [wechatOpenRouterModel, setWechatOpenRouterModel] = useState<string>(() => getSavedWechatOpenRouterModel());
   const [selectedKanbanId, setSelectedKanbanId] = useState<string | null>(null);
   const [isMiddlePaneCollapsed, setIsMiddlePaneCollapsed] = useState<boolean>(() => getSavedMiddlePaneCollapsed());
+  const [theme, setTheme] = useState<Theme>(() => getSavedTheme());
   const [notesSortOrder, setNotesSortOrder] = useState<NotesSortOrder>(() => {
     try {
       return localStorage.getItem(NOTES_SORT_ORDER_KEY) === 'asc' ? 'asc' : 'desc';
@@ -259,6 +288,18 @@ function App() {
 
     document.documentElement.style.setProperty('--app-font-family', `${trimmed}, ${DEFAULT_FONT_STACK}`);
   }, [appFontFamily]);
+
+  useEffect(() => {
+    applyTheme(theme);
+    
+    if (theme !== 'system') return;
+    
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => applyTheme('system');
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
 
   // 初始化：检查是否是首次启动
   useEffect(() => {
@@ -535,6 +576,11 @@ function App() {
     const value = model.trim() || DEFAULT_WECHAT_OPENROUTER_MODEL;
     setWechatOpenRouterModel(value);
     saveWechatOpenRouterModel(value);
+  }, []);
+
+  const handleChangeTheme = useCallback((nextTheme: Theme) => {
+    setTheme(nextTheme);
+    saveTheme(nextTheme);
   }, []);
 
   const handleOpenDailyNote = useCallback(async (date: Date) => {
@@ -876,6 +922,8 @@ function App() {
           onChangeStoragePath={handleChangeStoragePath}
           fontFamily={appFontFamily}
           onChangeFontFamily={handleChangeFontFamily}
+          theme={theme}
+          onChangeTheme={handleChangeTheme}
           wechatMoonshotApiKey={wechatMoonshotApiKey}
           wechatMoonshotModel={wechatMoonshotModel}
           onChangeWechatMoonshotApiKey={handleChangeWechatMoonshotApiKey}

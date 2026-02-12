@@ -29,12 +29,20 @@ const AUTO_SAVE_OPTIONS = [
   { value: 300000, label: '5 minutes' },
 ];
 
+const THEME_OPTIONS: Array<{ value: 'light' | 'dark' | 'system'; label: string }> = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
+];
+
 interface SettingsProps {
   onBack: () => void;
   storagePath: string;
   onChangeStoragePath: (path: string) => Promise<void>;
   fontFamily: string;
   onChangeFontFamily: (fontFamily: string) => void;
+  theme: 'light' | 'dark' | 'system';
+  onChangeTheme: (theme: 'light' | 'dark' | 'system') => void;
   wechatMoonshotApiKey: string;
   wechatMoonshotModel: string;
   onChangeWechatMoonshotApiKey: (apiKey: string) => void;
@@ -59,6 +67,8 @@ function Settings({
   onChangeStoragePath,
   fontFamily,
   onChangeFontFamily,
+  theme,
+  onChangeTheme,
   wechatMoonshotApiKey,
   wechatMoonshotModel,
   onChangeWechatMoonshotApiKey,
@@ -286,6 +296,28 @@ function Settings({
       <p className="settings-page-description">
         Customize the look and feel of the application
       </p>
+
+      <section className="settings-section">
+        <h3 className="settings-section-title">Theme</h3>
+
+        <div className="settings-item">
+          <div className="settings-item-info">
+            <span className="settings-item-label">Color theme</span>
+            <span className="settings-item-description">
+              Choose light, dark, or follow system preference
+            </span>
+          </div>
+          <select
+            className="settings-select"
+            value={theme}
+            onChange={(e) => onChangeTheme(e.target.value as 'light' | 'dark' | 'system')}
+          >
+            {THEME_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      </section>
 
       <section className="settings-section">
         <h3 className="settings-section-title">Typography</h3>
