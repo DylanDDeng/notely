@@ -1065,20 +1065,16 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 23, 42, 0.42);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(15, 23, 42, 0.32);
 }
 
 .editor-history-modal {
   width: min(1080px, 100%);
   max-height: min(84vh, 760px);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: #f8fafc;
+  border: 1px solid #dbe3eb;
   border-radius: 16px;
-  box-shadow: 0 34px 90px rgba(15, 23, 42, 0.28);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 26px 72px rgba(15, 23, 42, 0.24);
   display: flex;
   flex-direction: column;
   overflow: hidden;
