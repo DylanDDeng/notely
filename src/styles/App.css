@@ -25,6 +25,15 @@
   padding: 10px;
 }
 
+.app-settings {
+  width: 100%;
+}
+
+.app-settings > .settings {
+  flex: 1;
+  min-width: 0;
+}
+
 .app-main > .sidebar,
 .app-main > .notes-list,
 .app-main > .kanban-boards,
