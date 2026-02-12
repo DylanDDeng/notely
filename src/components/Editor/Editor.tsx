@@ -254,6 +254,9 @@ function Editor({
   const [selectedHistoryContent, setSelectedHistoryContent] = useState('');
   const [isHistoryVersionLoading, setIsHistoryVersionLoading] = useState(false);
   const [historyLabelDrafts, setHistoryLabelDrafts] = useState<Record<string, string>>({});
+  const [historyMetaUpdateEnabled, setHistoryMetaUpdateEnabled] = useState(
+    () => typeof window.electronAPI.updateNoteHistoryVersion === 'function'
+  );
   const [savingHistoryMetaId, setSavingHistoryMetaId] = useState<string | null>(null);
   const [rollingBackVersionId, setRollingBackVersionId] = useState<string | null>(null);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
@@ -271,6 +274,7 @@ function Editor({
   });
   const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const historyVersionContentCacheRef = useRef<Record<string, string>>({});
+  const historyMetaUpdateHintShownRef = useRef(false);
   const isPreviewMode = editorMode === 'preview';
   const isSourceMode = editorMode === 'source';
   const isEditing = editorMode === 'live' || editorMode === 'source';
@@ -349,6 +353,8 @@ function Editor({
     setSelectedHistoryContent('');
     setIsHistoryVersionLoading(false);
     setHistoryLabelDrafts({});
+    setHistoryMetaUpdateEnabled(typeof window.electronAPI.updateNoteHistoryVersion === 'function');
+    historyMetaUpdateHintShownRef.current = false;
     setSavingHistoryMetaId(null);
     setRollingBackVersionId(null);
     historyVersionContentCacheRef.current = {};
@@ -360,6 +366,12 @@ function Editor({
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 5200);
   }, []);
+
+  const notifyHistoryMetaUpdateUnavailable = useCallback(() => {
+    if (historyMetaUpdateHintShownRef.current) return;
+    historyMetaUpdateHintShownRef.current = true;
+    showToast('info', 'Pin/label requires restarting Notely once to reload main process updates.');
+  }, [showToast]);
 
   useEffect(() => {
     return () => {
@@ -460,8 +472,9 @@ function Editor({
 
   const updateHistoryVersionMeta = useCallback(async (versionId: string, changes: { label?: string; pinned?: boolean }) => {
     if (!note || !versionId) return false;
-    if (typeof window.electronAPI.updateNoteHistoryVersion !== 'function') {
-      showToast('error', 'Main process is outdated. Restart Notely and try again.');
+    if (!historyMetaUpdateEnabled || typeof window.electronAPI.updateNoteHistoryVersion !== 'function') {
+      setHistoryMetaUpdateEnabled(false);
+      notifyHistoryMetaUpdateUnavailable();
       return false;
     }
 
@@ -488,7 +501,8 @@ function Editor({
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/No handler registered for ['"]notes:history:update['"]/i.test(message)) {
-        showToast('error', 'Main process is outdated. Restart Notely and try again.');
+        setHistoryMetaUpdateEnabled(false);
+        notifyHistoryMetaUpdateUnavailable();
       } else {
         showToast('error', message || 'Failed to update history version');
       }
@@ -496,7 +510,7 @@ function Editor({
     } finally {
       setSavingHistoryMetaId(null);
     }
-  }, [note, showToast]);
+  }, [historyMetaUpdateEnabled, note, notifyHistoryMetaUpdateUnavailable, showToast]);
 
   const loadNoteHistory = useCallback(async () => {
     if (!note) return;
@@ -1700,6 +1714,9 @@ function Editor({
                     </button>
                   ))}
                 </div>
+                {!historyMetaUpdateEnabled && (
+                  <p className="editor-history-meta-hint">Pin and label are temporarily unavailable until app restart.</p>
+                )}
               </div>
               <button
                 type="button"
@@ -1754,11 +1771,17 @@ function Editor({
                               type="button"
                               className={`editor-history-pin-btn ${entry.pinned ? 'active' : ''}`}
                               aria-pressed={entry.pinned}
-                              title={entry.pinned ? 'Unpin version' : 'Pin version'}
+                              title={
+                                !historyMetaUpdateEnabled
+                                  ? 'Restart Notely to enable pin'
+                                  : entry.pinned
+                                    ? 'Unpin version'
+                                    : 'Pin version'
+                              }
                               onClick={() => {
                                 void toggleHistoryEntryPinned(entry);
                               }}
-                              disabled={Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
+                              disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
                             >
                               <Pin size={14} />
                             </button>
@@ -1787,11 +1810,17 @@ function Editor({
                             type="button"
                             className={`editor-history-pin-btn ${selectedHistoryEntry.pinned ? 'active' : ''}`}
                             aria-pressed={selectedHistoryEntry.pinned}
-                            title={selectedHistoryEntry.pinned ? 'Unpin version' : 'Pin version'}
+                            title={
+                              !historyMetaUpdateEnabled
+                                ? 'Restart Notely to enable pin'
+                                : selectedHistoryEntry.pinned
+                                  ? 'Unpin version'
+                                  : 'Pin version'
+                            }
                             onClick={() => {
                               void toggleHistoryEntryPinned(selectedHistoryEntry);
                             }}
-                            disabled={Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
+                            disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
                           >
                             <Pin size={14} />
                           </button>
@@ -1816,7 +1845,7 @@ function Editor({
                             }}
                             placeholder="Version label (optional)"
                             maxLength={100}
-                            disabled={Boolean(rollingBackVersionId)}
+                            disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId)}
                           />
                           <button
                             type="button"
@@ -1824,7 +1853,7 @@ function Editor({
                             onClick={() => {
                               void saveSelectedHistoryLabel();
                             }}
-                            disabled={Boolean(rollingBackVersionId) || !isSelectedHistoryLabelDirty || isSelectedHistoryMetaSaving}
+                            disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId) || !isSelectedHistoryLabelDirty || isSelectedHistoryMetaSaving}
                           >
                             {isSelectedHistoryMetaSaving ? 'Saving…' : 'Save Label'}
                           </button>

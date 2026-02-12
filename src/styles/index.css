@@ -608,6 +608,10 @@
   color: #ffffff;
 }
 
+[data-theme="dark"] .editor-history-meta-hint {
+  color: #fdba74;
+}
+
 [data-theme="dark"] .editor-history-list-pane,
 [data-theme="dark"] .editor-history-detail-pane {
   background: rgba(255, 255, 255, 0.04);
