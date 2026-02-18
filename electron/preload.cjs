@@ -30,4 +30,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // AI
   generateWechatHtmlWithAi: (data) => ipcRenderer.invoke('wechat:generateHtmlWithAi', data),
+
+  // Git Sync
+  getGitSyncConfig: () => ipcRenderer.invoke('gitSync:getConfig'),
+  setupGitSync: (data) => ipcRenderer.invoke('gitSync:setup', data),
+  runGitSync: (data) => ipcRenderer.invoke('gitSync:run', data),
+  updateGitSyncSettings: (data) => ipcRenderer.invoke('gitSync:updateSettings', data),
+  clearGitSyncCredential: () => ipcRenderer.invoke('gitSync:clearCredential'),
 });

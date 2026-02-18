@@ -127,6 +127,75 @@ export interface WechatAiConfig {
   model: string;
 }
 
+export type GitSyncStatus = 'idle' | 'running' | 'success' | 'error' | 'conflict' | 'disabled' | 'skipped';
+export type GitSyncReason = 'manual' | 'auto';
+
+export interface GitSyncConfig {
+  enabled: boolean;
+  remoteUrl: string;
+  branch: string;
+  autoSyncEnabled: boolean;
+  intervalMinutes: number;
+  tokenConfigured: boolean;
+  lastSyncAt: string | null;
+  lastStatus: GitSyncStatus;
+  lastMessage: string;
+  lastConflictFiles?: string[];
+}
+
+export interface GitSyncSetupRequest {
+  remoteUrl: string;
+  branch?: string;
+  token?: string;
+  autoSyncEnabled?: boolean;
+  intervalMinutes?: number;
+}
+
+export interface GitSyncSetupResult {
+  success: boolean;
+  status: GitSyncStatus;
+  message: string;
+  repoInitialized?: boolean;
+  remoteConnected?: boolean;
+  error?: string;
+}
+
+export interface GitSyncRunRequest {
+  reason: GitSyncReason;
+}
+
+export interface GitSyncRunResult {
+  success: boolean;
+  status: GitSyncStatus;
+  message: string;
+  commitsCreated: number;
+  pushed: boolean;
+  pulled: boolean;
+  conflictFiles: string[];
+  error?: string;
+}
+
+export interface GitSyncUpdateSettingsRequest {
+  enabled?: boolean;
+  remoteUrl?: string;
+  branch?: string;
+  autoSyncEnabled?: boolean;
+  intervalMinutes?: number;
+}
+
+export interface GitSyncConfigResult {
+  success: boolean;
+  config?: GitSyncConfig;
+  error?: string;
+}
+
+export interface GitSyncCredentialClearResult {
+  success: boolean;
+  status: GitSyncStatus;
+  message: string;
+  error?: string;
+}
+
 /**
  * 编辑器中的笔记数据
  */
@@ -205,6 +274,13 @@ export interface ElectronAPI {
 
   // AI
   generateWechatHtmlWithAi: (data: GenerateWechatHtmlWithAiRequest) => Promise<GenerateWechatHtmlWithAiResult>;
+
+  // Git Sync
+  getGitSyncConfig: () => Promise<GitSyncConfigResult>;
+  setupGitSync: (data: GitSyncSetupRequest) => Promise<GitSyncSetupResult>;
+  runGitSync: (data: GitSyncRunRequest) => Promise<GitSyncRunResult>;
+  updateGitSyncSettings: (data: GitSyncUpdateSettingsRequest) => Promise<GitSyncSetupResult>;
+  clearGitSyncCredential: () => Promise<GitSyncCredentialClearResult>;
 }
 
 /**

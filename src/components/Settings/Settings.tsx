@@ -9,7 +9,17 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AppSettings, SettingsMenuItem } from '../../types';
+import type {
+  AppSettings,
+  GitSyncConfig,
+  GitSyncCredentialClearResult,
+  GitSyncRunRequest,
+  GitSyncRunResult,
+  GitSyncSetupRequest,
+  GitSyncSetupResult,
+  GitSyncUpdateSettingsRequest,
+  SettingsMenuItem,
+} from '../../types';
 import { truncatePath } from '../../utils/pathUtils';
 import './Settings.css';
 
@@ -51,6 +61,13 @@ interface SettingsProps {
   wechatOpenRouterModel: string;
   onChangeWechatOpenRouterApiKey: (apiKey: string) => void;
   onChangeWechatOpenRouterModel: (model: string) => void;
+  gitSyncConfig: GitSyncConfig | null;
+  isGitSyncLoading: boolean;
+  onRefreshGitSyncConfig: () => Promise<void>;
+  onSetupGitSync: (data: GitSyncSetupRequest) => Promise<GitSyncSetupResult>;
+  onRunGitSync: (data: GitSyncRunRequest) => Promise<GitSyncRunResult>;
+  onUpdateGitSyncSettings: (data: GitSyncUpdateSettingsRequest) => Promise<GitSyncSetupResult>;
+  onClearGitSyncCredential: () => Promise<GitSyncCredentialClearResult>;
 }
 
 const DEFAULT_WECHAT_MOONSHOT_MODEL = 'kimi-k2.5';
@@ -61,6 +78,9 @@ const BUILT_IN_WECHAT_THEMES = [
   'Retro Corporate Archive',
   'Editorial Pick',
 ];
+const DEFAULT_GIT_SYNC_BRANCH = 'main';
+const DEFAULT_GIT_SYNC_INTERVAL = 5;
+const GIT_SYNC_INTERVAL_OPTIONS = [1, 5, 10, 15, 30, 60];
 
 function Settings({
   onBack,
@@ -78,6 +98,13 @@ function Settings({
   wechatOpenRouterModel,
   onChangeWechatOpenRouterApiKey,
   onChangeWechatOpenRouterModel,
+  gitSyncConfig,
+  isGitSyncLoading,
+  onRefreshGitSyncConfig,
+  onSetupGitSync,
+  onRunGitSync,
+  onUpdateGitSyncSettings,
+  onClearGitSyncCredential,
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<AppSettings>({
@@ -96,6 +123,17 @@ function Settings({
   const [wechatOpenRouterApiKeyInput, setWechatOpenRouterApiKeyInput] = useState(wechatOpenRouterApiKey || '');
   const [wechatOpenRouterModelInput, setWechatOpenRouterModelInput] = useState(wechatOpenRouterModel || DEFAULT_WECHAT_OPENROUTER_MODEL);
   const [showWechatOpenRouterApiKey, setShowWechatOpenRouterApiKey] = useState(false);
+  const [gitRemoteUrlInput, setGitRemoteUrlInput] = useState(gitSyncConfig?.remoteUrl || '');
+  const [gitBranchInput, setGitBranchInput] = useState(gitSyncConfig?.branch || DEFAULT_GIT_SYNC_BRANCH);
+  const [gitTokenInput, setGitTokenInput] = useState('');
+  const [showGitToken, setShowGitToken] = useState(false);
+  const [gitAutoSyncEnabled, setGitAutoSyncEnabled] = useState(Boolean(gitSyncConfig?.autoSyncEnabled ?? true));
+  const [gitSyncIntervalInput, setGitSyncIntervalInput] = useState(
+    String(gitSyncConfig?.intervalMinutes ?? DEFAULT_GIT_SYNC_INTERVAL)
+  );
+  const [gitSyncFeedback, setGitSyncFeedback] = useState('');
+  const [gitSyncConflictFiles, setGitSyncConflictFiles] = useState<string[]>(gitSyncConfig?.lastConflictFiles || []);
+  const [syncBusyAction, setSyncBusyAction] = useState<null | 'connect' | 'sync' | 'save' | 'clear' | 'refresh'>(null);
 
   useEffect(() => {
     if (!storagePath) return;
@@ -121,6 +159,24 @@ function Settings({
   useEffect(() => {
     setWechatOpenRouterModelInput(wechatOpenRouterModel || DEFAULT_WECHAT_OPENROUTER_MODEL);
   }, [wechatOpenRouterModel]);
+
+  useEffect(() => {
+    if (!gitSyncConfig) return;
+    setGitRemoteUrlInput(gitSyncConfig.remoteUrl || '');
+    setGitBranchInput(gitSyncConfig.branch || DEFAULT_GIT_SYNC_BRANCH);
+    setGitAutoSyncEnabled(Boolean(gitSyncConfig.autoSyncEnabled));
+    setGitSyncIntervalInput(String(gitSyncConfig.intervalMinutes || DEFAULT_GIT_SYNC_INTERVAL));
+    setGitSyncConflictFiles(gitSyncConfig.lastConflictFiles || []);
+    if (gitSyncConfig.lastMessage) {
+      setGitSyncFeedback(gitSyncConfig.lastMessage);
+    }
+  }, [gitSyncConfig]);
+
+  const normalizedGitSyncInterval = useMemo(() => {
+    const parsed = Number(gitSyncIntervalInput);
+    if (!Number.isFinite(parsed)) return DEFAULT_GIT_SYNC_INTERVAL;
+    return Math.max(1, Math.min(120, Math.floor(parsed)));
+  }, [gitSyncIntervalInput]);
 
   const handleToggle = (key: keyof AppSettings) => {
     setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -203,6 +259,101 @@ function Settings({
     setWechatOpenRouterModelInput(DEFAULT_WECHAT_OPENROUTER_MODEL);
     onChangeWechatOpenRouterModel(DEFAULT_WECHAT_OPENROUTER_MODEL);
   }, [onChangeWechatOpenRouterModel]);
+
+  const handleConnectGitSync = useCallback(async () => {
+    const remoteUrl = gitRemoteUrlInput.trim();
+    const branch = gitBranchInput.trim() || DEFAULT_GIT_SYNC_BRANCH;
+    setSyncBusyAction('connect');
+    setGitSyncConflictFiles([]);
+    try {
+      const result = await onSetupGitSync({
+        remoteUrl,
+        branch,
+        token: gitTokenInput.trim() || undefined,
+        autoSyncEnabled: gitAutoSyncEnabled,
+        intervalMinutes: normalizedGitSyncInterval,
+      });
+      setGitSyncFeedback(result.message || (result.success ? 'Git sync connected.' : 'Failed to connect Git sync.'));
+      if (result.success) {
+        setGitTokenInput('');
+      }
+    } catch (err) {
+      setGitSyncFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusyAction(null);
+    }
+  }, [
+    gitAutoSyncEnabled,
+    gitBranchInput,
+    gitRemoteUrlInput,
+    gitTokenInput,
+    normalizedGitSyncInterval,
+    onSetupGitSync,
+  ]);
+
+  const handleSaveGitSyncSettings = useCallback(async () => {
+    setSyncBusyAction('save');
+    try {
+      const result = await onUpdateGitSyncSettings({
+        remoteUrl: gitRemoteUrlInput.trim(),
+        branch: gitBranchInput.trim() || DEFAULT_GIT_SYNC_BRANCH,
+        autoSyncEnabled: gitAutoSyncEnabled,
+        intervalMinutes: normalizedGitSyncInterval,
+      });
+      setGitSyncFeedback(result.message || (result.success ? 'Git sync settings saved.' : 'Failed to save Git sync settings.'));
+    } catch (err) {
+      setGitSyncFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusyAction(null);
+    }
+  }, [
+    gitAutoSyncEnabled,
+    gitBranchInput,
+    gitRemoteUrlInput,
+    normalizedGitSyncInterval,
+    onUpdateGitSyncSettings,
+  ]);
+
+  const handleRunGitSyncNow = useCallback(async () => {
+    setSyncBusyAction('sync');
+    try {
+      const result = await onRunGitSync({ reason: 'manual' });
+      setGitSyncFeedback(result.message || (result.success ? 'Sync finished.' : 'Sync failed.'));
+      setGitSyncConflictFiles(result.conflictFiles || []);
+    } catch (err) {
+      setGitSyncFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusyAction(null);
+    }
+  }, [onRunGitSync]);
+
+  const handleRefreshGitSyncStatus = useCallback(async () => {
+    setSyncBusyAction('refresh');
+    try {
+      await onRefreshGitSyncConfig();
+      setGitSyncFeedback('Git sync status refreshed.');
+    } catch (err) {
+      setGitSyncFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusyAction(null);
+    }
+  }, [onRefreshGitSyncConfig]);
+
+  const handleClearGitToken = useCallback(async () => {
+    setSyncBusyAction('clear');
+    setGitSyncConflictFiles([]);
+    try {
+      const result = await onClearGitSyncCredential();
+      setGitSyncFeedback(result.message || (result.success ? 'Git token cleared.' : 'Failed to clear token.'));
+      if (result.success) {
+        setGitTokenInput('');
+      }
+    } catch (err) {
+      setGitSyncFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusyAction(null);
+    }
+  }, [onClearGitSyncCredential]);
 
   const renderGeneralSettings = () => (
     <>
@@ -631,6 +782,202 @@ function Settings({
     </>
   );
 
+  const renderSyncSettings = () => {
+    const syncStatus = gitSyncConfig?.lastStatus || 'idle';
+    const lastSyncAt = gitSyncConfig?.lastSyncAt
+      ? new Date(gitSyncConfig.lastSyncAt).toLocaleString()
+      : 'Never';
+    const tokenConfigured = Boolean(gitSyncConfig?.tokenConfigured);
+    const actionBusy = Boolean(syncBusyAction);
+    const statusClass = `settings-sync-status settings-sync-status-${syncStatus}`;
+    const conflictFiles = gitSyncConflictFiles.length > 0 ? gitSyncConflictFiles : (gitSyncConfig?.lastConflictFiles || []);
+
+    return (
+      <>
+        <h1 className="settings-page-title">Sync & Backup</h1>
+        <p className="settings-page-description">
+          Sync notes through Git over HTTPS with PAT authentication
+        </p>
+
+        <section className="settings-section">
+          <h3 className="settings-section-title">Repository</h3>
+
+          <div className="settings-item settings-item-column">
+            <div className="settings-item-info">
+              <span className="settings-item-label">Remote URL</span>
+              <span className="settings-item-description">
+                HTTPS repository address (for example: https://github.com/you/notes.git)
+              </span>
+            </div>
+            <input
+              className="settings-input"
+              type="text"
+              placeholder="https://..."
+              value={gitRemoteUrlInput}
+              onChange={(e) => setGitRemoteUrlInput(e.target.value)}
+              spellCheck={false}
+            />
+          </div>
+
+          <div className="settings-item settings-item-column">
+            <div className="settings-item-info">
+              <span className="settings-item-label">Branch</span>
+              <span className="settings-item-description">
+                Default branch used for sync
+              </span>
+            </div>
+            <input
+              className="settings-input settings-sync-branch-input"
+              type="text"
+              placeholder={DEFAULT_GIT_SYNC_BRANCH}
+              value={gitBranchInput}
+              onChange={(e) => setGitBranchInput(e.target.value)}
+              spellCheck={false}
+            />
+          </div>
+
+          <div className="settings-item settings-item-column">
+            <div className="settings-item-info">
+              <span className="settings-item-label">Personal Access Token</span>
+              <span className="settings-item-description">
+                Stored securely on this device via system encryption
+              </span>
+            </div>
+            <div className="settings-font-controls">
+              <input
+                className="settings-input"
+                type={showGitToken ? 'text' : 'password'}
+                placeholder="ghp_... / glpat-... / token"
+                value={gitTokenInput}
+                onChange={(e) => setGitTokenInput(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <button
+                className="settings-btn settings-btn-secondary"
+                type="button"
+                onClick={() => setShowGitToken((prev) => !prev)}
+                disabled={actionBusy}
+              >
+                {showGitToken ? 'Hide' : 'Show'}
+              </button>
+              <button
+                className="settings-btn settings-btn-secondary"
+                type="button"
+                onClick={handleClearGitToken}
+                disabled={actionBusy || !tokenConfigured}
+              >
+                {syncBusyAction === 'clear' ? 'Clearing...' : 'Clear token'}
+              </button>
+            </div>
+            <div className="settings-font-meta">
+              <span>Status: {tokenConfigured ? 'Configured' : 'Not configured'}</span>
+              {gitTokenInput.trim() && <span>• New token will be saved on Connect</span>}
+            </div>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3 className="settings-section-title">Automatic Sync</h3>
+
+          <div className="settings-item">
+            <div className="settings-item-info">
+              <span className="settings-item-label">Enable auto sync</span>
+              <span className="settings-item-description">
+                Run background sync every configured interval
+              </span>
+            </div>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={gitAutoSyncEnabled}
+                onChange={(e) => setGitAutoSyncEnabled(e.target.checked)}
+                disabled={actionBusy}
+              />
+              <span className="toggle-slider" />
+            </label>
+          </div>
+
+          <div className="settings-item">
+            <div className="settings-item-info">
+              <span className="settings-item-label">Sync interval</span>
+              <span className="settings-item-description">
+                Minutes between automatic sync runs
+              </span>
+            </div>
+            <select
+              className="settings-select"
+              value={String(normalizedGitSyncInterval)}
+              onChange={(e) => setGitSyncIntervalInput(e.target.value)}
+              disabled={actionBusy}
+            >
+              {GIT_SYNC_INTERVAL_OPTIONS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {minutes} minute{minutes > 1 ? 's' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        <section className="settings-section">
+          <h3 className="settings-section-title">Sync Actions</h3>
+          <div className="settings-item settings-item-column">
+            <div className="settings-sync-actions">
+              <button
+                className="settings-btn"
+                type="button"
+                onClick={handleConnectGitSync}
+                disabled={actionBusy || !gitRemoteUrlInput.trim()}
+              >
+                {syncBusyAction === 'connect' ? 'Connecting...' : 'Connect'}
+              </button>
+              <button
+                className="settings-btn settings-btn-secondary"
+                type="button"
+                onClick={handleSaveGitSyncSettings}
+                disabled={actionBusy || !gitRemoteUrlInput.trim()}
+              >
+                {syncBusyAction === 'save' ? 'Saving...' : 'Save settings'}
+              </button>
+              <button
+                className="settings-btn"
+                type="button"
+                onClick={handleRunGitSyncNow}
+                disabled={actionBusy || isGitSyncLoading || !gitSyncConfig?.enabled}
+              >
+                {syncBusyAction === 'sync' ? 'Syncing...' : 'Sync now'}
+              </button>
+              <button
+                className="settings-btn settings-btn-secondary"
+                type="button"
+                onClick={handleRefreshGitSyncStatus}
+                disabled={actionBusy || isGitSyncLoading}
+              >
+                {syncBusyAction === 'refresh' ? 'Refreshing...' : 'Refresh status'}
+              </button>
+            </div>
+
+            <div className={statusClass}>
+              <span className="settings-sync-status-title">
+                Status: {syncStatus}
+              </span>
+              <span>Last sync: {lastSyncAt}</span>
+              {gitSyncConfig?.lastMessage && <span>Last result: {gitSyncConfig.lastMessage}</span>}
+              {gitSyncFeedback && <span>Latest action: {gitSyncFeedback}</span>}
+              {conflictFiles.length > 0 && (
+                <div className="settings-sync-conflict">
+                  <span>Conflict files: {conflictFiles.join(', ')}</span>
+                  <span>Local and remote conflict copies are created automatically in your notes folder.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </>
+    );
+  };
+
   const renderPlaceholder = (title: string, description: string) => (
     <>
       <h1 className="settings-page-title">{title}</h1>
@@ -648,7 +995,7 @@ function Settings({
       case 'appearance':
         return renderAppearanceSettings();
       case 'sync':
-        return renderPlaceholder('Sync & Backup', 'Manage your sync and backup preferences');
+        return renderSyncSettings();
       case 'editor':
         return renderEditorSettings();
       case 'shortcuts':
@@ -683,6 +1030,9 @@ function Settings({
                   setActiveTab(item.id);
                   if (item.id === 'appearance' && localFontsStatus === 'idle') {
                     void loadLocalFonts();
+                  }
+                  if (item.id === 'sync') {
+                    void onRefreshGitSyncConfig();
                   }
                 }}
               >

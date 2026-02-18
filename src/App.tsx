@@ -10,7 +10,19 @@ import { parseNote, generateNoteContent, generateFilename } from './utils/noteUt
 import KanbanBoardsList from './components/Kanban/KanbanBoardsList';
 import KanbanBoard from './components/Kanban/KanbanBoard';
 import { DEFAULT_DONE_COLUMNS, DEFAULT_KANBAN_COLUMNS, createId, serializeKanbanMarkdown } from './utils/kanbanUtils';
-import type { Note, RawNote, SaveNoteData, EditorNote } from './types';
+import type {
+  EditorNote,
+  GitSyncCredentialClearResult,
+  GitSyncConfig,
+  GitSyncRunRequest,
+  GitSyncRunResult,
+  GitSyncSetupRequest,
+  GitSyncSetupResult,
+  GitSyncUpdateSettingsRequest,
+  Note,
+  RawNote,
+  SaveNoteData,
+} from './types';
 import './styles/App.css';
 
 type ViewType = 'welcome' | 'main' | 'settings';
@@ -235,6 +247,8 @@ function App() {
       return 'desc';
     }
   });
+  const [gitSyncConfig, setGitSyncConfig] = useState<GitSyncConfig | null>(null);
+  const [isGitSyncConfigLoading, setIsGitSyncConfigLoading] = useState(false);
 
   const toggleNotesSortOrder = useCallback(() => {
     setNotesSortOrder((prev) => {
@@ -301,6 +315,26 @@ function App() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
+  const loadGitSyncConfig = useCallback(async () => {
+    if (typeof window.electronAPI.getGitSyncConfig !== 'function') {
+      setGitSyncConfig(null);
+      return;
+    }
+
+    setIsGitSyncConfigLoading(true);
+    try {
+      const result = await window.electronAPI.getGitSyncConfig();
+      if (!result.success || !result.config) {
+        throw new Error(result.error || 'Failed to load Git sync config');
+      }
+      setGitSyncConfig(result.config);
+    } catch (err) {
+      console.error('Failed to load Git sync config:', err);
+    } finally {
+      setIsGitSyncConfigLoading(false);
+    }
+  }, []);
+
   // 初始化：检查是否是首次启动
   useEffect(() => {
     const init = async () => {
@@ -317,6 +351,7 @@ function App() {
           saveStoragePath(path);
           setView('main');
           loadNotes();
+          loadGitSyncConfig();
         } else {
           console.error('Failed to restore storage path:', result.error);
           setView('welcome');
@@ -513,8 +548,9 @@ function App() {
       setIsFirstLaunch(false);
       setView('main');
       loadNotes();
+      loadGitSyncConfig();
     }
-  }, [loadNotes]);
+  }, [loadGitSyncConfig, loadNotes]);
 
   // 打开已有文件夹
   const handleOpenFolder = useCallback(async () => {
@@ -528,9 +564,10 @@ function App() {
         setIsFirstLaunch(false);
         setView('main');
         loadNotes();
+        loadGitSyncConfig();
       }
     }
-  }, [loadNotes]);
+  }, [loadGitSyncConfig, loadNotes]);
 
   useEffect(() => {
     if (!isModalOpen) {
@@ -553,7 +590,8 @@ function App() {
     setActiveFilter('all');
     setSearchQuery('');
     await loadNotes();
-  }, [loadNotes]);
+    await loadGitSyncConfig();
+  }, [loadGitSyncConfig, loadNotes]);
 
   const handleChangeFontFamily = useCallback((nextFontFamily: string) => {
     const trimmed = nextFontFamily.trim();
@@ -589,6 +627,76 @@ function App() {
     setTheme(nextTheme);
     saveTheme(nextTheme);
   }, []);
+
+  const handleRefreshGitSyncConfig = useCallback(async () => {
+    await loadGitSyncConfig();
+  }, [loadGitSyncConfig]);
+
+  const handleSetupGitSync = useCallback(async (data: GitSyncSetupRequest): Promise<GitSyncSetupResult> => {
+    if (typeof window.electronAPI.setupGitSync !== 'function') {
+      return {
+        success: false,
+        status: 'error',
+        message: 'This build does not support Git sync yet.',
+      };
+    }
+
+    const result = await window.electronAPI.setupGitSync(data);
+    await loadGitSyncConfig();
+    return result;
+  }, [loadGitSyncConfig]);
+
+  const handleRunGitSync = useCallback(async (data: GitSyncRunRequest): Promise<GitSyncRunResult> => {
+    if (typeof window.electronAPI.runGitSync !== 'function') {
+      return {
+        success: false,
+        status: 'error',
+        message: 'This build does not support Git sync yet.',
+        commitsCreated: 0,
+        pushed: false,
+        pulled: false,
+        conflictFiles: [],
+      };
+    }
+
+    const result = await window.electronAPI.runGitSync(data);
+    await loadGitSyncConfig();
+    if (result.success || result.status === 'conflict') {
+      await loadNotes();
+    }
+    return result;
+  }, [loadGitSyncConfig, loadNotes]);
+
+  const handleUpdateGitSyncSettings = useCallback(
+    async (data: GitSyncUpdateSettingsRequest): Promise<GitSyncSetupResult> => {
+      if (typeof window.electronAPI.updateGitSyncSettings !== 'function') {
+        return {
+          success: false,
+          status: 'error',
+          message: 'This build does not support Git sync yet.',
+        };
+      }
+
+      const result = await window.electronAPI.updateGitSyncSettings(data);
+      await loadGitSyncConfig();
+      return result;
+    },
+    [loadGitSyncConfig]
+  );
+
+  const handleClearGitSyncCredential = useCallback(async (): Promise<GitSyncCredentialClearResult> => {
+    if (typeof window.electronAPI.clearGitSyncCredential !== 'function') {
+      return {
+        success: false,
+        status: 'error',
+        message: 'This build does not support Git sync yet.',
+      };
+    }
+
+    const result = await window.electronAPI.clearGitSyncCredential();
+    await loadGitSyncConfig();
+    return result;
+  }, [loadGitSyncConfig]);
 
   const handleOpenDailyNote = useCallback(async (date: Date) => {
     const ymd = toYmd(date);
@@ -939,6 +1047,13 @@ function App() {
           wechatOpenRouterModel={wechatOpenRouterModel}
           onChangeWechatOpenRouterApiKey={handleChangeWechatOpenRouterApiKey}
           onChangeWechatOpenRouterModel={handleChangeWechatOpenRouterModel}
+          gitSyncConfig={gitSyncConfig}
+          isGitSyncLoading={isGitSyncConfigLoading}
+          onRefreshGitSyncConfig={handleRefreshGitSyncConfig}
+          onSetupGitSync={handleSetupGitSync}
+          onRunGitSync={handleRunGitSync}
+          onUpdateGitSyncSettings={handleUpdateGitSyncSettings}
+          onClearGitSyncCredential={handleClearGitSyncCredential}
         />
       </div>
     );
@@ -993,6 +1108,10 @@ function App() {
             note={currentNote}
             onSave={handleSaveNote}
             isLoading={isLoading && !currentNote}
+            wechatMoonshotApiKey={wechatMoonshotApiKey}
+            wechatMoonshotModel={wechatMoonshotModel}
+            wechatOpenRouterApiKey={wechatOpenRouterApiKey}
+            wechatOpenRouterModel={wechatOpenRouterModel}
             isFullScreen={isModalFullScreen}
             onToggleFullScreen={() => setIsModalFullScreen(prev => !prev)}
             onClose={() => setIsModalOpen(false)}
@@ -1061,6 +1180,10 @@ function App() {
             note={currentNote}
             onSave={handleSaveNote}
             isLoading={isLoading && !currentNote}
+            wechatMoonshotApiKey={wechatMoonshotApiKey}
+            wechatMoonshotModel={wechatMoonshotModel}
+            wechatOpenRouterApiKey={wechatOpenRouterApiKey}
+            wechatOpenRouterModel={wechatOpenRouterModel}
             isFullScreen={isModalFullScreen}
             onToggleFullScreen={() => setIsModalFullScreen(prev => !prev)}
             onClose={() => setIsModalOpen(false)}
