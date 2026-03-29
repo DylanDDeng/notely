@@ -69,7 +69,9 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
   const [content, setContent] = useState('');
   const [isOutlineOpen, setIsOutlineOpen] = useState(() => readBooleanSetting(OUTLINE_OPEN_KEY, false));
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [isEditorFocused, setIsEditorFocused] = useState(false);
 
+  const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextAutoSaveRef = useRef(true);
   const draftContentRef = useRef('');
@@ -192,6 +194,25 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
     editorViewRef.current = view;
   }, []);
 
+  const handleEditorUpdate = useCallback((view: EditorView) => {
+    const scrollContainer = editorScrollRef.current;
+    if (!scrollContainer) return;
+
+    requestAnimationFrame(() => {
+      const coords = view.coordsAtPos(view.state.selection.main.head);
+      if (!coords) return;
+
+      const bounds = scrollContainer.getBoundingClientRect();
+      const padding = 72;
+
+      if (coords.top < bounds.top + padding) {
+        scrollContainer.scrollTop -= (bounds.top + padding) - coords.top;
+      } else if (coords.bottom > bounds.bottom - padding) {
+        scrollContainer.scrollTop += coords.bottom - (bounds.bottom - padding);
+      }
+    });
+  }, []);
+
   const jumpToOutlineItem = useCallback((item: OutlineItem) => {
     requestAnimationFrame(() => {
       const view = editorViewRef.current;
@@ -238,7 +259,7 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
       </header>
 
       <div className="editor-content-shell">
-        <div className="editor-content">
+        <div className="editor-content" ref={editorScrollRef}>
           <div className="editor-content-inner">
             <div className="editor-container editor-writing-surface">
               <MarkdownLiveEditor
@@ -247,6 +268,9 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
                 onOpenImagePreview={handleOpenImagePreview}
                 onOpenExternal={handleOpenExternal}
                 onEditorReady={handleEditorReady}
+                onEditorUpdate={handleEditorUpdate}
+                onFocusChange={setIsEditorFocused}
+                enableTablePreview={!isEditorFocused}
                 mode="live"
               />
             </div>
