@@ -32,6 +32,13 @@ const quoteLineDecorations = [
   Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-2' } }),
   Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-3' } }),
 ] as const;
+const codeBlockLineDecoration = Decoration.line({ attributes: { class: 'cm-md-code-block-line' } });
+const codeBlockStartDecoration = Decoration.line({
+  attributes: { class: 'cm-md-code-block-line cm-md-code-block-start cm-md-code-fence' },
+});
+const codeBlockEndDecoration = Decoration.line({
+  attributes: { class: 'cm-md-code-block-line cm-md-code-block-end cm-md-code-fence' },
+});
 
 const headingTextDecorations = [
   null,
@@ -229,6 +236,12 @@ const buildLivePreviewDecorations = (
     const isActiveLine = lineNo === focusedLineNo;
     const trimmed = text.trimStart();
     const isFenceLine = /^(```|~~~)/.test(trimmed);
+
+    if (isFenceLine) {
+      ranges.push((inFence ? codeBlockEndDecoration : codeBlockStartDecoration).range(line.from));
+    } else if (inFence) {
+      ranges.push(codeBlockLineDecoration.range(line.from));
+    }
 
     if (!isActiveLine && !inFence && text.length > 0) {
       if (isThematicBreakLine(text, previousLineText)) {
