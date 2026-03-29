@@ -457,6 +457,7 @@ function MarkdownLiveEditor({
       basicSetup={{
         lineNumbers: false,
         foldGutter: false,
+        syntaxHighlighting: false,
         highlightActiveLineGutter: false,
         drawSelection: true,
         dropCursor: false,

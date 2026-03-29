@@ -220,6 +220,9 @@
   font-weight: 700;
   font-family: var(--app-font-family);
   letter-spacing: -0.02em;
+  text-decoration: none !important;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
 .editor-live-cm .cm-md-heading-1 {
