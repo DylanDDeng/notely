@@ -128,6 +128,8 @@
 .editor-source-cm {
   flex: 1;
   min-height: 100%;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .editor-live-cm .cm-editor,
@@ -140,6 +142,8 @@
   font-size: 18px;
   line-height: 2;
   color: var(--surface-ink);
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .editor-live-cm .cm-focused,
@@ -163,6 +167,8 @@
   min-height: 100%;
   padding: 42px 0 var(--editor-tail-space) 0;
   caret-color: #2f3640;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .editor-live-cm .cm-line,
@@ -284,23 +290,22 @@
 }
 
 .editor-live-cm .cm-line.cm-md-code-block-start {
-  margin-top: 18px;
   padding-top: 12px;
   border-top-left-radius: 14px;
   border-top-right-radius: 14px;
 }
 
 .editor-live-cm .cm-line.cm-md-code-block-end {
-  margin-bottom: 20px;
   padding-bottom: 12px;
   border-bottom-left-radius: 14px;
   border-bottom-right-radius: 14px;
 }
 
 .editor-live-cm .cm-line.cm-md-code-fence {
-  color: transparent;
-  font-size: 0;
-  line-height: 0;
+  color: rgba(96, 88, 77, 0.7);
+  font-size: 0.78em;
+  line-height: 1.75;
+  text-shadow: none;
 }
 
 .editor-live-cm .cm-md-link-text {

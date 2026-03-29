@@ -19,18 +19,6 @@ interface MarkdownLiveEditorProps {
   mode?: 'live' | 'source';
 }
 
-type MarkdownTableAlignment = 'left' | 'center' | 'right' | null;
-
-interface MarkdownTableBlock {
-  from: number;
-  to: number;
-  startLineNo: number;
-  endLineNo: number;
-  headers: string[];
-  rows: string[][];
-  alignments: MarkdownTableAlignment[];
-}
-
 const hiddenMarker = Decoration.mark({ class: 'cm-md-hidden-marker' });
 const strongMark = Decoration.mark({ class: 'cm-md-strong' });
 const emMark = Decoration.mark({ class: 'cm-md-em' });
@@ -228,127 +216,6 @@ class MarkdownHrWidget extends WidgetType {
   }
 }
 
-class MarkdownTableWidget extends WidgetType {
-  constructor(private readonly table: MarkdownTableBlock) {
-    super();
-  }
-
-  eq(other: MarkdownTableWidget) {
-    if (this.table.from !== other.table.from || this.table.to !== other.table.to) return false;
-    if (this.table.startLineNo !== other.table.startLineNo || this.table.endLineNo !== other.table.endLineNo) return false;
-    if (this.table.headers.length !== other.table.headers.length || this.table.rows.length !== other.table.rows.length) return false;
-    if (this.table.alignments.join('|') !== other.table.alignments.join('|')) return false;
-    if (this.table.headers.join('|') !== other.table.headers.join('|')) return false;
-    return this.table.rows.every((row, index) => row.join('|') === other.table.rows[index]?.join('|'));
-  }
-
-  toDOM() {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'cm-md-table-widget';
-
-    const tableEl = document.createElement('table');
-    tableEl.className = 'cm-md-table';
-
-    const thead = document.createElement('thead');
-    const headRow = document.createElement('tr');
-    this.table.headers.forEach((header, index) => {
-      const cell = document.createElement('th');
-      const alignment = this.table.alignments[index];
-      if (alignment) {
-        cell.dataset.align = alignment;
-      }
-      cell.textContent = header;
-      headRow.appendChild(cell);
-    });
-    thead.appendChild(headRow);
-    tableEl.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    this.table.rows.forEach((row) => {
-      const rowEl = document.createElement('tr');
-      row.forEach((value, index) => {
-        const cell = document.createElement('td');
-        const alignment = this.table.alignments[index];
-        if (alignment) {
-          cell.dataset.align = alignment;
-        }
-        cell.textContent = value;
-        rowEl.appendChild(cell);
-      });
-      tbody.appendChild(rowEl);
-    });
-    tableEl.appendChild(tbody);
-
-    wrapper.appendChild(tableEl);
-    return wrapper;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
-}
-
-const splitMarkdownTableRow = (lineText: string): string[] | null => {
-  const trimmed = lineText.trim();
-  if (!trimmed.includes('|')) return null;
-
-  const normalized = trimmed.replace(/^\|/, '').replace(/\|$/, '');
-  const cells = normalized.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, '|').trim());
-  if (cells.length < 2) return null;
-  return cells;
-};
-
-const parseMarkdownTableDelimiter = (lineText: string): MarkdownTableAlignment[] | null => {
-  const cells = splitMarkdownTableRow(lineText);
-  if (!cells) return null;
-
-  const alignments = cells.map((cell) => {
-    const normalized = cell.replace(/\s+/g, '');
-    if (!/^:?-{3,}:?$/.test(normalized)) return null;
-    const startsWithColon = normalized.startsWith(':');
-    const endsWithColon = normalized.endsWith(':');
-    if (startsWithColon && endsWithColon) return 'center';
-    if (endsWithColon) return 'right';
-    if (startsWithColon) return 'left';
-    return null;
-  });
-
-  return alignments.every((alignment, index) => alignment !== null || /^-{3,}$/.test(cells[index].replace(/\s+/g, '')))
-    ? alignments
-    : null;
-};
-
-const parseMarkdownTableBlock = (doc: EditorView['state']['doc'], startLineNo: number): MarkdownTableBlock | null => {
-  if (startLineNo >= doc.lines) return null;
-
-  const headerLine = doc.line(startLineNo);
-  const delimiterLine = doc.line(startLineNo + 1);
-  const headers = splitMarkdownTableRow(headerLine.text);
-  const alignments = parseMarkdownTableDelimiter(delimiterLine.text);
-  if (!headers || !alignments || headers.length !== alignments.length) return null;
-
-  const rows: string[][] = [];
-  let endLineNo = startLineNo + 1;
-
-  for (let lineNo = startLineNo + 2; lineNo <= doc.lines; lineNo += 1) {
-    const line = doc.line(lineNo);
-    const row = splitMarkdownTableRow(line.text);
-    if (!row || row.length !== headers.length) break;
-    rows.push(row);
-    endLineNo = lineNo;
-  }
-
-  const endLine = doc.line(endLineNo);
-  return {
-    from: headerLine.from,
-    to: endLine.to,
-    startLineNo,
-    endLineNo,
-    headers,
-    rows,
-    alignments,
-  };
-};
 
 const buildLivePreviewDecorations = (
   state: EditorState,
@@ -368,24 +235,6 @@ const buildLivePreviewDecorations = (
     const isActiveLine = lineNo === focusedLineNo;
     const trimmed = text.trimStart();
     const isFenceLine = /^(```|~~~)/.test(trimmed);
-
-    if (!inFence) {
-      const tableBlock = parseMarkdownTableBlock(doc, lineNo);
-      if (tableBlock) {
-        const activeLineInsideTable = focusedLineNo >= tableBlock.startLineNo && focusedLineNo <= tableBlock.endLineNo;
-        if (!activeLineInsideTable) {
-          ranges.push(
-            Decoration.replace({
-              widget: new MarkdownTableWidget(tableBlock),
-              inclusive: false,
-              block: true,
-            }).range(tableBlock.from, tableBlock.to)
-          );
-          lineNo = tableBlock.endLineNo + 1;
-          continue;
-        }
-      }
-    }
 
     if (isFenceLine) {
       ranges.push((inFence ? codeBlockEndDecoration : codeBlockStartDecoration).range(line.from));
