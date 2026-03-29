@@ -49,8 +49,7 @@
 .editor-header {
   position: relative;
   z-index: 2;
-  background:
-    linear-gradient(180deg, rgba(246, 242, 234, 0.96) 0%, rgba(246, 242, 234, 0.84) 62%, rgba(246, 242, 234, 0) 100%);
+  background: rgba(255, 252, 247, 0.94);
   transition: opacity 0.18s ease;
 }
 
@@ -218,7 +217,7 @@
 .editor-live-cm .cm-md-heading {
   color: #1f2732;
   font-weight: 700;
-  font-family: var(--app-font-family);
+  font-family: var(--editor-prose-font);
   letter-spacing: -0.02em;
   text-decoration: none !important;
   border-bottom: none !important;
