@@ -5,9 +5,7 @@
   -webkit-user-select: none;
   user-select: none;
   position: relative;
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.68), transparent 42%),
-    linear-gradient(180deg, #f8f4ed 0%, #f4efe7 100%);
+  background: #faf9f5;
 }
 
 .app::before {

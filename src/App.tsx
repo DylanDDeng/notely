@@ -199,6 +199,8 @@ function App() {
         return {
           ...note,
           ...parsed,
+          modifiedAt: new Date(note.modifiedAt),
+          createdAt: new Date(note.createdAt),
         };
       });
       setNotes(parsedNotes);
@@ -366,7 +368,10 @@ function App() {
 
   const handleGetStarted = useCallback(async () => {
     const result = await window.electronAPI.setStoragePath('');
-    if (!result.success) return;
+    if (!result.success) {
+      console.error('Failed to initialize default storage path:', result.error);
+      return;
+    }
 
     const nextPath = result.path || '';
     setStoragePath(nextPath);
