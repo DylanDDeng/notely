@@ -5,24 +5,25 @@
   -webkit-user-select: none;
   user-select: none;
   position: relative;
-  background: transparent;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.68), transparent 42%),
+    linear-gradient(180deg, #f8f4ed 0%, #f4efe7 100%);
 }
 
-/* Drag region for macOS */
 .app::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 40px;
+  height: 56px;
   -webkit-app-region: drag;
   pointer-events: none;
 }
 
 .app-main {
-  gap: 12px;
-  padding: 10px;
+  padding: 0;
+  background: transparent;
 }
 
 .app-settings {
@@ -34,16 +35,33 @@
   min-width: 0;
 }
 
-.app-main > .sidebar,
-.app-main > .notes-list,
-.app-main > .kanban-boards,
-.app-main > .kanban-board,
-.app-main > .calendar-view,
 .app-main > .editor {
   min-height: 0;
 }
 
-/* Ensure interactive elements are not draggable */
-button, input, textarea, select, .nav-item, .note-card {
+.app-sidebar-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  padding: 14px 0 18px 14px;
+}
+
+.app-sidebar-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(239, 232, 220, 0.42);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+button,
+input,
+textarea,
+select,
+.nav-item,
+.note-card {
   -webkit-app-region: no-drag;
 }

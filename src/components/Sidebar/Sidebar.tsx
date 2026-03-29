@@ -1,241 +1,135 @@
-import { 
-  Feather, 
-  FileText,
-  CalendarDays,
-  KanbanSquare,
-  Star, 
-  Archive, 
-	Trash2, 
-	Plus, 
-	Settings, 
-	Search,
-	ChevronDown,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { FolderItem } from '../../types';
-import { getTagColor } from '../../utils/noteUtils';
+import { Command, FileText, FolderOpen, Plus, Search, X } from 'lucide-react';
+import type { Note } from '../../types';
 import './Sidebar.css';
 
-const FOLDERS: FolderItem[] = [
-  { id: 'all', label: 'All Notes', icon: FileText, count: null },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays, count: null },
-  { id: 'kanban', label: 'Kanban Board', icon: KanbanSquare, count: null },
-  { id: 'favorites', label: 'Favorites', icon: Star, count: null },
-  { id: 'archive', label: 'Archive', icon: Archive, count: null },
-  { id: 'trash', label: 'Trash', icon: Trash2, count: null },
-];
-
 interface SidebarProps {
-	activeFilter: string;
-	onFilterChange: (filter: string) => void;
-	onCreateNote: () => void;
-	onOpenSettings: () => void;
-	storagePath: string;
-	tags: string[];
-	tagCounts?: Record<string, number>;
-	folderCounts?: Record<string, number>;
-	searchQuery: string;
-	onSearchChange: (query: string) => void;
+  documentCount: number;
+  notes: Note[];
+  recentNotes: Note[];
+  selectedNoteId: string | null;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  onOpenNote: (noteId: string) => void;
+  onOpenQuickOpen: () => void;
+  onCreateNote: () => void;
+  onOpenFolder: () => void;
+  storagePath: string;
+  onClose: () => void;
 }
 
-const TAGS_COLLAPSED_BY_VAULT_KEY = 'notes:sidebar:tagsCollapsedByVault';
-
-const readTagsCollapsedByVault = (): Record<string, boolean> => {
-	try {
-		const raw = localStorage.getItem(TAGS_COLLAPSED_BY_VAULT_KEY);
-		if (!raw) return {};
-		const parsed = JSON.parse(raw) as unknown;
-		if (!parsed || typeof parsed !== 'object') return {};
-		return parsed as Record<string, boolean>;
-	} catch {
-		return {};
-	}
-};
-
-const writeTagsCollapsedByVault = (value: Record<string, boolean>) => {
-	try {
-		localStorage.setItem(TAGS_COLLAPSED_BY_VAULT_KEY, JSON.stringify(value));
-	} catch {
-		// ignore
-	}
-};
-
-function Sidebar({ 
-	activeFilter, 
-	onFilterChange, 
-	onCreateNote, 
-	onOpenSettings,
-	storagePath,
-	tags,
-	tagCounts = {},
-	folderCounts = {},
-	searchQuery,
-	onSearchChange,
+function Sidebar({
+  documentCount,
+  notes,
+  recentNotes,
+  selectedNoteId,
+  searchQuery,
+  onSearchChange,
+  onOpenNote,
+  onOpenQuickOpen,
+  onCreateNote,
+  onOpenFolder,
+  storagePath,
+  onClose,
 }: SidebarProps) {
-	const [isTagsCollapsed, setIsTagsCollapsed] = useState<boolean>(() => {
-		const map = readTagsCollapsedByVault();
-		return Boolean(map[storagePath]);
-	});
-
-	useEffect(() => {
-		const map = readTagsCollapsedByVault();
-		setIsTagsCollapsed(Boolean(map[storagePath]));
-	}, [storagePath]);
-
-	const selectedTag = useMemo(() => {
-		if (!activeFilter.startsWith('tag:')) return null;
-		return activeFilter.slice('tag:'.length);
-	}, [activeFilter]);
-
-	const selectedTagColor = useMemo(() => {
-		if (!selectedTag) return null;
-		return getTagColor(selectedTag);
-	}, [selectedTag]);
-
-	const selectedTagCount = useMemo(() => {
-		if (!selectedTag) return 0;
-		return tagCounts[selectedTag] ?? 0;
-	}, [selectedTag, tagCounts]);
-
-	const persistTagsCollapsed = useCallback((nextCollapsed: boolean) => {
-		setIsTagsCollapsed(nextCollapsed);
-		const map = readTagsCollapsedByVault();
-		if (nextCollapsed) {
-			map[storagePath] = true;
-		} else {
-			delete map[storagePath];
-		}
-		writeTagsCollapsedByVault(map);
-	}, [storagePath]);
-
-	const toggleTagsCollapsed = useCallback(() => {
-		persistTagsCollapsed(!isTagsCollapsed);
-	}, [isTagsCollapsed, persistTagsCollapsed]);
-
-	const handleTagClick = (tag: string) => {
-		onFilterChange(`tag:${tag}`);
-	};
-
-	return (
+  return (
     <aside className="sidebar">
-      {/* Header */}
       <div className="sidebar-header">
         <div className="logo">
-          <Feather size={24} color="#374151" strokeWidth={2.5} />
-          <span className="logo-text">Notely</span>
+          <span className="logo-text">Library</span>
+          <span className="logo-count">{documentCount} docs</span>
         </div>
-        <button className="icon-btn" onClick={onOpenSettings}>
-          <Settings size={18} />
-        </button>
+        <div className="sidebar-header-actions">
+          <button className="icon-btn" onClick={onClose} title="Close library" aria-label="Close library">
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* Search */}
       <div className="search-container">
         <Search size={16} className="search-icon" />
         <input
           type="text"
-          placeholder="Search notes..."
+          placeholder="Search documents..."
           className="search-input"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
         />
       </div>
 
-      {/* Folders */}
       <nav className="sidebar-section">
-        <h3 className="section-title">FOLDERS</h3>
+        <h3 className="section-title">Actions</h3>
         <ul className="nav-list">
-          {FOLDERS.map((folder) => {
-            const Icon = folder.icon;
-            const isActive = activeFilter === folder.id;
-            const count = folderCounts[folder.id] ?? folder.count ?? null;
-            return (
-              <li key={folder.id}>
-                <button
-                  className={`nav-item ${isActive ? 'active' : ''}`}
-                  onClick={() => onFilterChange(folder.id)}
-                >
-                  <Icon size={18} />
-                  <span className="nav-label">{folder.label}</span>
-                  {typeof count === 'number' && count > 0 && <span className="nav-count">{count}</span>}
-                </button>
-              </li>
-            );
-          })}
+          <li>
+            <button className="nav-item" type="button" onClick={onOpenQuickOpen}>
+              <Command size={18} />
+              <span className="nav-label">Open Quickly</span>
+              <span className="nav-shortcut">⌘P</span>
+            </button>
+          </li>
+          <li>
+            <button className="nav-item" type="button" onClick={onCreateNote}>
+              <Plus size={18} />
+              <span className="nav-label">New Document</span>
+            </button>
+          </li>
+          <li>
+            <button className="nav-item" type="button" onClick={onOpenFolder}>
+              <FolderOpen size={18} />
+              <span className="nav-label">Open Folder</span>
+            </button>
+          </li>
         </ul>
       </nav>
 
-      {/* Tags */}
-      <nav className="sidebar-section">
-        <button
-          type="button"
-          className="section-title-btn"
-          onClick={toggleTagsCollapsed}
-        >
-          <span className="section-title-left">
-            <span className="section-title-text">TAGS · {tags.length}</span>
-          </span>
-          <span className="section-title-right">
-            {isTagsCollapsed && selectedTag && selectedTagColor && (
-              <span
-                className="selected-tag-pill"
-                style={{
-                  backgroundColor: `${selectedTagColor}14`,
-                  borderColor: `${selectedTagColor}2A`,
-                  color: selectedTagColor,
-                }}
-              >
-                <span className="selected-tag-pill-dot" style={{ backgroundColor: selectedTagColor }} />
-                <span className="selected-tag-pill-label">{selectedTag}</span>
-                <span className="selected-tag-pill-count">{selectedTagCount}</span>
-              </span>
-            )}
-            <ChevronDown
-              size={14}
-              className={`section-chevron ${isTagsCollapsed ? 'collapsed' : ''}`}
-            />
-          </span>
-        </button>
-        {!isTagsCollapsed && (
-          <ul className="nav-list tag-list">
-            {tags.map((tag) => {
-              const isActive = activeFilter === `tag:${tag}`;
-              const color = getTagColor(tag);
-              const count = tagCounts[tag] ?? 0;
-              const tagStyle = {
-                '--tag-accent': color,
-                '--tag-bg': `${color}14`,
-                '--tag-bg-hover': `${color}20`,
-                '--tag-border': `${color}44`,
-                '--tag-count-bg': `${color}1F`,
-              } as CSSProperties;
-              return (
-                <li key={tag}>
-                  <button
-                    className={`nav-item tag-nav-item ${isActive ? 'active' : ''}`}
-                    onClick={() => handleTagClick(tag)}
-                    style={tagStyle}
-                  >
-                    <span
-                      className="tag-dot"
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="nav-label">{tag}</span>
-                    <span className="nav-count">{count}</span>
-                  </button>
-                </li>
-              );
-            })}
+      <nav className="sidebar-section sidebar-files-section">
+        <h3 className="section-title">Files</h3>
+        {notes.length === 0 ? (
+          <div className="sidebar-empty-hint">No documents in this folder yet.</div>
+        ) : (
+          <ul className="nav-list sidebar-file-list">
+            {notes.map((note) => (
+              <li key={note.id}>
+                <button
+                  className={`nav-item sidebar-file-item ${selectedNoteId === note.id ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => onOpenNote(note.id)}
+                  title={note.filename}
+                >
+                  <FileText size={16} />
+                  <span className="nav-label">{note.title || note.filename}</span>
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </nav>
 
-      {/* New Note Button */}
+      {recentNotes.length > 0 && (
+        <nav className="sidebar-section">
+          <h3 className="section-title">Recent</h3>
+          <ul className="nav-list sidebar-recent-list">
+            {recentNotes.map((note) => (
+              <li key={note.id}>
+                <button
+                  className={`nav-item sidebar-recent-item ${selectedNoteId === note.id ? 'active' : ''}`}
+                  type="button"
+                  onClick={() => onOpenNote(note.id)}
+                  title={note.filename}
+                >
+                  <span className="nav-label">{note.title || note.filename}</span>
+                  <span className="sidebar-recent-file">{note.filename}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
       <div className="sidebar-footer">
-        <button className="new-note-btn" onClick={onCreateNote}>
-          <Plus size={18} />
-          <span>New Note</span>
-        </button>
+        <span className="sidebar-footer-label">Library</span>
+        <span className="sidebar-footer-path" title={storagePath}>
+          {storagePath || 'Default Documents folder'}
+        </span>
       </div>
     </aside>
   );

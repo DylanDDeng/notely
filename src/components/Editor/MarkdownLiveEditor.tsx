@@ -1,9 +1,16 @@
 import { useMemo } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
-import { EditorView, Decoration, ViewPlugin, WidgetType, placeholder, type DecorationSet, type ViewUpdate } from '@codemirror/view';
-import type { Range } from '@codemirror/state';
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  WidgetType,
+  placeholder,
+  type DecorationSet,
+  type ViewUpdate,
+} from '@codemirror/view';
+import type { Range, Extension } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
-import type { Extension } from '@codemirror/state';
 
 interface MarkdownLiveEditorProps {
   value: string;
@@ -47,7 +54,6 @@ const hasVisibleText = (value: string): boolean => value.trim().length > 0;
 const isThematicBreakLine = (lineText: string, previousLineText: string): boolean => {
   if (!THEMATIC_BREAK_RE.test(lineText)) return false;
 
-  // Keep "Title\n---" behavior consistent with Markdown setext headings.
   if (HYPHEN_THEMATIC_BREAK_RE.test(lineText) && hasVisibleText(previousLineText)) {
     return false;
   }
@@ -359,13 +365,12 @@ const createLivePreviewPlugin = (onOpenImagePreview?: (url: string) => void) =>
   ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      activeLineNo: number;
 
       constructor(view: EditorView) {
         this.activeLineNo = view.state.doc.lineAt(view.state.selection.main.head).number;
         this.decorations = buildLivePreviewDecorations(view, onOpenImagePreview, this.activeLineNo);
       }
-
-      activeLineNo: number;
 
       update(update: ViewUpdate) {
         if (update.docChanged) {

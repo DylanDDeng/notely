@@ -1,1657 +1,276 @@
-import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorView } from '@codemirror/view';
-import { remark } from 'remark';
-import remarkGfm from 'remark-gfm';
-import remarkHtml from 'remark-html';
-import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Copy, FileDown, History, MoreHorizontal, Pin, Star, Wand2, X } from 'lucide-react';
-import { getTagColor, parseNote } from '../../utils/noteUtils';
-import type { EditorNote, ExportNotePdfRequest, ExportPdfOptions, NoteHistorySource, NoteHistoryVersion, SaveNoteData, WechatAiProvider } from '../../types';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
+import type { EditorNote, SaveNoteData } from '../../types';
 import './Editor.css';
 
 interface EditorProps {
   note: EditorNote | null;
   onSave: (note: SaveNoteData) => Promise<void>;
   isLoading: boolean;
-  wechatMoonshotApiKey: string;
-  wechatMoonshotModel: string;
-  wechatOpenRouterApiKey: string;
-  wechatOpenRouterModel: string;
+  outlineToggleKey?: number;
 }
 
-type EditorMode = 'live' | 'source' | 'preview';
-type WechatLayoutTheme = {
+interface OutlineItem {
   id: string;
-  name: string;
-  description: string;
-};
-type WechatPreviewState = {
-  html: string;
-  themeId: string;
-  sourceContent: string;
-};
-type WechatGenerationModelOption = {
-  id: string;
-  provider: WechatAiProvider;
-  label: string;
-  description: string;
-  apiKey: string;
-  model: string;
-  configured: boolean;
-};
-type HistoryFilter = 'all' | NoteHistorySource;
-type HistoryDiffLine = {
-  type: 'context' | 'add' | 'remove';
+  level: number;
   text: string;
-  oldLine: number | null;
-  newLine: number | null;
-};
+  offset: number;
+}
 
-const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
-const WECHAT_LAYOUT_THEMES: WechatLayoutTheme[] = [
-  {
-    id: 'digital-tools-guide',
-    name: 'Digital Tools Guide',
-    description: 'Clean white theme with structured section badges and lightweight cards.',
-  },
-  {
-    id: 'minimal-linework-black-red',
-    name: 'Minimal Linework (Black/Red)',
-    description: 'Minimal black-red layout with thin separators and generous whitespace.',
-  },
-  {
-    id: 'retro-corporate-archive',
-    name: 'Retro Corporate Archive',
-    description: 'Vintage annual-report style with beige paper tone, archive labels, and orange accents.',
-  },
-  {
-    id: 'editorial-pick',
-    name: 'Editorial Pick',
-    description: 'Warm beige tone with serif chapter numbers, magazine-style layout for deep reading.',
-  },
-];
-const DEFAULT_WECHAT_LAYOUT_THEME_ID = WECHAT_LAYOUT_THEMES[0]?.id ?? 'digital-tools-guide';
-const DEFAULT_WECHAT_MODEL_OPTION_ID = 'moonshot';
-const HISTORY_FILTER_OPTIONS: Array<{ id: HistoryFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'save', label: 'Save' },
-  { id: 'create', label: 'Create' },
-  { id: 'rollback', label: 'Rollback' },
-];
-const HISTORY_SOURCE_LABELS: Record<NoteHistorySource, string> = {
-  save: 'Saved',
-  create: 'Created',
-  rollback: 'Rollback',
-};
-const getWechatLayoutThemeById = (themeId: string): WechatLayoutTheme =>
-  WECHAT_LAYOUT_THEMES.find((theme) => theme.id === themeId) ?? WECHAT_LAYOUT_THEMES[0];
+const SAVE_DEBOUNCE_MS = 800;
+const OUTLINE_OPEN_KEY = 'notes:editor:outlineOpen';
 
-const isVideoSource = (url: string): boolean => VIDEO_SOURCE_PATTERN.test(url.trim());
-
-const transformMediaEmbeds = (html: string): string => {
-  if (!html || !html.includes('<img')) return html;
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const images = Array.from(doc.querySelectorAll('img'));
-  if (images.length === 0) return html;
-
-  let changed = false;
-  for (const image of images) {
-    const src = image.getAttribute('src')?.trim() ?? '';
-    if (!src || !isVideoSource(src)) continue;
-
-    const video = doc.createElement('video');
-    video.setAttribute('src', src);
-    video.setAttribute('controls', '');
-    video.setAttribute('preload', 'metadata');
-    video.setAttribute('playsinline', '');
-    video.className = 'editor-preview-video';
-    const alt = image.getAttribute('alt')?.trim();
-    if (alt) video.setAttribute('title', alt);
-
-    image.replaceWith(video);
-    changed = true;
+const readBooleanSetting = (key: string, fallback = false): boolean => {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved === null) return fallback;
+    return saved === 'true';
+  } catch {
+    return fallback;
   }
-
-  return changed ? doc.body.innerHTML : html;
 };
 
-const buildWechatPreviewSrcDoc = (html: string): string => `<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <base target="_blank" />
-    <style>
-      :root { color-scheme: light; }
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: #ffffff;
-      }
-      body {
-        min-height: 100vh;
-      }
-      img {
-        max-width: 100%;
-        height: auto;
-      }
-    </style>
-  </head>
-  <body>${html}</body>
-</html>`;
-
-const splitLines = (text: string): string[] => {
-  const normalized = String(text || '').replace(/\r/g, '');
-  if (!normalized) return [];
-  return normalized.split('\n');
-};
-
-const buildHistoryDiff = (previousText: string, currentText: string): HistoryDiffLine[] => {
-  const previousLines = splitLines(previousText);
-  const currentLines = splitLines(currentText);
-  const lines: HistoryDiffLine[] = [];
-
-  let prevIndex = 0;
-  let currIndex = 0;
-  let prevLineNumber = 1;
-  let currLineNumber = 1;
-
-  while (prevIndex < previousLines.length || currIndex < currentLines.length) {
-    const prevLine = prevIndex < previousLines.length ? previousLines[prevIndex] : null;
-    const currLine = currIndex < currentLines.length ? currentLines[currIndex] : null;
-
-    if (prevLine !== null && currLine !== null && prevLine === currLine) {
-      lines.push({ type: 'context', text: prevLine, oldLine: prevLineNumber, newLine: currLineNumber });
-      prevIndex += 1;
-      currIndex += 1;
-      prevLineNumber += 1;
-      currLineNumber += 1;
-      continue;
-    }
-
-    const prevNext = prevIndex + 1 < previousLines.length ? previousLines[prevIndex + 1] : null;
-    const currNext = currIndex + 1 < currentLines.length ? currentLines[currIndex + 1] : null;
-
-    if (prevLine !== null && prevNext === currLine) {
-      lines.push({ type: 'remove', text: prevLine, oldLine: prevLineNumber, newLine: null });
-      prevIndex += 1;
-      prevLineNumber += 1;
-      continue;
-    }
-
-    if (currLine !== null && currNext === prevLine) {
-      lines.push({ type: 'add', text: currLine, oldLine: null, newLine: currLineNumber });
-      currIndex += 1;
-      currLineNumber += 1;
-      continue;
-    }
-
-    if (prevLine !== null) {
-      lines.push({ type: 'remove', text: prevLine, oldLine: prevLineNumber, newLine: null });
-      prevIndex += 1;
-      prevLineNumber += 1;
-    }
-    if (currLine !== null) {
-      lines.push({ type: 'add', text: currLine, oldLine: null, newLine: currLineNumber });
-      currIndex += 1;
-      currLineNumber += 1;
-    }
+const writeBooleanSetting = (key: string, value: boolean) => {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // ignore
   }
-
-  return lines;
 };
 
-function Editor({
-  note,
-  onSave,
-  isLoading,
-  wechatMoonshotApiKey,
-  wechatMoonshotModel,
-  wechatOpenRouterApiKey,
-  wechatOpenRouterModel,
-}: EditorProps) {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [htmlContent, setHtmlContent] = useState('');
-  const [wechatPreview, setWechatPreview] = useState<WechatPreviewState | null>(null);
-  const [editorMode, setEditorMode] = useState<EditorMode>('live');
-  const [hasChanges, setHasChanges] = useState(false);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveInFlightRef = useRef(false);
-  const pendingSaveRef = useRef<{ id: string; filename: string } | null>(null);
-  const draftChangeTokenRef = useRef(0);
-  const draftCacheRef = useRef<
-    Record<
-      string,
-      { title: string; content: string; tags: string[]; date?: string; token: number; filename: string; preserveModifiedAt?: boolean }
-    >
-  >({});
-  const wechatPreviewCacheRef = useRef<Record<string, WechatPreviewState>>({});
-  const editorContentRef = useRef<HTMLDivElement>(null);
-  const liveEditorRef = useRef<EditorView | null>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const textOffsetMapRef = useRef<number[]>([]);
-  const textOffsetMapSourceRef = useRef<string>('');
-  const pendingSelectionRef = useRef<{ index?: number; scrollTop: number } | null>(null);
-  const pendingScrollRestoreRef = useRef<number | null>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const SAVE_DEBOUNCE_MS = 800;
+const parseOutline = (markdown: string): OutlineItem[] => {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const items: OutlineItem[] = [];
+  let offset = 0;
 
-  const [isWechatPreviewPanelOpen, setIsWechatPreviewPanelOpen] = useState(false);
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [isExportOpen, setIsExportOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [historyEntries, setHistoryEntries] = useState<NoteHistoryVersion[]>([]);
-  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
-  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
-  const [selectedHistoryVersionId, setSelectedHistoryVersionId] = useState<string | null>(null);
-  const [selectedHistoryContent, setSelectedHistoryContent] = useState('');
-  const [isHistoryVersionLoading, setIsHistoryVersionLoading] = useState(false);
-  const [historyLabelDrafts, setHistoryLabelDrafts] = useState<Record<string, string>>({});
-  const [historyMetaUpdateEnabled, setHistoryMetaUpdateEnabled] = useState(
-    () => typeof window.electronAPI.updateNoteHistoryVersion === 'function'
-  );
-  const [savingHistoryMetaId, setSavingHistoryMetaId] = useState<string | null>(null);
-  const [rollingBackVersionId, setRollingBackVersionId] = useState<string | null>(null);
-  const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
-  const [selectedWechatThemeId, setSelectedWechatThemeId] = useState(DEFAULT_WECHAT_LAYOUT_THEME_ID);
-  const [selectedWechatModelOptionId, setSelectedWechatModelOptionId] = useState(DEFAULT_WECHAT_MODEL_OPTION_ID);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isGeneratingWechatHtml, setIsGeneratingWechatHtml] = useState(false);
-  const [exportOptions, setExportOptions] = useState<ExportPdfOptions>({
-    pageSize: 'A4',
-    orientation: 'portrait',
-    includeHeader: false,
-    includeTitle: true,
-    includeDate: true,
-    includePageNumbers: true,
+  lines.forEach((line, index) => {
+    const match = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*$/);
+    if (match) {
+      items.push({
+        id: `${index}-${offset}`,
+        level: match[1].length,
+        text: match[2].trim(),
+        offset,
+      });
+    }
+    offset += line.length + 1;
   });
-  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
-  const historyVersionContentCacheRef = useRef<Record<string, string>>({});
-  const historyMetaUpdateHintShownRef = useRef(false);
-  const isPreviewMode = editorMode === 'preview';
-  const isSourceMode = editorMode === 'source';
-  const isEditing = editorMode === 'live' || editorMode === 'source';
-  const wechatGenerationModelOptions = useMemo<WechatGenerationModelOption[]>(() => {
-    const moonshotApiKey = wechatMoonshotApiKey.trim();
-    const moonshotModel = wechatMoonshotModel.trim();
-    const openRouterApiKey = wechatOpenRouterApiKey.trim();
-    const openRouterModel = wechatOpenRouterModel.trim();
 
-    return [
-      {
-        id: 'moonshot',
-        provider: 'moonshot',
-        label: 'Moonshot',
-        description: moonshotModel ? `Model: ${moonshotModel}` : 'Model not configured',
-        apiKey: moonshotApiKey,
-        model: moonshotModel,
-        configured: Boolean(moonshotApiKey && moonshotModel),
-      },
-      {
-        id: 'openrouter',
-        provider: 'openrouter',
-        label: 'OpenRouter',
-        description: openRouterModel ? `Model: ${openRouterModel}` : 'Model not configured',
-        apiKey: openRouterApiKey,
-        model: openRouterModel,
-        configured: Boolean(openRouterApiKey && openRouterModel),
-      },
-    ];
-  }, [wechatMoonshotApiKey, wechatMoonshotModel, wechatOpenRouterApiKey, wechatOpenRouterModel]);
+  return items;
+};
 
-  const selectedWechatGenerationModelOption = useMemo(() => {
-    return wechatGenerationModelOptions.find((option) => option.id === selectedWechatModelOptionId) ?? wechatGenerationModelOptions[0];
-  }, [selectedWechatModelOptionId, wechatGenerationModelOptions]);
+const fallbackTitleFromFilename = (filename?: string): string => {
+  if (!filename) return 'Untitled';
+  return filename.replace(/\.md$/i, '').trim() || 'Untitled';
+};
+
+function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) {
+  const [content, setContent] = useState('');
+  const [isOutlineOpen, setIsOutlineOpen] = useState(() => readBooleanSetting(OUTLINE_OPEN_KEY, false));
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextAutoSaveRef = useRef(true);
+  const draftContentRef = useRef('');
+  const documentTitleRef = useRef('');
+  const onSaveRef = useRef(onSave);
+  const editorViewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
-    if (!wechatGenerationModelOptions.length) return;
-    const selectedExists = wechatGenerationModelOptions.some((option) => option.id === selectedWechatModelOptionId);
-    if (selectedExists) return;
-    setSelectedWechatModelOptionId(wechatGenerationModelOptions[0].id);
-  }, [selectedWechatModelOptionId, wechatGenerationModelOptions]);
+    onSaveRef.current = onSave;
+  }, [onSave]);
 
-  // Lightbox keyboard controls
+  useEffect(() => {
+    draftContentRef.current = content;
+  }, [content]);
+
+  useEffect(() => {
+    writeBooleanSetting(OUTLINE_OPEN_KEY, isOutlineOpen);
+  }, [isOutlineOpen]);
+
+  useEffect(() => {
+    if (outlineToggleKey === 0) return;
+    setIsOutlineOpen((prev) => !prev);
+  }, [outlineToggleKey]);
+
+  const outlineItems = useMemo(() => parseOutline(content), [content]);
+
+  const documentTitle = useMemo(() => {
+    const firstHeading = outlineItems[0]?.text?.trim();
+    if (firstHeading) return firstHeading;
+    const noteTitle = note?.title?.trim();
+    if (noteTitle) return noteTitle;
+    return fallbackTitleFromFilename(note?.filename);
+  }, [note?.filename, note?.title, outlineItems]);
+
+  useEffect(() => {
+    documentTitleRef.current = documentTitle;
+  }, [documentTitle]);
+
+  const wordCount = useMemo(() => {
+    const trimmed = content.trim();
+    if (!trimmed) return 0;
+    return trimmed.split(/\s+/).filter(Boolean).length;
+  }, [content]);
+  const wordCountLabel = wordCount === 1 ? '1 Word' : `${wordCount} Words`;
+
+  const clearPendingSave = useCallback(() => {
+    if (!saveTimerRef.current) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+  }, []);
+
+  const flushSave = useCallback(
+    async (noteSnapshot: EditorNote | null | undefined) => {
+      if (!noteSnapshot) return;
+      clearPendingSave();
+      await onSaveRef.current({
+        id: noteSnapshot.id,
+        filename: noteSnapshot.filename,
+        title: documentTitleRef.current,
+        content: draftContentRef.current,
+        tags: [],
+        date: noteSnapshot.date,
+      });
+    },
+    [clearPendingSave]
+  );
+
+  useEffect(() => {
+    const activeNote = note;
+    setContent(activeNote?.content || '');
+    skipNextAutoSaveRef.current = true;
+
+    return () => {
+      if (activeNote) {
+        void flushSave(activeNote);
+      }
+    };
+  }, [flushSave, note?.id]);
+
+  useEffect(() => {
+    if (!note) return;
+    if (skipNextAutoSaveRef.current) {
+      skipNextAutoSaveRef.current = false;
+      return;
+    }
+
+    const activeNote = note;
+    clearPendingSave();
+    saveTimerRef.current = setTimeout(() => {
+      void flushSave(activeNote);
+    }, SAVE_DEBOUNCE_MS);
+
+    return clearPendingSave;
+  }, [clearPendingSave, content, documentTitle, flushSave, note?.date, note?.filename, note?.id]);
+
+  useEffect(() => {
+    return () => {
+      clearPendingSave();
+    };
+  }, [clearPendingSave]);
+
   useEffect(() => {
     if (!lightboxSrc) return;
-    const onKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxSrc(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setLightboxSrc(null);
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [lightboxSrc]);
 
-  useEffect(() => {
-    if (!isMoreMenuOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      const target = e.target as Node | null;
-      if (target && moreMenuRef.current?.contains(target)) return;
-      setIsMoreMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onMouseDown);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-    };
-  }, [isMoreMenuOpen]);
-
-  useEffect(() => {
-    setIsMoreMenuOpen(false);
-    setIsExportOpen(false);
-    setIsHistoryOpen(false);
-    setHistoryEntries([]);
-    setIsHistoryLoading(false);
-    setHistoryFilter('all');
-    setSelectedHistoryVersionId(null);
-    setSelectedHistoryContent('');
-    setIsHistoryVersionLoading(false);
-    setHistoryLabelDrafts({});
-    setHistoryMetaUpdateEnabled(typeof window.electronAPI.updateNoteHistoryVersion === 'function');
-    historyMetaUpdateHintShownRef.current = false;
-    setSavingHistoryMetaId(null);
-    setRollingBackVersionId(null);
-    historyVersionContentCacheRef.current = {};
-    setIsThemePickerOpen(false);
-  }, [note?.id]);
-
-  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
-    setToast({ type, message });
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToast(null), 5200);
+  const handleOpenImagePreview = useCallback((src: string) => {
+    setLightboxSrc(src);
   }, []);
 
-  const notifyHistoryMetaUpdateUnavailable = useCallback(() => {
-    if (historyMetaUpdateHintShownRef.current) return;
-    historyMetaUpdateHintShownRef.current = true;
-    showToast('info', 'Pin/label requires restarting Notely once to reload main process updates.');
-  }, [showToast]);
-
-  useEffect(() => {
-    return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    };
+  const handleOpenExternal = useCallback((url: string) => {
+    void window.electronAPI.openExternal(url);
   }, []);
 
-  const clearSaveDebounce = useCallback(() => {
-    if (!saveDebounceRef.current) return;
-    clearTimeout(saveDebounceRef.current);
-    saveDebounceRef.current = null;
+  const handleEditorReady = useCallback((view: EditorView) => {
+    editorViewRef.current = view;
   }, []);
 
-  const flushSaveForNote = useCallback(async (noteId: string, filename: string) => {
-    clearSaveDebounce();
-
-    if (saveInFlightRef.current) {
-      pendingSaveRef.current = { id: noteId, filename };
-      return;
-    }
-
-    const entry = draftCacheRef.current[noteId];
-    if (!entry) return;
-
-    saveInFlightRef.current = true;
-    const token = entry.token;
-
-    try {
-      await onSave({
-        id: noteId,
-        filename,
-        title: entry.title,
-        content: entry.content,
-        tags: entry.tags,
-        date: entry.date,
-        preserveModifiedAt: entry.preserveModifiedAt,
-      });
-
-      const stillSame = draftCacheRef.current[noteId]?.token === token;
-      if (stillSame) {
-        delete draftCacheRef.current[noteId];
-        if (note?.id === noteId) {
-          setHasChanges(false);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to save note:', err);
-    } finally {
-      saveInFlightRef.current = false;
-      const pending = pendingSaveRef.current;
-      pendingSaveRef.current = null;
-      if (pending) {
-        await flushSaveForNote(pending.id, pending.filename);
-      }
-    }
-  }, [clearSaveDebounce, onSave, note?.id]);
-
-  const scheduleSave = useCallback(() => {
-    if (!note) return;
-    clearSaveDebounce();
-    saveDebounceRef.current = setTimeout(() => {
-      void flushSaveForNote(note.id, note.filename);
-    }, SAVE_DEBOUNCE_MS);
-  }, [clearSaveDebounce, flushSaveForNote, note]);
-
-  const readHistoryVersionBody = useCallback(async (versionId: string): Promise<string | null> => {
-    if (!note || !versionId) return null;
-    if (typeof window.electronAPI.readNoteHistoryVersion !== 'function') {
-      showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      return null;
-    }
-
-    const cached = historyVersionContentCacheRef.current[versionId];
-    if (typeof cached === 'string') return cached;
-
-    try {
-      const readResult = await window.electronAPI.readNoteHistoryVersion({
-        filename: note.filename,
-        versionId,
-      });
-      if (!readResult.success || typeof readResult.content !== 'string') {
-        throw new Error(readResult.error || 'Failed to read history version');
-      }
-      const parsed = parseNote(readResult.content, note.filename);
-      const body = parsed.contentBody || '';
-      historyVersionContentCacheRef.current[versionId] = body;
-      return body;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/No handler registered for ['"]notes:history:read['"]/i.test(message)) {
-        showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      } else {
-        showToast('error', message || 'Failed to read history version');
-      }
-      return null;
-    }
-  }, [note, showToast]);
-
-  const updateHistoryVersionMeta = useCallback(async (versionId: string, changes: { label?: string; pinned?: boolean }) => {
-    if (!note || !versionId) return false;
-    if (!historyMetaUpdateEnabled || typeof window.electronAPI.updateNoteHistoryVersion !== 'function') {
-      setHistoryMetaUpdateEnabled(false);
-      notifyHistoryMetaUpdateUnavailable();
-      return false;
-    }
-
-    setSavingHistoryMetaId(versionId);
-    try {
-      const result = await window.electronAPI.updateNoteHistoryVersion({
-        filename: note.filename,
-        versionId,
-        ...changes,
-      });
-      if (!result.success || !result.version) {
-        throw new Error(result.error || 'Failed to update history version');
-      }
-      const updatedVersion = result.version;
-
-      setHistoryEntries((prev) => prev.map((entry) => (
-        entry.id === updatedVersion.id ? updatedVersion : entry
-      )));
-      setHistoryLabelDrafts((prev) => ({
-        ...prev,
-        [updatedVersion.id]: updatedVersion.label || '',
-      }));
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/No handler registered for ['"]notes:history:update['"]/i.test(message)) {
-        setHistoryMetaUpdateEnabled(false);
-        notifyHistoryMetaUpdateUnavailable();
-      } else {
-        showToast('error', message || 'Failed to update history version');
-      }
-      return false;
-    } finally {
-      setSavingHistoryMetaId(null);
-    }
-  }, [historyMetaUpdateEnabled, note, notifyHistoryMetaUpdateUnavailable, showToast]);
-
-  const loadNoteHistory = useCallback(async () => {
-    if (!note) return;
-    if (typeof window.electronAPI.listNoteHistory !== 'function') {
-      showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      return;
-    }
-
-    setIsHistoryLoading(true);
-    try {
-      const result = await window.electronAPI.listNoteHistory({
-        filename: note.filename,
-        limit: 120,
-      });
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to load note history');
-      }
-      const versions = result.versions ?? [];
-      setHistoryEntries(versions);
-      setHistoryLabelDrafts(
-        Object.fromEntries(versions.map((entry) => [entry.id, entry.label || '']))
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/No handler registered for ['"]notes:history:list['"]/i.test(message)) {
-        showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      } else {
-        showToast('error', message || 'Failed to load note history');
-      }
-    } finally {
-      setIsHistoryLoading(false);
-    }
-  }, [note, showToast]);
-
-  const filteredHistoryEntries = useMemo(() => {
-    const filtered = historyFilter === 'all'
-      ? historyEntries
-      : historyEntries.filter((entry) => entry.source === historyFilter);
-    return filtered.slice().sort((a, b) => {
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  }, [historyEntries, historyFilter]);
-
-  const selectedHistoryEntry = useMemo(() => {
-    if (!selectedHistoryVersionId) return null;
-    return historyEntries.find((entry) => entry.id === selectedHistoryVersionId) ?? null;
-  }, [historyEntries, selectedHistoryVersionId]);
-
-  const selectedHistoryLabelDraft = useMemo(() => {
-    if (!selectedHistoryEntry) return '';
-    return historyLabelDrafts[selectedHistoryEntry.id] ?? selectedHistoryEntry.label ?? '';
-  }, [historyLabelDrafts, selectedHistoryEntry]);
-
-  const isSelectedHistoryLabelDirty = useMemo(() => {
-    if (!selectedHistoryEntry) return false;
-    const currentLabel = (selectedHistoryEntry.label || '').trim();
-    const draftLabel = selectedHistoryLabelDraft.trim();
-    return currentLabel !== draftLabel;
-  }, [selectedHistoryEntry, selectedHistoryLabelDraft]);
-
-  const historyDiffLines = useMemo(() => {
-    if (!selectedHistoryVersionId) return [];
-    return buildHistoryDiff(selectedHistoryContent, content);
-  }, [content, selectedHistoryContent, selectedHistoryVersionId]);
-
-  const historyDiffStats = useMemo(() => {
-    return historyDiffLines.reduce(
-      (acc, line) => {
-        if (line.type === 'add') acc.additions += 1;
-        if (line.type === 'remove') acc.removals += 1;
-        return acc;
-      },
-      { additions: 0, removals: 0 }
-    );
-  }, [historyDiffLines]);
-  const selectedHistorySourceLabel = selectedHistoryEntry ? HISTORY_SOURCE_LABELS[selectedHistoryEntry.source] : '';
-  const selectedHistorySizeInKb = selectedHistoryEntry
-    ? Math.max(1, Math.ceil((selectedHistoryEntry.size || 0) / 1024))
-    : 0;
-  const isSelectedHistoryMetaSaving = selectedHistoryEntry ? savingHistoryMetaId === selectedHistoryEntry.id : false;
-  const isSelectedHistoryRollingBack = selectedHistoryEntry ? rollingBackVersionId === selectedHistoryEntry.id : false;
-
-  const saveSelectedHistoryLabel = useCallback(async () => {
-    if (!selectedHistoryEntry) return;
-    if (!isSelectedHistoryLabelDirty) return;
-    await updateHistoryVersionMeta(selectedHistoryEntry.id, {
-      label: selectedHistoryLabelDraft,
-    });
-  }, [isSelectedHistoryLabelDirty, selectedHistoryEntry, selectedHistoryLabelDraft, updateHistoryVersionMeta]);
-
-  const toggleHistoryEntryPinned = useCallback(async (entry: NoteHistoryVersion) => {
-    await updateHistoryVersionMeta(entry.id, {
-      pinned: !entry.pinned,
-    });
-  }, [updateHistoryVersionMeta]);
-
-  useEffect(() => {
-    if (!isHistoryOpen) return;
-    if (!filteredHistoryEntries.length) {
-      setSelectedHistoryVersionId(null);
-      setSelectedHistoryContent('');
-      return;
-    }
-    const selectedStillVisible = selectedHistoryVersionId
-      ? filteredHistoryEntries.some((entry) => entry.id === selectedHistoryVersionId)
-      : false;
-    if (!selectedStillVisible) {
-      setSelectedHistoryVersionId(filteredHistoryEntries[0].id);
-    }
-  }, [filteredHistoryEntries, isHistoryOpen, selectedHistoryVersionId]);
-
-  useEffect(() => {
-    if (!isHistoryOpen || !selectedHistoryVersionId) {
-      setIsHistoryVersionLoading(false);
-      return;
-    }
-    let cancelled = false;
-
-    setIsHistoryVersionLoading(true);
-    void (async () => {
-      const nextContent = await readHistoryVersionBody(selectedHistoryVersionId);
-      if (cancelled) return;
-      setSelectedHistoryContent(nextContent || '');
-      setIsHistoryVersionLoading(false);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isHistoryOpen, readHistoryVersionBody, selectedHistoryVersionId]);
-
-  const rollbackToHistoryVersion = useCallback(async (versionId: string) => {
-    if (!note || !versionId) return;
-    if (rollingBackVersionId) return;
-    if (typeof window.electronAPI.readNoteHistoryVersion !== 'function') {
-      showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      return;
-    }
-
-    setRollingBackVersionId(versionId);
-    try {
-      await flushSaveForNote(note.id, note.filename);
-
-      const readResult = await window.electronAPI.readNoteHistoryVersion({
-        filename: note.filename,
-        versionId,
-      });
-      if (!readResult.success || typeof readResult.content !== 'string') {
-        throw new Error(readResult.error || 'Failed to read history version');
-      }
-
-      const parsed = parseNote(readResult.content, note.filename);
-      const rollbackPayload: SaveNoteData = {
-        id: note.id,
-        filename: note.filename,
-        forceFilename: note.filename,
-        title: parsed.title,
-        content: parsed.contentBody,
-        tags: parsed.tags,
-        date: parsed.date,
-        historySource: 'rollback',
-      };
-      await onSave(rollbackPayload);
-
-      historyVersionContentCacheRef.current[versionId] = parsed.contentBody || '';
-      delete draftCacheRef.current[note.id];
-      setTitle(parsed.title || 'Untitled');
-      setContent(parsed.contentBody || '');
-      setTags(parsed.tags || []);
-      setHasChanges(false);
-      setWechatPreview(null);
-      setIsWechatPreviewPanelOpen(false);
-      setSelectedHistoryVersionId(versionId);
-      setSelectedHistoryContent(parsed.contentBody || '');
-      try {
-        const rendered = await remark()
-          .use(remarkGfm)
-          .use(remarkHtml)
-          .process(parsed.contentBody || '');
-        setHtmlContent(transformMediaEmbeds(String(rendered.value)));
-      } catch (renderErr) {
-        console.error('Failed to render rollback content:', renderErr);
-      }
-
-      showToast('success', 'Rolled back to selected version');
-      await loadNoteHistory();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/No handler registered for ['"]notes:history:read['"]/i.test(message)) {
-        showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      } else {
-        showToast('error', message || 'Failed to rollback');
-      }
-    } finally {
-      setRollingBackVersionId(null);
-    }
-  }, [flushSaveForNote, loadNoteHistory, note, onSave, rollingBackVersionId, showToast]);
-
-  // 加载笔记（并在切换时 flush 未保存的草稿）
-  useEffect(() => {
-    if (note) {
-      const cachedWechatPreview = wechatPreviewCacheRef.current[note.id] ?? null;
-      setWechatPreview(cachedWechatPreview);
-      setIsWechatPreviewPanelOpen(Boolean(cachedWechatPreview));
-      const cached = draftCacheRef.current[note.id];
-      if (cached) {
-        setTitle(cached.title || 'Untitled');
-        setContent(cached.content || '');
-        setTags(cached.tags || []);
-        setHasChanges(true);
-        setLightboxSrc(null);
-        renderMarkdown(cached.content || '');
-      } else {
-        setTitle(note.title || 'Untitled');
-        setContent(note.content || '');
-        setTags(note.tags || []);
-        setHasChanges(false);
-        setLightboxSrc(null);
-        renderMarkdown(note.content || '');
-      }
-    } else {
-      setTitle('');
-      setContent('');
-      setTags([]);
-      setHtmlContent('');
-      setWechatPreview(null);
-      setIsWechatPreviewPanelOpen(false);
-      setHasChanges(false);
-      setLightboxSrc(null);
-    }
-
-    return () => {
-      if (!note) return;
-      void flushSaveForNote(note.id, note.filename);
-    };
-  }, [flushSaveForNote, note?.id]);
-
-  const scrollLiveEditorToPosition = useCallback((index: number) => {
-    const view = liveEditorRef.current;
-    if (!view) return;
-
-    const pos = Math.max(0, Math.min(index, view.state.doc.length));
-    view.dispatch({
-      selection: { anchor: pos },
-      effects: EditorView.scrollIntoView(pos, { y: 'center' }),
-    });
-    view.focus();
-  }, []);
-
-  const applyPendingSelectionToLiveEditor = useCallback(() => {
-    const pending = pendingSelectionRef.current;
-    if (!pending) return;
-    const view = liveEditorRef.current;
-    if (!view) return;
-
-    if (typeof pending.index === 'number') {
-      scrollLiveEditorToPosition(pending.index);
-    } else {
-      view.scrollDOM.scrollTop = pending.scrollTop;
-      view.focus();
-    }
-    pendingSelectionRef.current = null;
-  }, [scrollLiveEditorToPosition]);
-
-  // 渲染 Markdown
-  const renderMarkdown = useCallback(async (text: string) => {
-    try {
-      const result = await remark()
-        .use(remarkGfm)
-        .use(remarkHtml)
-        .process(text);
-      setHtmlContent(transformMediaEmbeds(String(result.value)));
-      return true;
-    } catch (err) {
-      console.error('Failed to render markdown:', err);
-      return false;
-    }
-  }, []);
-
-  const updateTextOffsetMap = (markdown: string) => {
-    try {
-      const tree = remark().use(remarkGfm).parse(markdown) as any;
-      const offsets: number[] = [];
-
-      const addOffsets = (value: string, startOffset: number | null | undefined) => {
-        if (!value || typeof startOffset !== 'number') return;
-        for (let i = 0; i < value.length; i += 1) {
-          offsets.push(startOffset + i);
-        }
-      };
-
-      const findValueStart = (node: any) => {
-        const start = node?.position?.start?.offset;
-        const end = node?.position?.end?.offset;
-        if (typeof start !== 'number' || typeof end !== 'number') return null;
-        const slice = markdown.slice(start, end);
-        const idx = typeof node.value === 'string' ? slice.indexOf(node.value) : -1;
-        if (idx >= 0) return start + idx;
-        return start;
-      };
-
-      const visit = (node: any) => {
-        if (!node) return;
-        if (node.type === 'text') {
-          addOffsets(node.value, node.position?.start?.offset);
-          return;
-        }
-        if (node.type === 'inlineCode' || node.type === 'code') {
-          addOffsets(node.value || '', findValueStart(node));
-          return;
-        }
-        if (Array.isArray(node.children)) {
-          node.children.forEach(visit);
-        }
-      };
-
-      visit(tree);
-      textOffsetMapRef.current = offsets;
-      textOffsetMapSourceRef.current = markdown;
-    } catch (err) {
-      textOffsetMapRef.current = [];
-      textOffsetMapSourceRef.current = markdown;
-    }
-  };
-
-  const ensureTextOffsetMap = useCallback((markdown: string) => {
-    if (textOffsetMapSourceRef.current === markdown) return;
-    updateTextOffsetMap(markdown);
-  }, []);
-
-  // 自动保存
-  // 处理内容变化
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent);
-    setHasChanges(true);
-    if (note) {
-      draftChangeTokenRef.current += 1;
-      draftCacheRef.current[note.id] = {
-        title,
-        content: newContent,
-        tags,
-        date: note.date,
-        token: draftChangeTokenRef.current,
-        filename: note.filename,
-        preserveModifiedAt: false,
-      };
-      scheduleSave();
-    }
-  };
-
-  // 处理标题变化
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value;
-    setTitle(newTitle);
-    setHasChanges(true);
-    if (note) {
-      draftChangeTokenRef.current += 1;
-      draftCacheRef.current[note.id] = {
-        title: newTitle,
-        content,
-        tags,
-        date: note.date,
-        token: draftChangeTokenRef.current,
-        filename: note.filename,
-        preserveModifiedAt: false,
-      };
-      scheduleSave();
-    }
-  };
-
-  // 处理标签输入
-  const handleTagKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-      e.preventDefault();
-      const newTag = e.currentTarget.value.trim();
-      if (!tags.includes(newTag)) {
-        const nextTags = [...tags, newTag];
-        setTags(nextTags);
-        setHasChanges(true);
-        if (note) {
-          draftChangeTokenRef.current += 1;
-          draftCacheRef.current[note.id] = {
-            title,
-            content,
-            tags: nextTags,
-            date: note.date,
-            token: draftChangeTokenRef.current,
-            filename: note.filename,
-            preserveModifiedAt: false,
-          };
-          scheduleSave();
-        }
-      }
-      e.currentTarget.value = '';
-    }
-  };
-
-  // 删除标签
-  const removeTag = (tagToRemove: string) => {
-    const nextTags = tags.filter(tag => tag !== tagToRemove);
-    setTags(nextTags);
-    setHasChanges(true);
-    if (note) {
-      draftChangeTokenRef.current += 1;
-      draftCacheRef.current[note.id] = {
-        title,
-        content,
-        tags: nextTags,
-        date: note.date,
-        token: draftChangeTokenRef.current,
-        filename: note.filename,
-        preserveModifiedAt: false,
-      };
-      scheduleSave();
-    }
-  };
-
-  const togglePinned = useCallback(() => {
-    if (!note) return;
-
-    const existingDraft = draftCacheRef.current[note.id];
-    const preserveModifiedAt = existingDraft ? Boolean(existingDraft.preserveModifiedAt) : true;
-    const nextTags = tags.includes('pinned') ? tags.filter((tag) => tag !== 'pinned') : [...tags, 'pinned'];
-    setTags(nextTags);
-    setHasChanges(true);
-
-    draftChangeTokenRef.current += 1;
-    draftCacheRef.current[note.id] = {
-      title,
-      content,
-      tags: nextTags,
-      date: note.date,
-      token: draftChangeTokenRef.current,
-      filename: note.filename,
-      preserveModifiedAt,
-    };
-
-    void flushSaveForNote(note.id, note.filename);
-  }, [content, flushSaveForNote, note, tags, title]);
-
-  const toggleFavorite = useCallback(() => {
-    if (!note) return;
-
-    const existingDraft = draftCacheRef.current[note.id];
-    const preserveModifiedAt = existingDraft ? Boolean(existingDraft.preserveModifiedAt) : true;
-    const nextTags = tags.includes('favorite') ? tags.filter((tag) => tag !== 'favorite') : [...tags, 'favorite'];
-    setTags(nextTags);
-    setHasChanges(true);
-
-    draftChangeTokenRef.current += 1;
-    draftCacheRef.current[note.id] = {
-      title,
-      content,
-      tags: nextTags,
-      date: note.date,
-      token: draftChangeTokenRef.current,
-      filename: note.filename,
-      preserveModifiedAt,
-    };
-
-    void flushSaveForNote(note.id, note.filename);
-  }, [content, flushSaveForNote, note, tags, title]);
-
-  useEffect(() => {
-    if (!isEditing) return;
-    if (!pendingSelectionRef.current) return;
-
+  const jumpToOutlineItem = useCallback((item: OutlineItem) => {
     requestAnimationFrame(() => {
-      applyPendingSelectionToLiveEditor();
-    });
-  }, [applyPendingSelectionToLiveEditor, content, isEditing]);
-
-  useEffect(() => {
-    if (!isPreviewMode) return;
-    const pendingScroll = pendingScrollRestoreRef.current;
-    if (pendingScroll === null) return;
-    const container = editorContentRef.current;
-    if (!container) return;
-
-    let cancelled = false;
-    let raf1 = 0;
-    let raf2 = 0;
-    let settleTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const apply = () => {
-      if (cancelled) return;
-      const maxScrollTop = container.scrollHeight - container.clientHeight;
-      const next = Math.min(maxScrollTop, Math.max(0, pendingScroll));
-      container.scrollTop = next;
-    };
-
-    const stop = () => {
-      if (cancelled) return;
-      cancelled = true;
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      if (settleTimer) clearTimeout(settleTimer);
-      container.removeEventListener('wheel', onUserIntent);
-      container.removeEventListener('touchmove', onUserIntent);
-      container.removeEventListener('pointerdown', onUserIntent);
-      pendingScrollRestoreRef.current = null;
-    };
-
-    const onUserIntent = () => stop();
-
-    container.addEventListener('wheel', onUserIntent, { passive: true });
-    container.addEventListener('touchmove', onUserIntent, { passive: true });
-    container.addEventListener('pointerdown', onUserIntent, { passive: true });
-
-    raf1 = requestAnimationFrame(() => {
-      apply();
-      raf2 = requestAnimationFrame(() => apply());
-    });
-
-    // Final short settle pass for delayed layout shifts, then release control.
-    settleTimer = setTimeout(() => {
-      apply();
-      stop();
-    }, 180);
-
-    return () => {
-      if (settleTimer) clearTimeout(settleTimer);
-      container.removeEventListener('wheel', onUserIntent);
-      container.removeEventListener('touchmove', onUserIntent);
-      container.removeEventListener('pointerdown', onUserIntent);
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, [htmlContent, isPreviewMode]);
-
-  const switchToPreview = useCallback(async () => {
-    pendingScrollRestoreRef.current = liveEditorRef.current?.scrollDOM.scrollTop ?? editorContentRef.current?.scrollTop ?? 0;
-    await renderMarkdown(content);
-    setEditorMode('preview');
-  }, [content, renderMarkdown]);
-
-  const switchToEditMode = useCallback((mode: 'live' | 'source') => {
-    if (isPreviewMode) {
-      pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
-    }
-    setEditorMode(mode);
-  }, [isPreviewMode]);
-
-  useEffect(() => {
-    if (!isEditing) return;
-    const onKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        void switchToPreview();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [isEditing, switchToPreview]);
-
-  const sanitizePdfFileName = useCallback((value: string): string => {
-    const trimmed = value.trim();
-    const base = trimmed || 'Untitled';
-    return base
-      .replace(/[\\/:*?"<>|]/g, '-')
-      .replace(/\s+/g, ' ')
-      .slice(0, 80)
-      .trim();
-  }, []);
-
-  const copyTextToClipboard = useCallback(async (text: string): Promise<boolean> => {
-    const copyViaNativeClipboard = async (): Promise<boolean> => {
-      if (typeof window.electronAPI.writeClipboardText !== 'function') return false;
-      try {
-        const result = await window.electronAPI.writeClipboardText(text);
-        return Boolean(result?.success);
-      } catch {
-        return false;
-      }
-    };
-
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      // continue to fallbacks
-    }
-
-    if (await copyViaNativeClipboard()) {
-      return true;
-    }
-
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.setAttribute('readonly', 'true');
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(textarea);
-      if (ok) return true;
-    } catch {
-      // continue to final fallback
-    }
-
-    return copyViaNativeClipboard();
-  }, []);
-
-  const copyMarkdownSource = useCallback(async () => {
-    const ok = await copyTextToClipboard(content);
-    if (!ok) {
-      showToast('error', 'Failed to copy markdown');
-      return;
-    }
-    showToast('success', 'Markdown copied');
-    setIsMoreMenuOpen(false);
-  }, [content, copyTextToClipboard, showToast]);
-
-  const copyWechatHtml = useCallback(async () => {
-    const html = wechatPreview?.html ?? '';
-    if (!html) {
-      showToast('error', 'No generated WeChat HTML');
-      return;
-    }
-
-    const ok = await copyTextToClipboard(html);
-    if (!ok) {
-      showToast('error', 'Failed to copy WeChat HTML');
-      return;
-    }
-
-    showToast('success', 'WeChat HTML copied');
-  }, [copyTextToClipboard, showToast, wechatPreview]);
-
-  const generateWechatHtmlWithAi = useCallback(async (themeId: string) => {
-    const theme = getWechatLayoutThemeById(themeId);
-    const modelOption = selectedWechatGenerationModelOption;
-    const apiKey = modelOption?.apiKey.trim() ?? '';
-    const model = modelOption?.model.trim() ?? '';
-
-    if (!modelOption || !apiKey || !model) {
-      showToast('error', 'Set API key and model in Settings > Editor > WeChat Layout Themes first');
-      return;
-    }
-
-    const markdown = content.trim();
-    if (!markdown) {
-      showToast('error', 'Current note is empty');
-      return;
-    }
-
-    if (isGeneratingWechatHtml) return;
-    setIsGeneratingWechatHtml(true);
-    showToast('info', `Generating WeChat layout (${theme.name}) with ${modelOption.label}...`);
-
-    try {
-      if (typeof window.electronAPI.generateWechatHtmlWithAi !== 'function') {
-        throw new Error('WeChat layout channel is unavailable. Please restart the app.');
-      }
-
-      const result = await window.electronAPI.generateWechatHtmlWithAi({
-        markdown,
-        title: title.trim() || undefined,
-        provider: modelOption.provider,
-        apiKey,
-        model,
-        themeId: theme.id,
+      const view = editorViewRef.current;
+      if (!view) return;
+      const position = Math.max(0, Math.min(item.offset, view.state.doc.length));
+      view.dispatch({
+        selection: { anchor: position },
+        effects: EditorView.scrollIntoView(position, { y: 'center' }),
       });
-
-      if (!result.success || !result.html) {
-        throw new Error(result.error || 'Failed to generate WeChat layout');
-      }
-
-      const previewState: WechatPreviewState = {
-        html: result.html,
-        themeId: theme.id,
-        sourceContent: content,
-      };
-      if (note) {
-        wechatPreviewCacheRef.current[note.id] = previewState;
-      }
-      setWechatPreview(previewState);
-      setIsWechatPreviewPanelOpen(true);
-      setIsMoreMenuOpen(false);
-      setIsThemePickerOpen(false);
-
-      const ok = await copyTextToClipboard(result.html);
-      if (!ok) {
-        showToast('error', `Generated WeChat layout (${theme.name}) with ${modelOption.label}, but auto-copy failed. Use Copy HTML in preview panel.`);
-        return;
-      }
-
-      showToast('success', `Generated WeChat layout (${theme.name}) with ${modelOption.label} and copied to clipboard`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/No handler registered for ['"]wechat:generateHtmlWithAi['"]/i.test(message)) {
-        showToast('error', 'Main process is outdated. Restart Notely and try again.');
-      } else {
-        showToast('error', message || 'Failed to generate WeChat layout');
-      }
-    } finally {
-      setIsGeneratingWechatHtml(false);
-    }
-  }, [content, copyTextToClipboard, isGeneratingWechatHtml, note, selectedWechatGenerationModelOption, showToast, title]);
-
-  const exportCurrentNoteToPdf = useCallback(async () => {
-    if (!note) return;
-    if (isExporting) return;
-
-    setIsExporting(true);
-    try {
-      await flushSaveForNote(note.id, note.filename);
-
-      const result = await remark()
-        .use(remarkGfm)
-        .use(remarkHtml)
-        .process(content);
-      const bodyHtml = String(result.value);
-
-      const now = new Date();
-      const dateText = note?.modifiedAt
-        ? format(new Date(note.modifiedAt), "MMM d, yyyy 'at' h:mm a")
-        : format(now, "MMM d, yyyy 'at' h:mm a");
-      const fontFamily = window.getComputedStyle(document.documentElement).getPropertyValue('--app-font-family').trim();
-
-      const safeTitle = title.trim() || 'Untitled';
-      const fileDate = note?.modifiedAt ? new Date(note.modifiedAt) : now;
-      const suggestedFileName = `${sanitizePdfFileName(safeTitle)}-${fileDate.toISOString().slice(0, 10)}.pdf`;
-
-      const request: ExportNotePdfRequest = {
-        title: safeTitle,
-        html: bodyHtml,
-        options: {
-          ...exportOptions,
-          dateText,
-          fontFamily,
-        },
-        suggestedFileName,
-      };
-
-      const exportResult = await window.electronAPI.exportNotePdf(request);
-      if (exportResult.canceled) return;
-
-      if (!exportResult.success) {
-        throw new Error(exportResult.error || 'Failed to export PDF');
-      }
-
-      showToast('success', 'PDF exported');
-      setIsExportOpen(false);
-      setIsMoreMenuOpen(false);
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsExporting(false);
-    }
-  }, [content, exportOptions, flushSaveForNote, isExporting, note, sanitizePdfFileName, showToast, title]);
-
-  const getPlainTextOffsetFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
-    const previewEl = previewRef.current;
-    if (!previewEl) return null;
-
-    const caretRange =
-      (document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null })
-        .caretRangeFromPoint?.(e.clientX, e.clientY) ?? null;
-
-    if (!caretRange || caretRange.startContainer.nodeType !== Node.TEXT_NODE) return null;
-
-    const targetNode = caretRange.startContainer as Text;
-    const targetOffset = caretRange.startOffset;
-
-    const walker = document.createTreeWalker(previewEl, NodeFilter.SHOW_TEXT, {
-      acceptNode: (node) => {
-        if (!node.textContent) return NodeFilter.FILTER_REJECT;
-        if (node.textContent.trim() === '' && node.parentElement === previewEl) {
-          return NodeFilter.FILTER_REJECT;
-        }
-        return NodeFilter.FILTER_ACCEPT;
-      },
+      view.focus();
     });
-
-    let offset = 0;
-    let current = walker.nextNode();
-    while (current) {
-      if (current === targetNode) {
-        return offset + Math.min(targetOffset, current.textContent?.length ?? 0);
-      }
-      offset += current.textContent?.length ?? 0;
-      current = walker.nextNode();
-    }
-    return offset;
-  };
-
-  const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const container = editorContentRef.current;
-    if (
-      container &&
-      e.target === e.currentTarget &&
-      container.scrollHeight > container.clientHeight
-    ) {
-      const rect = container.getBoundingClientRect();
-      const scrollbarHitWidth = 18;
-      if (e.clientX >= rect.right - scrollbarHitWidth) {
-        return;
-      }
-    }
-
-    const target = e.target as HTMLElement | null;
-    if (!target) {
-      pendingSelectionRef.current = { index: undefined, scrollTop: editorContentRef.current?.scrollTop ?? 0 };
-      setEditorMode('live');
-      return;
-    }
-
-    if (target.closest('video')) {
-      return;
-    }
-
-    // Images: open lightbox
-    if (target.tagName === 'IMG') {
-      const img = target as HTMLImageElement;
-      if (img.src) {
-        setLightboxSrc(img.src);
-        return;
-      }
-    }
-
-    // Links: open in default browser
-    const link = target.closest('a') as HTMLAnchorElement | null;
-    if (link?.href) {
-      e.preventDefault();
-      window.electronAPI.openExternal(link.href);
-      return;
-    }
-
-    const scrollTop = editorContentRef.current?.scrollTop ?? 0;
-    const plainTextOffset = getPlainTextOffsetFromEvent(e);
-    ensureTextOffsetMap(content);
-    const map = textOffsetMapRef.current;
-    let index: number | undefined;
-    if (plainTextOffset !== null && map.length > 0) {
-      const mappedIndex = map[Math.min(plainTextOffset, map.length - 1)] ?? 0;
-      index = Math.max(0, Math.min(mappedIndex, content.length));
-    }
-    pendingSelectionRef.current = { index, scrollTop };
-
-    // Preview click always returns to live mode.
-    setEditorMode('live');
-  };
+  }, []);
 
   if (isLoading) {
     return (
-      <div className="editor">
+      <section className="editor">
         <div className="editor-loading">
           <div className="loading-spinner" />
         </div>
-      </div>
+      </section>
     );
   }
 
   if (!note) {
     return (
-      <div className="editor">
+      <section className="editor">
         <div className="editor-empty">
-          <p>Select a note to view</p>
+          <p>Select a Markdown document to start editing.</p>
         </div>
-      </div>
+      </section>
     );
   }
 
-  const isPinned = tags.includes('pinned');
-  const isFavorite = tags.includes('favorite');
-  const mainTag = tags.find(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
-  const displayTags = tags.filter(tag => !['favorite', 'archive', 'trash', 'pinned'].includes(tag));
-  const wechatTheme = wechatPreview ? getWechatLayoutThemeById(wechatPreview.themeId) : null;
-  const isWechatPreviewStale = Boolean(wechatPreview && wechatPreview.sourceContent !== content);
-  const wechatPreviewSrcDoc = wechatPreview ? buildWechatPreviewSrcDoc(wechatPreview.html) : '';
-
   return (
-    <div className={`editor ${isEditing ? 'is-editing' : 'is-preview'} ${isSourceMode ? 'is-source' : 'is-live'}`}>
-      {/* Header */}
-      <div className="editor-header">
-        <div className="editor-container editor-header-inner">
-          <div className="editor-meta">
-            <span className="editor-date">
-              {note.modifiedAt && format(new Date(note.modifiedAt), "MMM d, yyyy 'at' h:mm a")}
-            </span>
-            {mainTag && (
-              <span 
-                className="editor-tag"
-                style={{ 
-                  backgroundColor: `${getTagColor(mainTag)}20`,
-                  color: getTagColor(mainTag)
-                }}
-              >
-                {mainTag}
-              </span>
-            )}
-          </div>
-          <div className="editor-actions">
-            <div className="editor-mode-group" role="tablist" aria-label="Editor mode">
-              <button
-                type="button"
-                className={`editor-mode-segment ${editorMode === 'live' ? 'active' : ''}`}
-                role="tab"
-                aria-selected={editorMode === 'live'}
-                onClick={() => switchToEditMode('live')}
-              >
-                Live
-              </button>
-              <button
-                type="button"
-                className={`editor-mode-segment ${editorMode === 'source' ? 'active' : ''}`}
-                role="tab"
-                aria-selected={editorMode === 'source'}
-                onClick={() => switchToEditMode('source')}
-              >
-                Source
-              </button>
-              <button
-                type="button"
-                className={`editor-mode-segment ${editorMode === 'preview' ? 'active' : ''}`}
-                role="tab"
-                aria-selected={editorMode === 'preview'}
-                onClick={() => {
-                  if (isPreviewMode) return;
-                  void switchToPreview();
-                }}
-              >
-                Preview
-              </button>
-            </div>
-            <button
-              type="button"
-              className={`editor-action-btn ${isPinned ? 'active' : ''}`}
-              onClick={togglePinned}
-              aria-pressed={isPinned}
-              aria-label={isPinned ? '取消置顶' : '置顶'}
-              title={isPinned ? '取消置顶' : '置顶'}
-            >
-              <Pin size={18} />
-            </button>
-            <button
-              type="button"
-              className={`editor-action-btn ${isFavorite ? 'active' : ''}`}
-              onClick={toggleFavorite}
-              aria-pressed={isFavorite}
-              aria-label={isFavorite ? '取消收藏' : '收藏'}
-              title={isFavorite ? '取消收藏' : '收藏'}
-            >
-              <Star size={18} />
-            </button>
-            <div className="editor-more" ref={moreMenuRef}>
-              <button
-                type="button"
-                className="editor-action-btn"
-                onClick={() => setIsMoreMenuOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={isMoreMenuOpen}
-                title="More"
-              >
-                <MoreHorizontal size={18} />
-              </button>
-              {isMoreMenuOpen && (
-                <div className="editor-more-menu" role="menu">
-                  <button
-                    type="button"
-                    className="editor-more-item"
-                    role="menuitem"
-                    onClick={() => {
-                      void copyMarkdownSource();
-                    }}
-                  >
-                    <Copy size={16} />
-                    <span>Copy Markdown</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="editor-more-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setIsHistoryOpen(true);
-                      setIsMoreMenuOpen(false);
-                      void loadNoteHistory();
-                    }}
-                  >
-                    <History size={16} />
-                    <span>Version History...</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="editor-more-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setSelectedWechatThemeId((prev) => getWechatLayoutThemeById(prev).id);
-                      setSelectedWechatModelOptionId((prev) => {
-                        const selected = wechatGenerationModelOptions.find((option) => option.id === prev);
-                        if (selected?.configured) return selected.id;
-                        return wechatGenerationModelOptions.find((option) => option.configured)?.id
-                          ?? wechatGenerationModelOptions[0]?.id
-                          ?? DEFAULT_WECHAT_MODEL_OPTION_ID;
-                      });
-                      setIsThemePickerOpen(true);
-                      setIsMoreMenuOpen(false);
-                    }}
-                  >
-                    <Wand2 size={16} />
-                    <span>Generate &amp; Copy WeChat Layout...</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="editor-more-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setIsExportOpen(true);
-                      setIsMoreMenuOpen(false);
-                    }}
-                  >
-                    <FileDown size={16} />
-                    <span>Export PDF</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+    <section className="editor">
+      <header className="editor-header editor-header-minimal">
+        <div className="editor-header-side editor-header-left" aria-hidden="true" />
+
+        <div className="editor-title-rail">{documentTitle}</div>
+
+        <div className="editor-header-side editor-header-right">
+          <span className="editor-word-count">{wordCountLabel}</span>
         </div>
-      </div>
+      </header>
 
-      <div className="editor-container">
-        {/* Title */}
-        <input
-          type="text"
-          className="editor-title-input"
-          value={title}
-          onChange={handleTitleChange}
-          placeholder="Note title"
-        />
-
-        {/* Tags Input */}
-        <div className="editor-tags">
-          {displayTags.map(tag => (
-            <span 
-              key={tag} 
-              className="editor-tag-chip"
-              style={{ 
-                backgroundColor: `${getTagColor(tag)}20`,
-                color: getTagColor(tag)
-              }}
-            >
-              {tag}
-              <button onClick={() => removeTag(tag)}>×</button>
-            </span>
-          ))}
-          <input
-            type="text"
-            className="editor-tag-input"
-            placeholder={displayTags.length === 0 ? "Add tags..." : ""}
-            onKeyDown={handleTagKeyDown}
-          />
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className={`editor-content-shell ${wechatPreview ? 'has-wechat-panel' : ''}`}>
-        <div
-          className="editor-content"
-          ref={editorContentRef}
-          onClick={isPreviewMode ? handlePreviewClick : undefined}
-        >
-          <div className="editor-container editor-content-inner">
-            {isEditing ? (
+      <div className="editor-content-shell">
+        <div className="editor-content">
+          <div className="editor-content-inner">
+            <div className="editor-container editor-writing-surface">
               <MarkdownLiveEditor
                 value={content}
-                onChange={handleContentChange}
-                mode={isSourceMode ? 'source' : 'live'}
-                onEditorReady={(view) => {
-                  liveEditorRef.current = view;
-                  requestAnimationFrame(() => {
-                    applyPendingSelectionToLiveEditor();
-                  });
-                }}
-                onOpenExternal={(url) => {
-                  void window.electronAPI.openExternal(url);
-                }}
-                onOpenImagePreview={(url) => {
-                  setLightboxSrc(url);
-                }}
+                onChange={setContent}
+                onOpenImagePreview={handleOpenImagePreview}
+                onOpenExternal={handleOpenExternal}
+                onEditorReady={handleEditorReady}
+                mode="live"
               />
-            ) : (
-              <div
-                className="editor-preview"
-                ref={previewRef}
-                dangerouslySetInnerHTML={{
-                  __html: htmlContent || '<p class="editor-placeholder">Click to start editing...</p>',
-                }}
-              />
-            )}
+            </div>
           </div>
         </div>
 
-        {wechatPreview && (
-          <aside className={`editor-wechat-panel ${isWechatPreviewPanelOpen ? 'open' : 'collapsed'}`}>
-            <button
-              type="button"
-              className="editor-wechat-panel-toggle"
-              onClick={() => setIsWechatPreviewPanelOpen((open) => !open)}
-              aria-label={isWechatPreviewPanelOpen ? 'Collapse WeChat preview' : 'Expand WeChat preview'}
-              aria-expanded={isWechatPreviewPanelOpen}
-              title={isWechatPreviewPanelOpen ? 'Collapse WeChat preview' : 'Expand WeChat preview'}
-            >
-              {isWechatPreviewPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
-
-            {isWechatPreviewPanelOpen && (
-              <div className="editor-wechat-panel-body">
-                <div className="editor-wechat-toolbar">
-                  {wechatTheme && <span className="editor-wechat-theme">{wechatTheme.name}</span>}
+        {isOutlineOpen && (
+          <aside className="editor-outline-panel">
+            <div className="editor-outline-header">Outline</div>
+            {outlineItems.length === 0 ? (
+              <div className="editor-outline-empty">Add headings to see the document outline.</div>
+            ) : (
+              <div className="editor-outline-list">
+                {outlineItems.map((item) => (
                   <button
+                    key={item.id}
                     type="button"
-                    className="editor-wechat-copy-btn"
-                    onClick={() => {
-                      void copyWechatHtml();
-                    }}
-                    title="Copy generated WeChat HTML"
+                    className={`editor-outline-item level-${item.level}`}
+                    onClick={() => jumpToOutlineItem(item)}
+                    title={item.text}
                   >
-                    <Copy size={14} />
-                    <span>Copy HTML</span>
+                    {item.text}
                   </button>
-                </div>
-
-                {isWechatPreviewStale && (
-                  <p className="editor-wechat-stale">Markdown changed after generation. Regenerate to refresh the WeChat layout.</p>
-                )}
-
-                <div className="editor-wechat-phone">
-                  <iframe
-                    className="editor-wechat-frame"
-                    title="WeChat layout preview"
-                    srcDoc={wechatPreviewSrcDoc}
-                    sandbox=""
-                  />
-                </div>
+                ))}
               </div>
             )}
           </aside>
@@ -1660,518 +279,13 @@ function Editor({
 
       {lightboxSrc && (
         <div className="image-lightbox" onClick={() => setLightboxSrc(null)}>
-          <button
-            type="button"
-            className="image-lightbox-close"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxSrc(null);
-            }}
-            aria-label="Close image preview"
-          >
-            ×
+          <button className="image-lightbox-close" type="button" onClick={() => setLightboxSrc(null)}>
+            Close
           </button>
-          <img
-            className="image-lightbox-img"
-            src={lightboxSrc}
-            alt=""
-            onClick={(e) => e.stopPropagation()}
-          />
+          <img className="image-lightbox-img" src={lightboxSrc} alt="" />
         </div>
       )}
-
-      {isHistoryOpen && (
-        <div
-          className="editor-history-overlay"
-          onClick={() => {
-            if (rollingBackVersionId) return;
-            setIsHistoryOpen(false);
-          }}
-        >
-          <div
-            className="editor-history-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Version History"
-          >
-            <div className="editor-history-header">
-              <div className="editor-history-header-text">
-                <h2>Version History</h2>
-                <p>Compare snapshots, label key versions, and rollback in one click</p>
-                <div className="editor-history-filters" role="tablist" aria-label="History source filter">
-                  {HISTORY_FILTER_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={historyFilter === option.id}
-                      className={`editor-history-filter-btn ${historyFilter === option.id ? 'active' : ''}`}
-                      onClick={() => setHistoryFilter(option.id)}
-                      disabled={isHistoryLoading || Boolean(rollingBackVersionId)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                {!historyMetaUpdateEnabled && (
-                  <p className="editor-history-meta-hint">Pin and label are temporarily unavailable until app restart.</p>
-                )}
-              </div>
-              <button
-                type="button"
-                className="editor-history-close"
-                onClick={() => setIsHistoryOpen(false)}
-                disabled={Boolean(rollingBackVersionId)}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="editor-history-body">
-              {isHistoryLoading ? (
-                <p className="editor-history-empty">Loading versions…</p>
-              ) : historyEntries.length === 0 ? (
-                <p className="editor-history-empty">No versions yet. Save this note to create the first snapshot.</p>
-              ) : filteredHistoryEntries.length === 0 ? (
-                <p className="editor-history-empty">No versions match this filter yet.</p>
-              ) : (
-                <div className="editor-history-layout">
-                  <div className="editor-history-list-pane">
-                    <div className="editor-history-list">
-                      {filteredHistoryEntries.map((entry) => {
-                        const sourceLabel = HISTORY_SOURCE_LABELS[entry.source];
-                        const isSelected = selectedHistoryVersionId === entry.id;
-                        const sizeInKb = Math.max(1, Math.ceil((entry.size || 0) / 1024));
-                        const labelDraft = (historyLabelDrafts[entry.id] ?? entry.label ?? '').trim();
-                        return (
-                          <div key={entry.id} className={`editor-history-item ${isSelected ? 'selected' : ''}`}>
-                            <button
-                              type="button"
-                              className="editor-history-item-select"
-                              onClick={() => setSelectedHistoryVersionId(entry.id)}
-                            >
-                              <div className="editor-history-item-main">
-                                <div className="editor-history-item-top">
-                                  <span className="editor-history-item-time">
-                                    {format(new Date(entry.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                                  </span>
-                                  <span className={`editor-history-item-source ${entry.source}`}>
-                                    {sourceLabel}
-                                  </span>
-                                </div>
-                                <p className="editor-history-item-preview">
-                                  {labelDraft || entry.preview || 'No preview available'}
-                                </p>
-                                <span className="editor-history-item-meta">{sizeInKb} KB</span>
-                              </div>
-                            </button>
-                            <button
-                              type="button"
-                              className={`editor-history-pin-btn ${entry.pinned ? 'active' : ''}`}
-                              aria-pressed={entry.pinned}
-                              title={
-                                !historyMetaUpdateEnabled
-                                  ? 'Restart Notely to enable pin'
-                                  : entry.pinned
-                                    ? 'Unpin version'
-                                    : 'Pin version'
-                              }
-                              onClick={() => {
-                                void toggleHistoryEntryPinned(entry);
-                              }}
-                              disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
-                            >
-                              <Pin size={14} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="editor-history-detail-pane">
-                    {!selectedHistoryEntry ? (
-                      <p className="editor-history-empty">Select a version from the list to compare and rollback.</p>
-                    ) : (
-                      <>
-                        <div className="editor-history-detail-head">
-                          <div className="editor-history-detail-main">
-                            <span className={`editor-history-item-source ${selectedHistoryEntry.source}`}>
-                              {selectedHistorySourceLabel}
-                            </span>
-                            <span className="editor-history-item-time">
-                              {format(new Date(selectedHistoryEntry.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                            </span>
-                            <span className="editor-history-item-meta">{selectedHistorySizeInKb} KB</span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`editor-history-pin-btn ${selectedHistoryEntry.pinned ? 'active' : ''}`}
-                            aria-pressed={selectedHistoryEntry.pinned}
-                            title={
-                              !historyMetaUpdateEnabled
-                                ? 'Restart Notely to enable pin'
-                                : selectedHistoryEntry.pinned
-                                  ? 'Unpin version'
-                                  : 'Pin version'
-                            }
-                            onClick={() => {
-                              void toggleHistoryEntryPinned(selectedHistoryEntry);
-                            }}
-                            disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId) || Boolean(savingHistoryMetaId)}
-                          >
-                            <Pin size={14} />
-                          </button>
-                        </div>
-
-                        <div className="editor-history-label-row">
-                          <input
-                            type="text"
-                            className="editor-history-label-input"
-                            value={selectedHistoryLabelDraft}
-                            onChange={(event) => {
-                              const nextLabel = event.target.value.slice(0, 100);
-                              setHistoryLabelDrafts((prev) => ({
-                                ...prev,
-                                [selectedHistoryEntry.id]: nextLabel,
-                              }));
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key !== 'Enter') return;
-                              event.preventDefault();
-                              void saveSelectedHistoryLabel();
-                            }}
-                            placeholder="Version label (optional)"
-                            maxLength={100}
-                            disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId)}
-                          />
-                          <button
-                            type="button"
-                            className="editor-history-action-btn secondary"
-                            onClick={() => {
-                              void saveSelectedHistoryLabel();
-                            }}
-                            disabled={!historyMetaUpdateEnabled || Boolean(rollingBackVersionId) || !isSelectedHistoryLabelDirty || isSelectedHistoryMetaSaving}
-                          >
-                            {isSelectedHistoryMetaSaving ? 'Saving…' : 'Save Label'}
-                          </button>
-                          <button
-                            type="button"
-                            className="editor-history-action-btn primary"
-                            onClick={() => {
-                              void rollbackToHistoryVersion(selectedHistoryEntry.id);
-                            }}
-                            disabled={Boolean(rollingBackVersionId)}
-                          >
-                            {isSelectedHistoryRollingBack ? 'Restoring…' : 'Rollback'}
-                          </button>
-                        </div>
-
-                        <div className="editor-history-diff-summary">
-                          {historyDiffStats.additions === 0 && historyDiffStats.removals === 0
-                            ? 'No content changes compared with current draft.'
-                            : `Compared with current draft: +${historyDiffStats.additions} / -${historyDiffStats.removals}`}
-                        </div>
-
-                        <div className="editor-history-diff">
-                          {isHistoryVersionLoading ? (
-                            <p className="editor-history-empty">Loading selected version…</p>
-                          ) : (
-                            historyDiffLines.map((line, index) => (
-                              <div key={`${line.oldLine ?? 'o'}-${line.newLine ?? 'n'}-${index}`} className={`editor-history-diff-line ${line.type}`}>
-                                <span className="editor-history-diff-number">{line.oldLine ?? ''}</span>
-                                <span className="editor-history-diff-number">{line.newLine ?? ''}</span>
-                                <span className="editor-history-diff-marker">
-                                  {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ''}
-                                </span>
-                                <span className="editor-history-diff-text">{line.text || ' '}</span>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isThemePickerOpen && (
-        <div
-          className="editor-theme-overlay"
-          onClick={() => {
-            if (isGeneratingWechatHtml) return;
-            setIsThemePickerOpen(false);
-          }}
-        >
-          <div
-            className="editor-theme-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Generate WeChat Layout"
-          >
-            <div className="editor-theme-header">
-              <div className="editor-theme-header-text">
-                <h2>Generate WeChat Layout</h2>
-                <p>Select a theme and model before generating and copying HTML</p>
-              </div>
-              <button
-                type="button"
-                className="editor-theme-close"
-                onClick={() => setIsThemePickerOpen(false)}
-                disabled={isGeneratingWechatHtml}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="editor-theme-body">
-              <div className="editor-theme-section">
-                <h3 className="editor-theme-section-title">Theme</h3>
-                <div className="editor-theme-list">
-                  {WECHAT_LAYOUT_THEMES.map((theme) => {
-                    const active = selectedWechatThemeId === theme.id;
-                    return (
-                      <label key={theme.id} className={`editor-theme-option ${active ? 'active' : ''}`}>
-                        <input
-                          type="radio"
-                          name="wechat-theme"
-                          value={theme.id}
-                          checked={active}
-                          onChange={() => setSelectedWechatThemeId(theme.id)}
-                          disabled={isGeneratingWechatHtml}
-                        />
-                        <span className="editor-theme-option-content">
-                          <span className="editor-theme-option-name">{theme.name}</span>
-                          <span className="editor-theme-option-desc">{theme.description}</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="editor-theme-section">
-                <h3 className="editor-theme-section-title">Model</h3>
-                <div className="editor-theme-list">
-                  {wechatGenerationModelOptions.map((option) => {
-                    const active = selectedWechatModelOptionId === option.id;
-                    const disabled = isGeneratingWechatHtml || !option.configured;
-                    const optionClassName = `editor-theme-option ${active ? 'active' : ''} ${option.configured ? '' : 'disabled'}`.trim();
-                    return (
-                      <label key={option.id} className={optionClassName}>
-                        <input
-                          type="radio"
-                          name="wechat-model"
-                          value={option.id}
-                          checked={active}
-                          onChange={() => setSelectedWechatModelOptionId(option.id)}
-                          disabled={disabled}
-                        />
-                        <span className="editor-theme-option-content">
-                          <span className="editor-theme-option-name">{option.label}</span>
-                          <span className="editor-theme-option-desc">{option.description}</span>
-                          {!option.configured && (
-                            <span className="editor-theme-option-hint">Configure API key and model in Settings first</span>
-                          )}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="editor-theme-footer">
-              <button
-                type="button"
-                className="editor-theme-btn secondary"
-                onClick={() => setIsThemePickerOpen(false)}
-                disabled={isGeneratingWechatHtml}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="editor-theme-btn primary"
-                onClick={() => {
-                  void generateWechatHtmlWithAi(selectedWechatThemeId);
-                }}
-                disabled={isGeneratingWechatHtml || !selectedWechatGenerationModelOption?.configured}
-              >
-                {isGeneratingWechatHtml ? 'Generating…' : 'Generate & Copy'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isExportOpen && (
-        <div
-          className="editor-export-overlay"
-          onClick={() => {
-            if (isExporting) return;
-            setIsExportOpen(false);
-          }}
-        >
-          <div
-            className="editor-export-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Export PDF"
-          >
-            <div className="editor-export-header">
-              <div className="editor-export-header-text">
-                <h2>Export PDF</h2>
-                <p>Choose your PDF settings</p>
-              </div>
-              <button
-                type="button"
-                className="editor-export-close"
-                onClick={() => setIsExportOpen(false)}
-                disabled={isExporting}
-                aria-label="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="editor-export-body">
-              <div className="editor-export-grid">
-                <label className="editor-export-field">
-                  <span>Page size</span>
-                  <select
-                    value={exportOptions.pageSize}
-                    onChange={(e) =>
-                      setExportOptions((prev) => ({
-                        ...prev,
-                        pageSize: e.target.value as ExportPdfOptions['pageSize'],
-                      }))
-                    }
-                    disabled={isExporting}
-                  >
-                    <option value="A4">A4</option>
-                    <option value="Letter">Letter</option>
-                  </select>
-                </label>
-
-                <label className="editor-export-field">
-                  <span>Orientation</span>
-                  <select
-                    value={exportOptions.orientation}
-                    onChange={(e) =>
-                      setExportOptions((prev) => ({
-                        ...prev,
-                        orientation: e.target.value as ExportPdfOptions['orientation'],
-                      }))
-                    }
-                    disabled={isExporting}
-                  >
-                    <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="editor-export-options">
-                <label className="editor-export-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={exportOptions.includeHeader}
-                    onChange={(e) =>
-                      setExportOptions((prev) => ({
-                        ...prev,
-                        includeHeader: e.target.checked,
-                      }))
-                    }
-                    disabled={isExporting}
-                  />
-                  <span>Header (repeat each page)</span>
-                </label>
-
-                <label className="editor-export-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={exportOptions.includeTitle}
-                    onChange={(e) =>
-                      setExportOptions((prev) => ({
-                        ...prev,
-                        includeTitle: e.target.checked,
-                      }))
-                    }
-                    disabled={isExporting}
-                  />
-                  <span>Title</span>
-                </label>
-
-                <label className="editor-export-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={exportOptions.includeDate}
-                    onChange={(e) =>
-                      setExportOptions((prev) => ({
-                        ...prev,
-                        includeDate: e.target.checked,
-                      }))
-                    }
-                    disabled={isExporting}
-                  />
-                  <span>Date</span>
-                </label>
-
-                <label className="editor-export-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={exportOptions.includePageNumbers}
-                    onChange={(e) =>
-                      setExportOptions((prev) => ({
-                        ...prev,
-                        includePageNumbers: e.target.checked,
-                      }))
-                    }
-                    disabled={isExporting}
-                  />
-                  <span>Page numbers</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="editor-export-footer">
-              <button
-                type="button"
-                className="editor-export-btn secondary"
-                onClick={() => setIsExportOpen(false)}
-                disabled={isExporting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="editor-export-btn primary"
-                onClick={exportCurrentNoteToPdf}
-                disabled={isExporting}
-              >
-                {isExporting ? 'Exporting…' : 'Export'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {toast && (
-        <div className={`editor-toast ${toast.type}`} role="status">
-          {toast.message}
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
 
