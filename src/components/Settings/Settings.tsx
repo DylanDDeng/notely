@@ -53,21 +53,21 @@ interface SettingsProps {
   onChangeFontFamily: (fontFamily: string) => void;
   theme: 'light' | 'dark' | 'system';
   onChangeTheme: (theme: 'light' | 'dark' | 'system') => void;
-  wechatMoonshotApiKey: string;
-  wechatMoonshotModel: string;
-  onChangeWechatMoonshotApiKey: (apiKey: string) => void;
-  onChangeWechatMoonshotModel: (model: string) => void;
-  wechatOpenRouterApiKey: string;
-  wechatOpenRouterModel: string;
-  onChangeWechatOpenRouterApiKey: (apiKey: string) => void;
-  onChangeWechatOpenRouterModel: (model: string) => void;
-  gitSyncConfig: GitSyncConfig | null;
-  isGitSyncLoading: boolean;
-  onRefreshGitSyncConfig: () => Promise<void>;
-  onSetupGitSync: (data: GitSyncSetupRequest) => Promise<GitSyncSetupResult>;
-  onRunGitSync: (data: GitSyncRunRequest) => Promise<GitSyncRunResult>;
-  onUpdateGitSyncSettings: (data: GitSyncUpdateSettingsRequest) => Promise<GitSyncSetupResult>;
-  onClearGitSyncCredential: () => Promise<GitSyncCredentialClearResult>;
+  wechatMoonshotApiKey?: string;
+  wechatMoonshotModel?: string;
+  onChangeWechatMoonshotApiKey?: (apiKey: string) => void;
+  onChangeWechatMoonshotModel?: (model: string) => void;
+  wechatOpenRouterApiKey?: string;
+  wechatOpenRouterModel?: string;
+  onChangeWechatOpenRouterApiKey?: (apiKey: string) => void;
+  onChangeWechatOpenRouterModel?: (model: string) => void;
+  gitSyncConfig?: GitSyncConfig | null;
+  isGitSyncLoading?: boolean;
+  onRefreshGitSyncConfig?: () => Promise<void>;
+  onSetupGitSync?: (data: GitSyncSetupRequest) => Promise<GitSyncSetupResult>;
+  onRunGitSync?: (data: GitSyncRunRequest) => Promise<GitSyncRunResult>;
+  onUpdateGitSyncSettings?: (data: GitSyncUpdateSettingsRequest) => Promise<GitSyncSetupResult>;
+  onClearGitSyncCredential?: () => Promise<GitSyncCredentialClearResult>;
 }
 
 const DEFAULT_WECHAT_MOONSHOT_MODEL = 'kimi-k2.5';
@@ -90,21 +90,21 @@ function Settings({
   onChangeFontFamily,
   theme,
   onChangeTheme,
-  wechatMoonshotApiKey,
-  wechatMoonshotModel,
-  onChangeWechatMoonshotApiKey,
-  onChangeWechatMoonshotModel,
-  wechatOpenRouterApiKey,
-  wechatOpenRouterModel,
-  onChangeWechatOpenRouterApiKey,
-  onChangeWechatOpenRouterModel,
-  gitSyncConfig,
-  isGitSyncLoading,
-  onRefreshGitSyncConfig,
-  onSetupGitSync,
-  onRunGitSync,
-  onUpdateGitSyncSettings,
-  onClearGitSyncCredential,
+  wechatMoonshotApiKey = '',
+  wechatMoonshotModel = DEFAULT_WECHAT_MOONSHOT_MODEL,
+  onChangeWechatMoonshotApiKey = () => {},
+  onChangeWechatMoonshotModel = () => {},
+  wechatOpenRouterApiKey = '',
+  wechatOpenRouterModel = DEFAULT_WECHAT_OPENROUTER_MODEL,
+  onChangeWechatOpenRouterApiKey = () => {},
+  onChangeWechatOpenRouterModel = () => {},
+  gitSyncConfig = null,
+  isGitSyncLoading = false,
+  onRefreshGitSyncConfig = async () => {},
+  onSetupGitSync = async () => ({ success: false, message: 'Git sync is unavailable in this build.' }),
+  onRunGitSync = async () => ({ success: false, message: 'Git sync is unavailable in this build.' }),
+  onUpdateGitSyncSettings = async () => ({ success: false, message: 'Git sync is unavailable in this build.' }),
+  onClearGitSyncCredential = async () => ({ success: false, message: 'Git sync is unavailable in this build.' }),
 }: SettingsProps) {
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState<AppSettings>({
@@ -137,7 +137,7 @@ function Settings({
 
   useEffect(() => {
     if (!storagePath) return;
-    setSettings(prev => ({ ...prev, saveLocation: storagePath }));
+    setSettings((prev: AppSettings) => ({ ...prev, saveLocation: storagePath }));
   }, [storagePath]);
 
   useEffect(() => {
@@ -179,11 +179,11 @@ function Settings({
   }, [gitSyncIntervalInput]);
 
   const handleToggle = (key: keyof AppSettings) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
+    setSettings((prev: AppSettings) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleAutoSaveChange = (value: string) => {
-    setSettings(prev => ({ ...prev, autoSaveInterval: parseInt(value) }));
+    setSettings((prev: AppSettings) => ({ ...prev, autoSaveInterval: parseInt(value, 10) }));
   };
 
   const handleChangeSaveLocation = async () => {

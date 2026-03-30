@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EditorView } from '@codemirror/view';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import type { EditorNote, SaveNoteData } from '../../types';
 import './Editor.css';
@@ -69,7 +68,6 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
   const [content, setContent] = useState('');
   const [isOutlineOpen, setIsOutlineOpen] = useState(() => readBooleanSetting(OUTLINE_OPEN_KEY, false));
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [isEditorFocused, setIsEditorFocused] = useState(false);
 
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,7 +75,7 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
   const draftContentRef = useRef('');
   const documentTitleRef = useRef('');
   const onSaveRef = useRef(onSave);
-  const editorViewRef = useRef<EditorView | null>(null);
+  const editorDomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -190,39 +188,21 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
     void window.electronAPI.openExternal(url);
   }, []);
 
-  const handleEditorReady = useCallback((view: EditorView) => {
-    editorViewRef.current = view;
-  }, []);
-
-  const handleEditorUpdate = useCallback((view: EditorView) => {
-    const scrollContainer = editorScrollRef.current;
-    if (!scrollContainer) return;
-
-    requestAnimationFrame(() => {
-      const coords = view.coordsAtPos(view.state.selection.main.head);
-      if (!coords) return;
-
-      const bounds = scrollContainer.getBoundingClientRect();
-      const padding = 72;
-
-      if (coords.top < bounds.top + padding) {
-        scrollContainer.scrollTop -= (bounds.top + padding) - coords.top;
-      } else if (coords.bottom > bounds.bottom - padding) {
-        scrollContainer.scrollTop += coords.bottom - (bounds.bottom - padding);
-      }
-    });
+  const handleEditorDomReady = useCallback((root: HTMLDivElement | null) => {
+    editorDomRef.current = root;
   }, []);
 
   const jumpToOutlineItem = useCallback((item: OutlineItem) => {
     requestAnimationFrame(() => {
-      const view = editorViewRef.current;
-      if (!view) return;
-      const position = Math.max(0, Math.min(item.offset, view.state.doc.length));
-      view.dispatch({
-        selection: { anchor: position },
-        effects: EditorView.scrollIntoView(position, { y: 'center' }),
-      });
-      view.focus();
+      const root = editorDomRef.current;
+      if (!root) return;
+
+      const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+      const match = headings.find((heading) => heading.textContent?.trim() === item.text.trim());
+      if (match instanceof HTMLElement) {
+        match.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        match.click();
+      }
     });
   }, []);
 
@@ -267,11 +247,8 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
                 onChange={setContent}
                 onOpenImagePreview={handleOpenImagePreview}
                 onOpenExternal={handleOpenExternal}
-                onEditorReady={handleEditorReady}
-                onEditorUpdate={handleEditorUpdate}
-                onFocusChange={setIsEditorFocused}
-                enableTablePreview={!isEditorFocused}
-                mode="live"
+                onEditorDomReady={handleEditorDomReady}
+                documentKey={note.id}
               />
             </div>
           </div>

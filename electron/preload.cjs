@@ -37,4 +37,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runGitSync: (data) => ipcRenderer.invoke('gitSync:run', data),
   updateGitSyncSettings: (data) => ipcRenderer.invoke('gitSync:updateSettings', data),
   clearGitSyncCredential: () => ipcRenderer.invoke('gitSync:clearCredential'),
+
+  // Menu events
+  onMenuAction: (callback) => {
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on('menu-action', handler);
+    return () => ipcRenderer.removeListener('menu-action', handler);
+  },
 });

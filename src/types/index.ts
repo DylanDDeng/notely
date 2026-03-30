@@ -35,6 +35,67 @@ export interface KanbanFrontmatter {
   doneColumns?: string[];
 }
 
+export interface AppSettings {
+  launchAtStartup: boolean;
+  showInMenuBar: boolean;
+  autoSaveInterval: number;
+  saveLocation: string;
+}
+
+export type GitSyncStatus = 'idle' | 'running' | 'success' | 'error' | 'conflict' | 'disabled' | 'skipped';
+
+export interface GitSyncConfig {
+  enabled: boolean;
+  remoteUrl: string;
+  branch: string;
+  autoSyncEnabled: boolean;
+  intervalMinutes: number;
+  tokenConfigured: boolean;
+  lastStatus?: GitSyncStatus;
+  lastMessage?: string;
+  lastSyncAt?: string | null;
+  lastConflictFiles?: string[];
+}
+
+export interface GitSyncSetupRequest {
+  remoteUrl: string;
+  branch: string;
+  token?: string;
+  autoSyncEnabled?: boolean;
+  intervalMinutes?: number;
+}
+
+export interface GitSyncRunRequest {
+  reason?: 'manual' | 'startup' | 'interval';
+}
+
+export interface GitSyncUpdateSettingsRequest {
+  remoteUrl?: string;
+  branch?: string;
+  autoSyncEnabled?: boolean;
+  intervalMinutes?: number;
+}
+
+export interface GitSyncSetupResult {
+  success: boolean;
+  message?: string;
+  config?: GitSyncConfig | null;
+  error?: string;
+}
+
+export interface GitSyncRunResult {
+  success: boolean;
+  message?: string;
+  conflictFiles?: string[];
+  error?: string;
+}
+
+export interface GitSyncCredentialClearResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 export interface ExportPdfOptions {
   pageSize: 'A4' | 'Letter';
   orientation: 'portrait' | 'landscape';
@@ -108,6 +169,13 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<void>;
   writeClipboardText: (text: string) => Promise<WriteClipboardTextResult>;
   exportNotePdf: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
+  exportNotePDF?: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
+  generateWechatHtmlWithAi?: (data: unknown) => Promise<unknown>;
+  getGitSyncConfig?: () => Promise<GitSyncConfig | null>;
+  setupGitSync?: (data: GitSyncSetupRequest) => Promise<GitSyncSetupResult>;
+  runGitSync?: (data: GitSyncRunRequest) => Promise<GitSyncRunResult>;
+  updateGitSyncSettings?: (data: GitSyncUpdateSettingsRequest) => Promise<GitSyncSetupResult>;
+  clearGitSyncCredential?: () => Promise<GitSyncCredentialClearResult>;
   onMenuAction: (callback: (action: string) => void) => () => void;
 }
 
