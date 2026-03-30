@@ -395,11 +395,15 @@
 
 .editor-milkdown-root .milkdown-code-block .codemirror-host {
   padding: 8px 16px 14px;
+  outline: none;
+  border: none;
 }
 
 .editor-milkdown-root .milkdown-code-block .codemirror-host .cm-editor {
   background: transparent;
   border: none;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .editor-milkdown-root .milkdown-code-block .codemirror-host .cm-scroller {
@@ -424,6 +428,19 @@
 .editor-milkdown-root .milkdown-code-block .codemirror-host .cm-activeLine,
 .editor-milkdown-root .milkdown-code-block .codemirror-host .cm-activeLineGutter {
   background: transparent;
+}
+
+.editor-milkdown-root .milkdown-code-block .codemirror-host .cm-focused,
+.editor-milkdown-root .milkdown-code-block .codemirror-host .cm-editor.cm-focused {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.editor-milkdown-root .milkdown-code-block.selected,
+.editor-milkdown-root .milkdown-code-block.selected .codemirror-host,
+.editor-milkdown-root .milkdown-code-block.selected .cm-editor {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .editor-milkdown-root .milkdown-code-block .codemirror-host .cm-selectionBackground,
