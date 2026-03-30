@@ -49,8 +49,10 @@ function MarkdownLiveEditor({
         [Crepe.Feature.Toolbar]: false,
         [Crepe.Feature.LinkTooltip]: false,
         [Crepe.Feature.Cursor]: false,
+        [Crepe.Feature.CodeMirror]: false,
         [Crepe.Feature.ListItem]: false,
         [Crepe.Feature.ImageBlock]: false,
+        [Crepe.Feature.Table]: false,
         [Crepe.Feature.Latex]: false,
       },
     });
