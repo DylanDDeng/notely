@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EditorView } from '@codemirror/view';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import type { EditorNote, SaveNoteData } from '../../types';
 import './Editor.css';
@@ -76,7 +75,7 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
   const draftContentRef = useRef('');
   const documentTitleRef = useRef('');
   const onSaveRef = useRef(onSave);
-  const editorViewRef = useRef<EditorView | null>(null);
+  const editorRootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -189,20 +188,21 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
     void window.electronAPI.openExternal(url);
   }, []);
 
-  const handleEditorReady = useCallback((view: EditorView) => {
-    editorViewRef.current = view;
+  const handleEditorDomReady = useCallback((root: HTMLDivElement | null) => {
+    editorRootRef.current = root;
   }, []);
 
   const jumpToOutlineItem = useCallback((item: OutlineItem) => {
     requestAnimationFrame(() => {
-      const view = editorViewRef.current;
-      if (!view) return;
-      const position = Math.max(0, Math.min(item.offset, view.state.doc.length));
-      view.dispatch({
-        selection: { anchor: position },
-        effects: EditorView.scrollIntoView(position, { y: 'center' }),
-      });
-      view.focus();
+      const root = editorRootRef.current;
+      if (!root) return;
+
+      const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+      const match = headings.find((heading) => heading.textContent?.trim() === item.text.trim());
+      if (match instanceof HTMLElement) {
+        match.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        match.click();
+      }
     });
   }, []);
 
@@ -247,8 +247,8 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
                 onChange={setContent}
                 onOpenImagePreview={handleOpenImagePreview}
                 onOpenExternal={handleOpenExternal}
-                onEditorReady={handleEditorReady}
-                mode="live"
+                onEditorDomReady={handleEditorDomReady}
+                documentKey={note.id}
               />
             </div>
           </div>

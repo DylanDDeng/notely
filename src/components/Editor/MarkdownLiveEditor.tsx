@@ -1,67 +1,24 @@
-import { useMemo } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
-import {
-  Decoration,
-  EditorView,
-  WidgetType,
-  keymap,
-  placeholder,
-  type DecorationSet,
-} from '@codemirror/view';
-import { EditorSelection, Prec, StateField, type EditorState, type Range, type Extension } from '@codemirror/state';
-import { markdown } from '@codemirror/lang-markdown';
+import { useEffect, useRef } from 'react';
+import { Editor, rootCtx, defaultValueCtx, remarkPluginsCtx } from '@milkdown/kit/core';
+import { commonmark } from '@milkdown/kit/preset/commonmark';
+import { gfm } from '@milkdown/kit/preset/gfm';
+import { history } from '@milkdown/kit/plugin/history';
+import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
+import { clipboard } from '@milkdown/kit/plugin/clipboard';
+import { trailing } from '@milkdown/kit/plugin/trailing';
+import { replaceAll } from '@milkdown/kit/utils';
+import remarkBreaks from 'remark-breaks';
+import { htmlView } from './htmlView';
+import '@milkdown/kit/prose/view/style/prosemirror.css';
 
 interface MarkdownLiveEditorProps {
   value: string;
   onChange: (value: string) => void;
-  onEditorReady?: (view: EditorView) => void;
-  onEditorUpdate?: (view: EditorView) => void;
   onOpenExternal?: (url: string) => void;
   onOpenImagePreview?: (url: string) => void;
-  mode?: 'live' | 'source';
+  onEditorDomReady?: (root: HTMLDivElement | null) => void;
+  documentKey?: string;
 }
-
-const hiddenMarker = Decoration.mark({ class: 'cm-md-hidden-marker' });
-const strongMark = Decoration.mark({ class: 'cm-md-strong' });
-const emMark = Decoration.mark({ class: 'cm-md-em' });
-const strikeMark = Decoration.mark({ class: 'cm-md-strike' });
-const inlineCodeMark = Decoration.mark({ class: 'cm-md-inline-code' });
-const linkTextMark = Decoration.mark({ class: 'cm-md-link-text' });
-const quoteLineDecorations = [
-  Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-1' } }),
-  Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-2' } }),
-  Decoration.line({ attributes: { class: 'cm-md-quote-line cm-md-quote-depth-3' } }),
-] as const;
-const codeBlockLineDecoration = Decoration.line({ attributes: { class: 'cm-md-code-block-line' } });
-const codeBlockStartDecoration = Decoration.line({
-  attributes: { class: 'cm-md-code-block-line cm-md-code-block-start cm-md-code-fence' },
-});
-const codeBlockEndDecoration = Decoration.line({
-  attributes: { class: 'cm-md-code-block-line cm-md-code-block-end cm-md-code-fence' },
-});
-
-const headingTextDecorations = [
-  null,
-  Decoration.mark({ class: 'cm-md-heading cm-md-heading-1' }),
-  Decoration.mark({ class: 'cm-md-heading cm-md-heading-2' }),
-  Decoration.mark({ class: 'cm-md-heading cm-md-heading-3' }),
-  Decoration.mark({ class: 'cm-md-heading cm-md-heading-4' }),
-  Decoration.mark({ class: 'cm-md-heading cm-md-heading-5' }),
-  Decoration.mark({ class: 'cm-md-heading cm-md-heading-6' }),
-] as const;
-
-const THEMATIC_BREAK_RE = /^ {0,3}(?:\*(?:[ \t]*\*){2,}|-(?:[ \t]*-){2,}|_(?:[ \t]*_){2,})[ \t]*$/;
-const HYPHEN_THEMATIC_BREAK_RE = /^ {0,3}-(?:[ \t]*-){2,}[ \t]*$/;
-const VIDEO_SOURCE_PATTERN = /\.(mp4|webm|ogg|mov|m4v)(?:$|[?#])/i;
-
-const hasVisibleText = (value: string): boolean => value.trim().length > 0;
-const isVideoSource = (value: string): boolean => VIDEO_SOURCE_PATTERN.test(value.trim());
-
-const isThematicBreakLine = (lineText: string, previousLineText: string): boolean => {
-  if (!THEMATIC_BREAK_RE.test(lineText)) return false;
-  if (HYPHEN_THEMATIC_BREAK_RE.test(lineText) && hasVisibleText(previousLineText)) return false;
-  return true;
-};
 
 const normalizeUrl = (value: string): string => {
   const trimmed = value.trim();
@@ -71,414 +28,112 @@ const normalizeUrl = (value: string): string => {
   return `https://${trimmed}`;
 };
 
-const addRange = (ranges: ReturnType<typeof hiddenMarker.range>[], from: number, to: number) => {
-  if (to <= from) return;
-  ranges.push(hiddenMarker.range(from, to));
-};
-
-const addRangeUnlessLineExhausted = (
-  ranges: ReturnType<typeof hiddenMarker.range>[],
-  from: number,
-  to: number,
-  lineEnd: number
-) => {
-  if (to <= from) return;
-  if (to >= lineEnd) return;
-  ranges.push(hiddenMarker.range(from, to));
-};
-
-class MarkdownImageWidget extends WidgetType {
-  constructor(
-    private readonly src: string,
-    private readonly alt: string,
-    private readonly onOpenImagePreview?: (url: string) => void
-  ) {
-    super();
-  }
-
-  eq(other: MarkdownImageWidget) {
-    return this.src === other.src && this.alt === other.alt && this.onOpenImagePreview === other.onOpenImagePreview;
-  }
-
-  toDOM() {
-    const wrapper = document.createElement('span');
-    wrapper.className = 'cm-md-image-widget';
-
-    const img = document.createElement('img');
-    img.className = 'cm-md-image-widget-img';
-    img.src = this.src;
-    img.alt = this.alt;
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    img.referrerPolicy = 'no-referrer';
-
-    img.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.onOpenImagePreview?.(this.src);
-    });
-
-    img.addEventListener('error', () => {
-      wrapper.classList.add('is-broken');
-      const fallback = document.createElement('span');
-      fallback.className = 'cm-md-image-widget-fallback';
-      fallback.textContent = this.alt ? `Image failed: ${this.alt}` : 'Image failed to load';
-      wrapper.replaceChildren(fallback);
-    });
-
-    wrapper.appendChild(img);
-    return wrapper;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
-}
-
-class MarkdownVideoWidget extends WidgetType {
-  constructor(private readonly src: string, private readonly title: string) {
-    super();
-  }
-
-  eq(other: MarkdownVideoWidget) {
-    return this.src === other.src && this.title === other.title;
-  }
-
-  toDOM() {
-    const wrapper = document.createElement('span');
-    wrapper.className = 'cm-md-video-widget';
-    wrapper.contentEditable = 'false';
-
-    const title = document.createElement('span');
-    title.className = 'cm-md-video-widget-title';
-    title.textContent = this.title || 'Video';
-
-    const source = document.createElement('span');
-    source.className = 'cm-md-video-widget-source';
-    source.textContent = this.src;
-
-    wrapper.appendChild(title);
-    wrapper.appendChild(source);
-    return wrapper;
-  }
-
-  ignoreEvent() {
-    return true;
-  }
-}
-
-const buildLivePreviewDecorations = (
-  state: EditorState,
-  onOpenImagePreview?: (url: string) => void
-): DecorationSet => {
-  const doc = state.doc;
-  const ranges: Range<Decoration>[] = [];
-
-  let inFence = false;
-  let lineNo = 1;
-
-  while (lineNo <= doc.lines) {
-    const line = doc.line(lineNo);
-    const text = line.text;
-    const previousLineText = lineNo > 1 ? doc.line(lineNo - 1).text : '';
-    const trimmed = text.trimStart();
-    const isFenceLine = /^(```|~~~)/.test(trimmed);
-
-    if (isFenceLine) {
-      ranges.push((inFence ? codeBlockEndDecoration : codeBlockStartDecoration).range(line.from));
-    } else if (inFence) {
-      ranges.push(codeBlockLineDecoration.range(line.from));
-    }
-
-    if (!inFence && text.length > 0) {
-      if (isThematicBreakLine(text, previousLineText)) {
-        ranges.push(Decoration.line({ attributes: { class: 'cm-md-hr-line' } }).range(line.from));
-        lineNo += 1;
-        continue;
-      }
-
-      const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
-      if (heading) {
-        const level = heading[2].length;
-        const headingText = headingTextDecorations[level];
-        const headingTextFrom = line.from + heading[0].length;
-        if (headingText && line.to > headingTextFrom) {
-          ranges.push(headingText.range(headingTextFrom, line.to));
-        }
-        addRangeUnlessLineExhausted(
-          ranges,
-          line.from + heading[1].length,
-          line.from + heading[1].length + heading[2].length + heading[3].length,
-          line.to
-        );
-      }
-
-      const quotePrefix = text.match(/^(\s*>+\s*)+/);
-      if (quotePrefix) {
-        const quoteDepth = (quotePrefix[0].match(/>/g) || []).length;
-        const normalizedDepth = Math.max(1, Math.min(quoteDepth, quoteLineDecorations.length));
-        ranges.push(quoteLineDecorations[normalizedDepth - 1].range(line.from));
-      }
-
-      const taskPrefix = text.match(/^(\s*[-+*]\s+\[(?: |x|X)\]\s+)/);
-      if (taskPrefix) {
-        addRangeUnlessLineExhausted(ranges, line.from, line.from + taskPrefix[0].length, line.to);
-      } else {
-        const listPrefix = text.match(/^(\s*)([-+*]|\d+[.)])(\s+)/);
-        if (listPrefix) {
-          const markerFrom = line.from + listPrefix[1].length;
-          const markerTo = markerFrom + listPrefix[2].length + listPrefix[3].length;
-          if (markerTo <= line.to && line.to > markerTo) {
-            const isOrdered = /^\d+[.)]$/.test(listPrefix[2]);
-            ranges.push(
-              Decoration.line({
-                attributes: {
-                  class: isOrdered ? 'cm-md-list-line is-ordered' : 'cm-md-list-line is-unordered',
-                },
-              }).range(line.from)
-            );
-            addRangeUnlessLineExhausted(ranges, markerFrom, markerTo, line.to);
-          }
-        }
-      }
-
-      const addPairStyles = (regex: RegExp, markerLen: number, innerDecoration: typeof strongMark) => {
-        let match = regex.exec(text);
-        while (match) {
-          const start = line.from + match.index;
-          const end = start + match[0].length;
-          if (end - start <= markerLen * 2) {
-            match = regex.exec(text);
-            continue;
-          }
-          addRange(ranges, start, start + markerLen);
-          addRange(ranges, end - markerLen, end);
-          ranges.push(innerDecoration.range(start + markerLen, end - markerLen));
-          match = regex.exec(text);
-        }
-      };
-
-      addPairStyles(/\*\*([^\n]+?)\*\*/g, 2, strongMark);
-      addPairStyles(/__([^\n]+?)__/g, 2, strongMark);
-      addPairStyles(/(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)/g, 1, emMark);
-      addPairStyles(/(?<!_)_(?!_)([^_\n]+?)(?<!_)_(?!_)/g, 1, emMark);
-      addPairStyles(/~~([^\n]+?)~~/g, 2, strikeMark);
-
-      const inlineCodeRegex = /`([^`\n]+)`/g;
-      let inlineCode = inlineCodeRegex.exec(text);
-      while (inlineCode) {
-        const start = line.from + inlineCode.index;
-        const end = start + inlineCode[0].length;
-        addRange(ranges, start, start + 1);
-        addRange(ranges, end - 1, end);
-        ranges.push(inlineCodeMark.range(start + 1, end - 1));
-        inlineCode = inlineCodeRegex.exec(text);
-      }
-
-      const linkRegex = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
-      let linkMatch = linkRegex.exec(text);
-      while (linkMatch) {
-        const full = linkMatch[0];
-        const isImage = full.startsWith('!');
-        const contentOffset = isImage ? 2 : 1;
-        const textValue = linkMatch[1];
-        const textStart = line.from + linkMatch.index + contentOffset;
-        const textEnd = textStart + textValue.length;
-        const fullStart = line.from + linkMatch.index;
-        const fullEnd = fullStart + full.length;
-
-        if (isImage) {
-          const rawUrl = linkMatch[2]?.trim() ?? '';
-          const url = normalizeUrl(rawUrl);
-          if (url) {
-            const widget = isVideoSource(rawUrl) || isVideoSource(url)
-              ? new MarkdownVideoWidget(url, textValue)
-              : new MarkdownImageWidget(url, textValue, onOpenImagePreview);
-            ranges.push(
-              Decoration.replace({
-                widget,
-                inclusive: false,
-              }).range(fullStart, fullEnd)
-            );
-          }
-        } else {
-          addRange(ranges, fullStart, textStart);
-          addRange(ranges, textEnd, fullEnd);
-          ranges.push(linkTextMark.range(textStart, textEnd));
-        }
-
-        linkMatch = linkRegex.exec(text);
-      }
-    }
-
-    if (isFenceLine) {
-      inFence = !inFence;
-    }
-
-    lineNo += 1;
-  }
-
-  return Decoration.set(ranges, true);
-};
-
-const createLivePreviewDecorationsExtension = (
-  onOpenImagePreview?: (url: string) => void
-) => {
-  const livePreviewField = StateField.define<DecorationSet>({
-    create(state) {
-      return buildLivePreviewDecorations(state, onOpenImagePreview);
-    },
-    update(decorations, transaction) {
-      if (transaction.docChanged) {
-        return buildLivePreviewDecorations(transaction.state, onOpenImagePreview);
-      }
-      return decorations;
-    },
-    provide: (field) => EditorView.decorations.from(field),
-  });
-
-  return livePreviewField;
-};
-
-const moveVerticallyWithFallback = (
-  view: EditorView,
-  forward: boolean,
-  extend: boolean
-): boolean => {
-  const { state } = view;
-  const range = state.selection.main;
-
-  try {
-    const moved = view.moveVertically(range, forward);
-    if (moved.head !== range.head) {
-      const selection = extend
-        ? EditorSelection.range(range.anchor, moved.head)
-        : moved;
-      view.dispatch({
-        selection: EditorSelection.create([selection], 0),
-        scrollIntoView: true,
-      });
-      return true;
-    }
-  } catch {
-    // fall through to logical-line movement when block widgets break geometry lookups
-  }
-
-  const line = state.doc.lineAt(range.head);
-  if (forward ? line.number >= state.doc.lines : line.number <= 1) return false;
-
-  const targetLine = state.doc.line(line.number + (forward ? 1 : -1));
-  const column = range.head - line.from;
-  const nextHead = Math.min(targetLine.from + column, targetLine.to);
-  const selection = extend
-    ? EditorSelection.range(range.anchor, nextHead)
-    : EditorSelection.cursor(nextHead);
-
-  view.dispatch({
-    selection: EditorSelection.create([selection], 0),
-    scrollIntoView: true,
-  });
-  return true;
-};
-
-const verticalMoveFallback = Prec.high(keymap.of([
-  { key: 'ArrowUp', run: (view) => moveVerticallyWithFallback(view, false, false) },
-  { key: 'ArrowDown', run: (view) => moveVerticallyWithFallback(view, true, false) },
-  { key: 'Shift-ArrowUp', run: (view) => moveVerticallyWithFallback(view, false, true) },
-  { key: 'Shift-ArrowDown', run: (view) => moveVerticallyWithFallback(view, true, true) },
-]));
-
 function MarkdownLiveEditor({
   value,
   onChange,
-  onEditorReady,
-  onEditorUpdate,
   onOpenExternal,
   onOpenImagePreview,
-  mode = 'live',
+  onEditorDomReady,
+  documentKey,
 }: MarkdownLiveEditorProps) {
-  const extensions = useMemo<Extension[]>(() => {
-    const baseExtensions: Extension[] = [
-      markdown(),
-      EditorView.lineWrapping,
-      EditorView.scrollMargins.of(() => ({ top: 72, bottom: 72 })),
-      verticalMoveFallback,
-      placeholder('Start writing...'),
-    ];
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const currentMarkdownRef = useRef(value);
+  const latestOnChangeRef = useRef(onChange);
 
-    if (mode === 'source') {
-      return baseExtensions;
-    }
+  useEffect(() => {
+    latestOnChangeRef.current = onChange;
+  }, [onChange]);
 
-    const livePreviewDecorations = createLivePreviewDecorationsExtension(onOpenImagePreview);
-    const updateListener = EditorView.updateListener.of((update) => {
-      if (update.selectionSet || update.docChanged || update.focusChanged || update.viewportChanged) {
-        onEditorUpdate?.(update.view);
+  useEffect(() => {
+    const root = hostRef.current;
+    if (!root) return;
+
+    let disposed = false;
+    const initialValue = value;
+
+    const setup = async () => {
+      const editor = await Editor.make()
+        .config((ctx) => {
+          ctx.set(rootCtx, root);
+          ctx.set(defaultValueCtx, initialValue);
+          ctx.set(remarkPluginsCtx, [{ plugin: remarkBreaks, options: {} }]);
+          ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
+            currentMarkdownRef.current = markdown;
+            latestOnChangeRef.current(markdown);
+          });
+        })
+        .use(commonmark)
+        .use(gfm)
+        .use(history)
+        .use(listener)
+        .use(clipboard)
+        .use(trailing)
+        .use(htmlView)
+        .create();
+
+      if (disposed) {
+        await editor.destroy();
+        return;
       }
-    });
-    const domHandlers = EditorView.domEventHandlers({
-      mousedown: (event, view) => {
-        const target = event.target as HTMLElement | null;
-        if (target?.closest('.cm-md-video-widget')) {
-          return true;
-        }
 
-        if (!(event.metaKey || event.ctrlKey) || !onOpenExternal) return false;
-        const linkNode = target?.closest('.cm-md-link-text');
-        if (!linkNode) return false;
+      editorRef.current = editor;
+      currentMarkdownRef.current = initialValue;
+      onEditorDomReady?.(root);
+    };
 
-        const pos = view.posAtDOM(linkNode, 0);
-        const line = view.state.doc.lineAt(pos);
-        const relPos = pos - line.from;
-        const source = line.text;
+    void setup();
 
-        const linkRegex = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
-        let match = linkRegex.exec(source);
-        while (match) {
-          const full = match[0];
-          if (full.startsWith('!')) {
-            match = linkRegex.exec(source);
-            continue;
-          }
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
 
-          const labelStart = match.index + 1;
-          const labelEnd = labelStart + match[1].length;
-          if (relPos >= labelStart && relPos <= labelEnd) {
-            const href = normalizeUrl(match[2]);
-            if (!href) return false;
-            event.preventDefault();
-            onOpenExternal(href);
-            return true;
-          }
-          match = linkRegex.exec(source);
-        }
-        return false;
-      },
-    });
+      const image = target.closest('img');
+      if (image) {
+        const src = image.getAttribute('src')?.trim() || '';
+        if (!src) return;
+        event.preventDefault();
+        onOpenImagePreview?.(normalizeUrl(src));
+        return;
+      }
 
-    return [...baseExtensions, livePreviewDecorations, updateListener, domHandlers];
-  }, [mode, onEditorUpdate, onOpenExternal, onOpenImagePreview]);
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const link = target.closest('a');
+      if (!link) return;
 
-  return (
-    <CodeMirror
-      className={mode === 'source' ? 'editor-source-cm' : 'editor-live-cm'}
-      value={value}
-      onChange={onChange}
-      extensions={extensions}
-      basicSetup={{
-        lineNumbers: false,
-        foldGutter: false,
-        syntaxHighlighting: false,
-        highlightActiveLineGutter: false,
-        drawSelection: true,
-        dropCursor: false,
-        allowMultipleSelections: false,
-        indentOnInput: true,
-      }}
-      autoFocus
-      onCreateEditor={(view) => onEditorReady?.(view)}
-    />
-  );
+      const href = link.getAttribute('href')?.trim() || '';
+      const normalized = normalizeUrl(href);
+      if (!normalized) return;
+
+      event.preventDefault();
+      onOpenExternal?.(normalized);
+    };
+
+    root.addEventListener('click', handleClick);
+
+    return () => {
+      disposed = true;
+      root.removeEventListener('click', handleClick);
+      onEditorDomReady?.(null);
+      const editor = editorRef.current;
+      editorRef.current = null;
+      if (editor) {
+        void editor.destroy();
+      }
+      root.innerHTML = '';
+    };
+  }, [documentKey, onEditorDomReady, onOpenExternal, onOpenImagePreview]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (value === currentMarkdownRef.current) return;
+
+    currentMarkdownRef.current = value;
+    editor.action(replaceAll(value));
+  }, [value]);
+
+  return <div ref={hostRef} className="editor-milkdown-root" />;
 }
 
 export default MarkdownLiveEditor;
