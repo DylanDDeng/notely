@@ -6,12 +6,10 @@ import { history } from '@milkdown/kit/plugin/history';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { trailing } from '@milkdown/kit/plugin/trailing';
-import { codeBlockComponent, codeBlockConfig } from '@milkdown/kit/component/code-block';
 import { replaceAll } from '@milkdown/kit/utils';
-import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { languages } from '@codemirror/language-data';
 import remarkBreaks from 'remark-breaks';
 import { htmlView } from './htmlView';
+import { customCodeBlockView } from './codeBlockView';
 import '@milkdown/kit/prose/view/style/prosemirror.css';
 
 interface MarkdownLiveEditorProps {
@@ -43,6 +41,7 @@ function MarkdownLiveEditor({
   const editorRef = useRef<Editor | null>(null);
   const currentMarkdownRef = useRef(value);
   const latestOnChangeRef = useRef(onChange);
+  const copyResetTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     latestOnChangeRef.current = onChange;
@@ -61,13 +60,6 @@ function MarkdownLiveEditor({
           ctx.set(rootCtx, root);
           ctx.set(defaultValueCtx, initialValue);
           ctx.set(remarkPluginsCtx, [{ plugin: remarkBreaks, options: {} }]);
-          ctx.update(codeBlockConfig.key, (prev) => ({
-            ...prev,
-            languages,
-            extensions: [...prev.extensions, syntaxHighlighting(defaultHighlightStyle)],
-            copyText: '',
-            previewLabel: '',
-          }));
           ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
             currentMarkdownRef.current = markdown;
             latestOnChangeRef.current(markdown);
@@ -79,7 +71,7 @@ function MarkdownLiveEditor({
         .use(listener)
         .use(clipboard)
         .use(trailing)
-        .use(codeBlockComponent)
+        .use(customCodeBlockView)
         .use(htmlView)
         .create();
 
@@ -98,6 +90,37 @@ function MarkdownLiveEditor({
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
+
+      const copyButton = target.closest('.copy-button');
+      if (copyButton) {
+        const block = copyButton.closest('.milkdown-code-block');
+        const codeContent = block?.querySelector('.cm-content') as HTMLElement | null;
+        const text = codeContent?.innerText?.trim() || '';
+        if (!text) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const setCopiedState = () => {
+          if (!(copyButton instanceof HTMLElement)) return;
+          copyButton.dataset.copied = 'true';
+          if (copyResetTimerRef.current) {
+            window.clearTimeout(copyResetTimerRef.current);
+          }
+          copyResetTimerRef.current = window.setTimeout(() => {
+            copyButton.removeAttribute('data-copied');
+            copyResetTimerRef.current = null;
+          }, 1200);
+        };
+
+        void (async () => {
+          const result = await window.electronAPI.writeClipboardText(text);
+          if (result.success) {
+            setCopiedState();
+          }
+        })();
+        return;
+      }
 
       const image = target.closest('img');
       if (image) {
@@ -130,6 +153,10 @@ function MarkdownLiveEditor({
       editorRef.current = null;
       if (editor) {
         void editor.destroy();
+      }
+      if (copyResetTimerRef.current) {
+        window.clearTimeout(copyResetTimerRef.current);
+        copyResetTimerRef.current = null;
       }
       root.innerHTML = '';
     };
