@@ -4,10 +4,11 @@ import {
   Decoration,
   EditorView,
   WidgetType,
+  keymap,
   placeholder,
   type DecorationSet,
 } from '@codemirror/view';
-import { StateField, type EditorState, type Range, type Extension } from '@codemirror/state';
+import { EditorSelection, Prec, StateField, type EditorState, type Range, type Extension } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 
 interface MarkdownLiveEditorProps {
@@ -18,18 +19,6 @@ interface MarkdownLiveEditorProps {
   onOpenExternal?: (url: string) => void;
   onOpenImagePreview?: (url: string) => void;
   mode?: 'live' | 'source';
-}
-
-type MarkdownTableAlignment = 'left' | 'center' | 'right' | null;
-
-interface MarkdownTableBlock {
-  from: number;
-  to: number;
-  startLineNo: number;
-  endLineNo: number;
-  headers: string[];
-  rows: string[][];
-  alignments: MarkdownTableAlignment[];
 }
 
 const hiddenMarker = Decoration.mark({ class: 'cm-md-hidden-marker' });
@@ -178,177 +167,12 @@ class MarkdownVideoWidget extends WidgetType {
   }
 }
 
-class MarkdownListMarkerWidget extends WidgetType {
-  constructor(
-    private readonly marker: string,
-    private readonly ordered: boolean
-  ) {
-    super();
-  }
-
-  eq(other: MarkdownListMarkerWidget) {
-    return this.marker === other.marker && this.ordered === other.ordered;
-  }
-
-  toDOM() {
-    const marker = document.createElement('span');
-    marker.className = `cm-md-list-marker ${this.ordered ? 'is-ordered' : 'is-unordered'}`;
-    marker.textContent = this.ordered ? `${this.marker} ` : '• ';
-    return marker;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
-}
-
-class MarkdownHrWidget extends WidgetType {
-  eq() {
-    return true;
-  }
-
-  toDOM() {
-    const wrapper = document.createElement('span');
-    wrapper.className = 'cm-md-hr-widget';
-    wrapper.setAttribute('aria-hidden', 'true');
-
-    const line = document.createElement('span');
-    line.className = 'cm-md-hr-widget-line';
-    wrapper.appendChild(line);
-
-    return wrapper;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
-}
-
-class MarkdownTableWidget extends WidgetType {
-  constructor(private readonly table: MarkdownTableBlock) {
-    super();
-  }
-
-  eq(other: MarkdownTableWidget) {
-    if (this.table.from !== other.table.from || this.table.to !== other.table.to) return false;
-    if (this.table.startLineNo !== other.table.startLineNo || this.table.endLineNo !== other.table.endLineNo) return false;
-    if (this.table.headers.length !== other.table.headers.length || this.table.rows.length !== other.table.rows.length) return false;
-    if (this.table.alignments.join('|') !== other.table.alignments.join('|')) return false;
-    if (this.table.headers.join('|') !== other.table.headers.join('|')) return false;
-    return this.table.rows.every((row, index) => row.join('|') === other.table.rows[index]?.join('|'));
-  }
-
-  toDOM() {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'cm-md-table-widget';
-
-    const tableEl = document.createElement('table');
-    tableEl.className = 'cm-md-table';
-
-    const thead = document.createElement('thead');
-    const headRow = document.createElement('tr');
-    this.table.headers.forEach((header, index) => {
-      const cell = document.createElement('th');
-      const alignment = this.table.alignments[index];
-      if (alignment) cell.dataset.align = alignment;
-      cell.textContent = header;
-      headRow.appendChild(cell);
-    });
-    thead.appendChild(headRow);
-    tableEl.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
-    this.table.rows.forEach((row) => {
-      const rowEl = document.createElement('tr');
-      row.forEach((value, index) => {
-        const cell = document.createElement('td');
-        const alignment = this.table.alignments[index];
-        if (alignment) cell.dataset.align = alignment;
-        cell.textContent = value;
-        rowEl.appendChild(cell);
-      });
-      tbody.appendChild(rowEl);
-    });
-    tableEl.appendChild(tbody);
-
-    wrapper.appendChild(tableEl);
-    return wrapper;
-  }
-
-  ignoreEvent() {
-    return false;
-  }
-}
-
-const splitMarkdownTableRow = (lineText: string): string[] | null => {
-  const trimmed = lineText.trim();
-  if (!trimmed.includes('|')) return null;
-
-  const normalized = trimmed.replace(/^\|/, '').replace(/\|$/, '');
-  const cells = normalized.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, '|').trim());
-  if (cells.length < 2) return null;
-  return cells;
-};
-
-const parseMarkdownTableDelimiter = (lineText: string): MarkdownTableAlignment[] | null => {
-  const cells = splitMarkdownTableRow(lineText);
-  if (!cells) return null;
-
-  const alignments = cells.map((cell) => {
-    const normalized = cell.replace(/\s+/g, '');
-    if (!/^:?-{3,}:?$/.test(normalized)) return null;
-    const startsWithColon = normalized.startsWith(':');
-    const endsWithColon = normalized.endsWith(':');
-    if (startsWithColon && endsWithColon) return 'center';
-    if (endsWithColon) return 'right';
-    if (startsWithColon) return 'left';
-    return null;
-  });
-
-  return alignments.every((alignment, index) => alignment !== null || /^-{3,}$/.test(cells[index].replace(/\s+/g, '')))
-    ? alignments
-    : null;
-};
-
-const parseMarkdownTableBlock = (doc: EditorView['state']['doc'], startLineNo: number): MarkdownTableBlock | null => {
-  if (startLineNo >= doc.lines) return null;
-
-  const headerLine = doc.line(startLineNo);
-  const delimiterLine = doc.line(startLineNo + 1);
-  const headers = splitMarkdownTableRow(headerLine.text);
-  const alignments = parseMarkdownTableDelimiter(delimiterLine.text);
-  if (!headers || !alignments || headers.length !== alignments.length) return null;
-
-  const rows: string[][] = [];
-  let endLineNo = startLineNo + 1;
-
-  for (let nextLineNo = startLineNo + 2; nextLineNo <= doc.lines; nextLineNo += 1) {
-    const nextLine = doc.line(nextLineNo);
-    const row = splitMarkdownTableRow(nextLine.text);
-    if (!row || row.length !== headers.length) break;
-    rows.push(row);
-    endLineNo = nextLineNo;
-  }
-
-  const endLine = doc.line(endLineNo);
-  return {
-    from: headerLine.from,
-    to: endLine.to,
-    startLineNo,
-    endLineNo,
-    headers,
-    rows,
-    alignments,
-  };
-};
-
 const buildLivePreviewDecorations = (
   state: EditorState,
   onOpenImagePreview?: (url: string) => void
 ): DecorationSet => {
   const doc = state.doc;
   const ranges: Range<Decoration>[] = [];
-  const focusedLineNo = doc.lineAt(state.selection.main.head).number;
 
   let inFence = false;
   let lineNo = 1;
@@ -357,27 +181,8 @@ const buildLivePreviewDecorations = (
     const line = doc.line(lineNo);
     const text = line.text;
     const previousLineText = lineNo > 1 ? doc.line(lineNo - 1).text : '';
-    const isActiveLine = lineNo === focusedLineNo;
     const trimmed = text.trimStart();
     const isFenceLine = /^(```|~~~)/.test(trimmed);
-
-    if (!inFence) {
-      const tableBlock = parseMarkdownTableBlock(doc, lineNo);
-      if (tableBlock) {
-        const activeLineInsideTable = focusedLineNo >= tableBlock.startLineNo && focusedLineNo <= tableBlock.endLineNo;
-        if (!activeLineInsideTable) {
-          ranges.push(
-            Decoration.replace({
-              widget: new MarkdownTableWidget(tableBlock),
-              inclusive: false,
-              block: true,
-            }).range(tableBlock.from, tableBlock.to)
-          );
-          lineNo = tableBlock.endLineNo + 1;
-          continue;
-        }
-      }
-    }
 
     if (isFenceLine) {
       ranges.push((inFence ? codeBlockEndDecoration : codeBlockStartDecoration).range(line.from));
@@ -386,33 +191,26 @@ const buildLivePreviewDecorations = (
     }
 
     if (!inFence && text.length > 0) {
-      if (!isActiveLine && isThematicBreakLine(text, previousLineText)) {
-        ranges.push(
-          Decoration.replace({
-            widget: new MarkdownHrWidget(),
-            inclusive: false,
-          }).range(line.from, line.to)
-        );
+      if (isThematicBreakLine(text, previousLineText)) {
+        ranges.push(Decoration.line({ attributes: { class: 'cm-md-hr-line' } }).range(line.from));
         lineNo += 1;
         continue;
       }
 
-      if (!isActiveLine) {
-        const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
-        if (heading) {
-          const level = heading[2].length;
-          const headingText = headingTextDecorations[level];
-          const headingTextFrom = line.from + heading[0].length;
-          if (headingText && line.to > headingTextFrom) {
-            ranges.push(headingText.range(headingTextFrom, line.to));
-          }
-          addRangeUnlessLineExhausted(
-            ranges,
-            line.from + heading[1].length,
-            line.from + heading[1].length + heading[2].length + heading[3].length,
-            line.to
-          );
+      const heading = text.match(/^(\s{0,3})(#{1,6})(\s+)/);
+      if (heading) {
+        const level = heading[2].length;
+        const headingText = headingTextDecorations[level];
+        const headingTextFrom = line.from + heading[0].length;
+        if (headingText && line.to > headingTextFrom) {
+          ranges.push(headingText.range(headingTextFrom, line.to));
         }
+        addRangeUnlessLineExhausted(
+          ranges,
+          line.from + heading[1].length,
+          line.from + heading[1].length + heading[2].length + heading[3].length,
+          line.to
+        );
       }
 
       const quotePrefix = text.match(/^(\s*>+\s*)+/);
@@ -424,94 +222,92 @@ const buildLivePreviewDecorations = (
 
       const taskPrefix = text.match(/^(\s*[-+*]\s+\[(?: |x|X)\]\s+)/);
       if (taskPrefix) {
-        if (!isActiveLine) {
-          addRangeUnlessLineExhausted(ranges, line.from, line.from + taskPrefix[0].length, line.to);
-        }
+        addRangeUnlessLineExhausted(ranges, line.from, line.from + taskPrefix[0].length, line.to);
       } else {
         const listPrefix = text.match(/^(\s*)([-+*]|\d+[.)])(\s+)/);
         if (listPrefix) {
           const markerFrom = line.from + listPrefix[1].length;
           const markerTo = markerFrom + listPrefix[2].length + listPrefix[3].length;
-          if (markerTo <= line.to) {
+          if (markerTo <= line.to && line.to > markerTo) {
             const isOrdered = /^\d+[.)]$/.test(listPrefix[2]);
             ranges.push(
-              Decoration.replace({
-                widget: new MarkdownListMarkerWidget(listPrefix[2], isOrdered),
-                inclusive: false,
-              }).range(markerFrom, markerTo)
+              Decoration.line({
+                attributes: {
+                  class: isOrdered ? 'cm-md-list-line is-ordered' : 'cm-md-list-line is-unordered',
+                },
+              }).range(line.from)
             );
+            addRangeUnlessLineExhausted(ranges, markerFrom, markerTo, line.to);
           }
         }
       }
 
-      if (!isActiveLine) {
-        const addPairStyles = (regex: RegExp, markerLen: number, innerDecoration: typeof strongMark) => {
-          let match = regex.exec(text);
-          while (match) {
-            const start = line.from + match.index;
-            const end = start + match[0].length;
-            if (end - start <= markerLen * 2) {
-              match = regex.exec(text);
-              continue;
-            }
-            addRange(ranges, start, start + markerLen);
-            addRange(ranges, end - markerLen, end);
-            ranges.push(innerDecoration.range(start + markerLen, end - markerLen));
+      const addPairStyles = (regex: RegExp, markerLen: number, innerDecoration: typeof strongMark) => {
+        let match = regex.exec(text);
+        while (match) {
+          const start = line.from + match.index;
+          const end = start + match[0].length;
+          if (end - start <= markerLen * 2) {
             match = regex.exec(text);
+            continue;
           }
-        };
+          addRange(ranges, start, start + markerLen);
+          addRange(ranges, end - markerLen, end);
+          ranges.push(innerDecoration.range(start + markerLen, end - markerLen));
+          match = regex.exec(text);
+        }
+      };
 
-        addPairStyles(/\*\*([^\n]+?)\*\*/g, 2, strongMark);
-        addPairStyles(/__([^\n]+?)__/g, 2, strongMark);
-        addPairStyles(/(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)/g, 1, emMark);
-        addPairStyles(/(?<!_)_(?!_)([^_\n]+?)(?<!_)_(?!_)/g, 1, emMark);
-        addPairStyles(/~~([^\n]+?)~~/g, 2, strikeMark);
+      addPairStyles(/\*\*([^\n]+?)\*\*/g, 2, strongMark);
+      addPairStyles(/__([^\n]+?)__/g, 2, strongMark);
+      addPairStyles(/(?<!\*)\*(?!\*)([^*\n]+?)(?<!\*)\*(?!\*)/g, 1, emMark);
+      addPairStyles(/(?<!_)_(?!_)([^_\n]+?)(?<!_)_(?!_)/g, 1, emMark);
+      addPairStyles(/~~([^\n]+?)~~/g, 2, strikeMark);
 
-        const inlineCodeRegex = /`([^`\n]+)`/g;
-        let inlineCode = inlineCodeRegex.exec(text);
-        while (inlineCode) {
-          const start = line.from + inlineCode.index;
-          const end = start + inlineCode[0].length;
-          addRange(ranges, start, start + 1);
-          addRange(ranges, end - 1, end);
-          ranges.push(inlineCodeMark.range(start + 1, end - 1));
-          inlineCode = inlineCodeRegex.exec(text);
+      const inlineCodeRegex = /`([^`\n]+)`/g;
+      let inlineCode = inlineCodeRegex.exec(text);
+      while (inlineCode) {
+        const start = line.from + inlineCode.index;
+        const end = start + inlineCode[0].length;
+        addRange(ranges, start, start + 1);
+        addRange(ranges, end - 1, end);
+        ranges.push(inlineCodeMark.range(start + 1, end - 1));
+        inlineCode = inlineCodeRegex.exec(text);
+      }
+
+      const linkRegex = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
+      let linkMatch = linkRegex.exec(text);
+      while (linkMatch) {
+        const full = linkMatch[0];
+        const isImage = full.startsWith('!');
+        const contentOffset = isImage ? 2 : 1;
+        const textValue = linkMatch[1];
+        const textStart = line.from + linkMatch.index + contentOffset;
+        const textEnd = textStart + textValue.length;
+        const fullStart = line.from + linkMatch.index;
+        const fullEnd = fullStart + full.length;
+
+        if (isImage) {
+          const rawUrl = linkMatch[2]?.trim() ?? '';
+          const url = normalizeUrl(rawUrl);
+          if (url) {
+            const widget = isVideoSource(rawUrl) || isVideoSource(url)
+              ? new MarkdownVideoWidget(url, textValue)
+              : new MarkdownImageWidget(url, textValue, onOpenImagePreview);
+            ranges.push(
+              Decoration.replace({
+                widget,
+                inclusive: false,
+              }).range(fullStart, fullEnd)
+            );
+          }
+        } else {
+          addRange(ranges, fullStart, textStart);
+          addRange(ranges, textEnd, fullEnd);
+          ranges.push(linkTextMark.range(textStart, textEnd));
         }
 
-        const linkRegex = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
-        let linkMatch = linkRegex.exec(text);
-        while (linkMatch) {
-          const full = linkMatch[0];
-          const isImage = full.startsWith('!');
-          const contentOffset = isImage ? 2 : 1;
-          const textValue = linkMatch[1];
-          const textStart = line.from + linkMatch.index + contentOffset;
-          const textEnd = textStart + textValue.length;
-          const fullStart = line.from + linkMatch.index;
-          const fullEnd = fullStart + full.length;
-
-          if (isImage) {
-            const rawUrl = linkMatch[2]?.trim() ?? '';
-            const url = normalizeUrl(rawUrl);
-            if (url) {
-              const widget = isVideoSource(rawUrl) || isVideoSource(url)
-                ? new MarkdownVideoWidget(url, textValue)
-                : new MarkdownImageWidget(url, textValue, onOpenImagePreview);
-              ranges.push(
-                Decoration.replace({
-                  widget,
-                  inclusive: false,
-                }).range(fullStart, fullEnd)
-              );
-            }
-          } else {
-            addRange(ranges, fullStart, textStart);
-            addRange(ranges, textEnd, fullEnd);
-            ranges.push(linkTextMark.range(textStart, textEnd));
-          }
-
-          linkMatch = linkRegex.exec(text);
-        }
+        linkMatch = linkRegex.exec(text);
       }
     }
 
@@ -533,7 +329,7 @@ const createLivePreviewDecorationsExtension = (
       return buildLivePreviewDecorations(state, onOpenImagePreview);
     },
     update(decorations, transaction) {
-      if (transaction.docChanged || transaction.selection) {
+      if (transaction.docChanged) {
         return buildLivePreviewDecorations(transaction.state, onOpenImagePreview);
       }
       return decorations;
@@ -543,6 +339,54 @@ const createLivePreviewDecorationsExtension = (
 
   return livePreviewField;
 };
+
+const moveVerticallyWithFallback = (
+  view: EditorView,
+  forward: boolean,
+  extend: boolean
+): boolean => {
+  const { state } = view;
+  const range = state.selection.main;
+
+  try {
+    const moved = view.moveVertically(range, forward);
+    if (moved.head !== range.head) {
+      const selection = extend
+        ? EditorSelection.range(range.anchor, moved.head)
+        : moved;
+      view.dispatch({
+        selection: EditorSelection.create([selection], 0),
+        scrollIntoView: true,
+      });
+      return true;
+    }
+  } catch {
+    // fall through to logical-line movement when block widgets break geometry lookups
+  }
+
+  const line = state.doc.lineAt(range.head);
+  if (forward ? line.number >= state.doc.lines : line.number <= 1) return false;
+
+  const targetLine = state.doc.line(line.number + (forward ? 1 : -1));
+  const column = range.head - line.from;
+  const nextHead = Math.min(targetLine.from + column, targetLine.to);
+  const selection = extend
+    ? EditorSelection.range(range.anchor, nextHead)
+    : EditorSelection.cursor(nextHead);
+
+  view.dispatch({
+    selection: EditorSelection.create([selection], 0),
+    scrollIntoView: true,
+  });
+  return true;
+};
+
+const verticalMoveFallback = Prec.high(keymap.of([
+  { key: 'ArrowUp', run: (view) => moveVerticallyWithFallback(view, false, false) },
+  { key: 'ArrowDown', run: (view) => moveVerticallyWithFallback(view, true, false) },
+  { key: 'Shift-ArrowUp', run: (view) => moveVerticallyWithFallback(view, false, true) },
+  { key: 'Shift-ArrowDown', run: (view) => moveVerticallyWithFallback(view, true, true) },
+]));
 
 function MarkdownLiveEditor({
   value,
@@ -558,6 +402,7 @@ function MarkdownLiveEditor({
       markdown(),
       EditorView.lineWrapping,
       EditorView.scrollMargins.of(() => ({ top: 72, bottom: 72 })),
+      verticalMoveFallback,
       placeholder('Start writing...'),
     ];
 
