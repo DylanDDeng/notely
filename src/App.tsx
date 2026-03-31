@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { remark } from 'remark';
+import remarkGfm from 'remark-gfm';
+import remarkHtml from 'remark-html';
 import Sidebar from './components/Sidebar/Sidebar';
 import Editor from './components/Editor/Editor';
 import Settings from './components/Settings/Settings';
@@ -158,6 +161,32 @@ const createDraftNote = (): EditorNote => {
   };
 };
 
+const deriveDocumentTitle = (markdown: string, fallbackTitle?: string, filename?: string): string => {
+  const headingMatch = String(markdown || '')
+    .replace(/\r\n/g, '\n')
+    .match(/^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$/m);
+
+  const headingTitle = headingMatch?.[1]?.trim();
+  if (headingTitle) return headingTitle;
+
+  const trimmedFallback = fallbackTitle?.trim();
+  if (trimmedFallback && trimmedFallback !== 'Untitled') return trimmedFallback;
+
+  const trimmedFilename = filename?.replace(/\.md$/i, '').trim();
+  if (trimmedFilename) return trimmedFilename;
+
+  return 'Untitled';
+};
+
+const markdownToExportHtml = async (markdown: string): Promise<string> => {
+  const result = await remark()
+    .use(remarkGfm)
+    .use(remarkHtml)
+    .process(markdown);
+
+  return String(result);
+};
+
 function App() {
   const [view, setView] = useState<ViewType>('main');
   const [notes, setNotes] = useState<Note[]>([]);
@@ -179,6 +208,11 @@ function App() {
   const currentNoteRef = useRef<EditorNote | null>(draftNote);
   const latestContentRef = useRef('');
   const lastSavedContentRef = useRef('');
+  const exportHtmlGetterRef = useRef<(() => string) | null>(null);
+
+  const handleRegisterExportHtmlGetter = useCallback((getter: (() => string) | null) => {
+    exportHtmlGetterRef.current = getter;
+  }, []);
 
   useEffect(() => {
     notesRef.current = notes;
@@ -491,6 +525,79 @@ function App() {
     }
   }, [handleSaveNote]);
 
+  const handleEditorContentChange = useCallback((nextContent: string) => {
+    latestContentRef.current = nextContent;
+    const current = currentNoteRef.current;
+
+    if (current?.isDraft) {
+      const nextModifiedAt = new Date();
+      const nextDraft = {
+        ...(current ?? createDraftNote()),
+        content: nextContent,
+        modifiedAt: nextModifiedAt,
+        isDraft: true,
+      };
+
+      setDraftNote((prev) => {
+        if (!prev || prev.id !== nextDraft.id) return prev;
+        if (prev.content === nextContent) return prev;
+        return {
+          ...prev,
+          content: nextDraft.content,
+          modifiedAt: nextDraft.modifiedAt,
+          isDraft: true,
+        };
+      });
+
+      writeUnsavedDraft(nextDraft);
+    }
+
+    window.__notelyUnsavedState = {
+      dirty: Boolean(current) && nextContent !== lastSavedContentRef.current,
+      title: current?.title || 'Untitled',
+      isDraft: Boolean(current?.isDraft || !current?.filename),
+    };
+  }, []);
+
+  const exportCurrentDocument = useCallback(async (): Promise<boolean> => {
+    const current = currentNoteRef.current;
+    if (!current) return false;
+
+    try {
+      const markdown = latestContentRef.current;
+      const documentTitle = deriveDocumentTitle(markdown, current.title, current.filename);
+      const renderedHtml = exportHtmlGetterRef.current?.() || '';
+      const html = renderedHtml || await markdownToExportHtml(markdown);
+      const suggestedBaseName = current.filename
+        ? current.filename.replace(/\.md$/i, '')
+        : generateFilename(documentTitle).replace(/\.md$/i, '');
+
+      const result = await window.electronAPI.exportNotePdf({
+        title: documentTitle,
+        html,
+        suggestedFileName: `${suggestedBaseName || 'note'}.pdf`,
+        options: {
+          pageSize: 'A4',
+          orientation: 'portrait',
+          includeHeader: false,
+          includeTitle: false,
+          includeDate: false,
+          includePageNumbers: true,
+          fontFamily: appFontFamily.trim(),
+        },
+      });
+
+      if (!result.success && !result.canceled) {
+        console.error('Failed to export PDF:', result.error);
+      }
+
+      return Boolean(result.success);
+    } catch (error) {
+      console.error('Failed to export current document:', error);
+      return false;
+    }
+  }, [appFontFamily]);
+
   const handleOpenFolder = useCallback(async () => {
     const selectedPath = await window.electronAPI.selectDirectory();
     if (!selectedPath) return;
@@ -546,6 +653,10 @@ function App() {
           setView('main');
           setManualSaveKey((prev) => prev + 1);
           break;
+        case 'export-pdf':
+          setView('main');
+          void exportCurrentDocument();
+          break;
         case 'open-folder':
           void handleOpenFolder();
           break;
@@ -566,7 +677,7 @@ function App() {
     });
 
     return unsubscribe;
-  }, [handleCreateNote, handleOpenFolder]);
+  }, [exportCurrentDocument, handleCreateNote, handleOpenFolder]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const visibleNotes = useMemo(() => {
@@ -684,22 +795,8 @@ function App() {
       <Editor
         note={currentNote}
         onSave={handleSaveNote}
-        onContentChange={(nextContent) => {
-          latestContentRef.current = nextContent;
-          if (currentNote?.isDraft) {
-            writeUnsavedDraft({
-              ...(currentNote ?? createDraftNote()),
-              content: nextContent,
-              modifiedAt: new Date(),
-              isDraft: true,
-            });
-          }
-          window.__notelyUnsavedState = {
-            dirty: Boolean(currentNote) && nextContent !== lastSavedContentRef.current,
-            title: currentNote?.title || 'Untitled',
-            isDraft: Boolean(currentNote?.isDraft || !currentNote?.filename),
-          };
-        }}
+        onContentChange={handleEditorContentChange}
+        onRegisterExportHtmlGetter={handleRegisterExportHtmlGetter}
         isLoading={isLoading && !currentNote}
         outlineToggleKey={outlineToggleKey}
         saveRequestKey={manualSaveKey}

@@ -1,6 +1,6 @@
 import { Compartment, EditorState } from '@codemirror/state';
 import { defaultHighlightStyle, LanguageDescription, syntaxHighlighting } from '@codemirror/language';
-import { EditorView, drawSelection, keymap, type ViewUpdate } from '@codemirror/view';
+import { EditorView, keymap, type ViewUpdate } from '@codemirror/view';
 import { languages } from '@codemirror/language-data';
 import { codeBlockSchema } from '@milkdown/kit/preset/commonmark';
 import { $view } from '@milkdown/kit/utils';
@@ -104,7 +104,6 @@ class CustomCodeBlockView {
       parent: this.host,
       extensions: [
         this.readOnlyConf.of(EditorState.readOnly.of(!this.view.editable)),
-        drawSelection(),
         keymap.of(this.codeMirrorKeymap()),
         this.languageConf.of([]),
         syntaxHighlighting(defaultHighlightStyle),

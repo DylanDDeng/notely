@@ -7,6 +7,7 @@ interface EditorProps {
   note: EditorNote | null;
   onSave: (note: SaveNoteData) => Promise<void>;
   onContentChange?: (content: string) => void;
+  onRegisterExportHtmlGetter?: (getter: (() => string) | null) => void;
   isLoading: boolean;
   outlineToggleKey?: number;
   saveRequestKey?: number;
@@ -66,7 +67,15 @@ const fallbackTitleFromFilename = (filename?: string): string => {
   return filename.replace(/\.md$/i, '').trim() || 'Untitled';
 };
 
-function Editor({ note, onSave, onContentChange, isLoading, outlineToggleKey = 0, saveRequestKey = 0 }: EditorProps) {
+function Editor({
+  note,
+  onSave,
+  onContentChange,
+  onRegisterExportHtmlGetter,
+  isLoading,
+  outlineToggleKey = 0,
+  saveRequestKey = 0,
+}: EditorProps) {
   const [content, setContent] = useState('');
   const [isOutlineOpen, setIsOutlineOpen] = useState(() => readBooleanSetting(OUTLINE_OPEN_KEY, false));
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -149,11 +158,9 @@ function Editor({ note, onSave, onContentChange, isLoading, outlineToggleKey = 0
     skipNextAutoSaveRef.current = true;
 
     return () => {
-      if (activeNote) {
-        void flushSave(activeNote, false);
-      }
+      clearPendingSave();
     };
-  }, [flushSave, note?.id]);
+  }, [clearPendingSave, note?.id]);
 
   useEffect(() => {
     if (!note) return;
@@ -202,6 +209,12 @@ function Editor({ note, onSave, onContentChange, isLoading, outlineToggleKey = 0
   const handleEditorDomReady = useCallback((root: HTMLDivElement | null) => {
     editorRootRef.current = root;
   }, []);
+
+  useEffect(() => {
+    return () => {
+      onRegisterExportHtmlGetter?.(null);
+    };
+  }, [onRegisterExportHtmlGetter]);
 
   const jumpToOutlineItem = useCallback((item: OutlineItem) => {
     requestAnimationFrame(() => {
@@ -259,6 +272,7 @@ function Editor({ note, onSave, onContentChange, isLoading, outlineToggleKey = 0
                 onOpenImagePreview={handleOpenImagePreview}
                 onOpenExternal={handleOpenExternal}
                 onEditorDomReady={handleEditorDomReady}
+                onRegisterExportHtmlGetter={onRegisterExportHtmlGetter}
                 documentKey={note.id}
               />
             </div>
