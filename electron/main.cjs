@@ -7,6 +7,7 @@ const { pathToFileURL } = require('url');
 
 const DEFAULT_NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
 const isDev = !app.isPackaged;
+let isAppQuitting = false;
 
 let currentNotesDir = DEFAULT_NOTES_DIR;
 
@@ -251,7 +252,7 @@ async function createWindow() {
 
   let allowClose = false;
   mainWindow.on('close', async (event) => {
-    if (allowClose) return;
+    if (allowClose || isAppQuitting) return;
     event.preventDefault();
 
     try {
@@ -261,8 +262,12 @@ async function createWindow() {
       );
       const state = rawState ? JSON.parse(rawState) : null;
       if (!state?.dirty) {
-        allowClose = true;
-        mainWindow.close();
+        if (process.platform === 'darwin') {
+          mainWindow.hide();
+        } else {
+          allowClose = true;
+          mainWindow.close();
+        }
         return;
       }
 
@@ -296,8 +301,12 @@ async function createWindow() {
         );
       }
 
-      allowClose = true;
-      mainWindow.close();
+      if (process.platform === 'darwin') {
+        mainWindow.hide();
+      } else {
+        allowClose = true;
+        mainWindow.close();
+      }
     } catch (err) {
       console.error('Failed to handle close/save flow:', err);
     }
@@ -754,10 +763,21 @@ app.whenReady().then(() => {
   void createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    const windows = BrowserWindow.getAllWindows();
+    if (windows.length === 0) {
       void createWindow();
+      return;
+    }
+    const [firstWindow] = windows;
+    if (firstWindow) {
+      firstWindow.show();
+      firstWindow.focus();
     }
   });
+});
+
+app.on('before-quit', () => {
+  isAppQuitting = true;
 });
 
 app.on('window-all-closed', () => {
