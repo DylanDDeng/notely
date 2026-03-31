@@ -23,10 +23,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Shell
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   writeClipboardText: (text) => ipcRenderer.invoke('clipboard:writeText', text),
-  getClipboardDebugPayload: () => ipcRenderer.invoke('clipboard:getDebugPayload'),
-  getClipboardLocalImagePath: () => ipcRenderer.invoke('clipboard:getLocalImagePath'),
-  saveClipboardImageAsset: (data) => ipcRenderer.invoke('media:saveClipboardImageAsset', data),
-  resolveLocalImage: (filePath) => ipcRenderer.invoke('media:resolveLocalImage', filePath),
 
   // Export
   exportNotePdf: (data) => ipcRenderer.invoke('notes:exportPdf', data),

@@ -126,37 +126,6 @@ export interface WriteClipboardTextResult {
   error?: string;
 }
 
-export interface ResolveLocalImageResult {
-  success: boolean;
-  dataUrl?: string;
-  error?: string;
-}
-
-export interface SaveClipboardImageAssetResult {
-  success: boolean;
-  filePath?: string;
-  error?: string;
-}
-
-export interface ClipboardDebugPayloadResult {
-  success: boolean;
-  formats?: Array<{
-    format: string;
-    kind: 'text' | 'buffer' | 'error';
-    value?: string;
-    utf8?: string;
-    hexPreview?: string;
-    error?: string;
-  }>;
-  error?: string;
-}
-
-export interface ClipboardLocalImagePathResult {
-  success: boolean;
-  filePath?: string;
-  error?: string;
-}
-
 export interface EditorNote {
   id: string;
   filename?: string;
@@ -205,10 +174,6 @@ export interface ElectronAPI {
 
   openExternal: (url: string) => Promise<void>;
   writeClipboardText: (text: string) => Promise<WriteClipboardTextResult>;
-  getClipboardDebugPayload?: () => Promise<ClipboardDebugPayloadResult>;
-  getClipboardLocalImagePath?: () => Promise<ClipboardLocalImagePathResult>;
-  saveClipboardImageAsset?: (data: { dataUrl: string; suggestedName?: string }) => Promise<SaveClipboardImageAssetResult>;
-  resolveLocalImage?: (filePath: string) => Promise<ResolveLocalImageResult>;
   exportNotePdf: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
   exportNotePDF?: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
   generateWechatHtmlWithAi?: (data: unknown) => Promise<unknown>;
