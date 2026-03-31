@@ -385,11 +385,12 @@ function App() {
   const handleSaveNote = useCallback(
     async (noteData: SaveNoteData) => {
       const now = new Date();
+      const shouldSaveAs = Boolean(noteData.saveAs);
       const isDraft = Boolean(noteData.isDraft || !noteData.filename);
       const nextTitle = noteData.title.trim() || 'Untitled';
 
-      if (isDraft) {
-        if (!noteData.interactive) {
+      if (isDraft || shouldSaveAs) {
+        if (isDraft && !noteData.interactive && !shouldSaveAs) {
           setDraftNote((prev) => ({
             ...(prev ?? createDraftNote()),
             id: noteData.id || prev?.id || `draft-${Date.now()}`,
@@ -404,8 +405,10 @@ function App() {
           return;
         }
 
-        const suggestedFilename = makeUniqueFilename(nextTitle);
-        const draftContent = generateNoteContent(
+        const suggestedFilename = shouldSaveAs
+          ? makeUniqueFilename(nextTitle, noteData.filename)
+          : makeUniqueFilename(nextTitle);
+        const fileContent = generateNoteContent(
           {
             title: nextTitle,
             date: noteData.date || now.toISOString(),
@@ -416,7 +419,7 @@ function App() {
 
         const saveAsResult = await window.electronAPI.saveNoteAs?.({
           suggestedFilename,
-          content: draftContent,
+          content: fileContent,
         });
 
         if (!saveAsResult || saveAsResult.canceled) {
@@ -427,12 +430,15 @@ function App() {
           throw new Error(saveAsResult.error || 'Failed to save document');
         }
 
-        const parsed = parseNote(draftContent, saveAsResult.filename);
+        const existingNote = shouldSaveAs
+          ? notesRef.current.find((note) => note.id === noteData.id || note.filename === noteData.filename)
+          : undefined;
+        const parsed = parseNote(fileContent, saveAsResult.filename);
         const savedNote: Note = {
           id: saveAsResult.filename.replace(/\.md$/i, ''),
           filename: saveAsResult.filename,
           filepath: saveAsResult.filepath,
-          content: draftContent,
+          content: fileContent,
           title: parsed.title,
           date: parsed.date,
           tags: [],
@@ -441,7 +447,7 @@ function App() {
           type: parsed.type,
           kanban: parsed.kanban,
           modifiedAt: now,
-          createdAt: now,
+          createdAt: shouldSaveAs ? existingNote?.createdAt || now : now,
         };
 
         if (saveAsResult.directory) {
@@ -449,9 +455,11 @@ function App() {
           saveStoragePath(saveAsResult.directory);
         }
 
-        writeUnsavedDraft(draftStorageKey, null);
+        if (isDraft) {
+          writeUnsavedDraft(draftStorageKey, null);
+          setDraftNote(null);
+        }
         setNotes((prev) => [...prev.filter((note) => note.filepath !== savedNote.filepath), savedNote].sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
-        setDraftNote(null);
         setSelectedNoteId(savedNote.id);
         return;
       }
@@ -545,6 +553,37 @@ function App() {
       return false;
     }
   }, [handleSaveNote]);
+
+  const saveCurrentDocumentAs = useCallback(async (): Promise<boolean> => {
+    const current = currentNoteRef.current;
+    if (!current) return false;
+
+    try {
+      await handleSaveNote({
+        id: current.id,
+        filename: current.filename,
+        filepath: current.filepath,
+        title: current.title,
+        content: latestContentRef.current,
+        tags: current.tags,
+        date: current.date,
+        interactive: true,
+        isDraft: current.isDraft,
+        saveAs: true,
+      });
+      lastSavedContentRef.current = latestContentRef.current;
+      window.__notelyUnsavedState = {
+        dirty: false,
+        title: current.title || 'Untitled',
+        isDraft: Boolean(current.isDraft || !current.filename),
+        draftStorageKey,
+      };
+      return true;
+    } catch (error) {
+      console.error('Failed to save current document as:', error);
+      return false;
+    }
+  }, [draftStorageKey, handleSaveNote]);
 
   const handleEditorContentChange = useCallback((nextContent: string) => {
     latestContentRef.current = nextContent;
@@ -675,6 +714,10 @@ function App() {
           setView('main');
           void saveCurrentDocument(true);
           break;
+        case 'save-note-as':
+          setView('main');
+          void saveCurrentDocumentAs();
+          break;
         case 'export-pdf':
           setView('main');
           void exportCurrentDocument();
@@ -699,7 +742,7 @@ function App() {
     });
 
     return unsubscribe;
-  }, [exportCurrentDocument, handleCreateNote, handleOpenFolder]);
+  }, [exportCurrentDocument, handleCreateNote, handleOpenFolder, saveCurrentDocument, saveCurrentDocumentAs]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const visibleNotes = useMemo(() => {

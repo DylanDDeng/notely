@@ -175,6 +175,7 @@ export interface SaveNoteData {
   filename?: string;
   filepath?: string;
   forceFilename?: string;
+  saveAs?: boolean;
   title: string;
   content: string;
   tags: string[];

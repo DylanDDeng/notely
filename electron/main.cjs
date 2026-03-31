@@ -965,7 +965,7 @@ function buildApplicationMenu(mainWindow) {
         { label: 'New Document', accelerator: 'CmdOrCtrl+N', click: () => void createWindow({ newDocument: true }) },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('save-note') },
-        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-note') },
+        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-note-as') },
         { type: 'separator' },
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('open-folder') },
         { type: 'separator' },
