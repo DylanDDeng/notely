@@ -204,6 +204,7 @@
 
 .editor-milkdown-root .ProseMirror strong {
   font-weight: 600;
+  color: rgb(193, 95, 60);
 }
 
 .editor-milkdown-root .ProseMirror a {
@@ -468,6 +469,16 @@
   padding: 0;
   font-size: 15px;
   line-height: 1.75;
+  min-height: 1.75em;
+}
+
+.editor-milkdown-root .milkdown-code-block .codemirror-host .cm-cursorLayer {
+  pointer-events: none;
+}
+
+.editor-milkdown-root .milkdown-code-block .codemirror-host .cm-cursor,
+.editor-milkdown-root .milkdown-code-block .codemirror-host .cm-dropCursor {
+  border-left: 1.5px solid #2f2924 !important;
 }
 
 .editor-milkdown-root .milkdown-code-block .codemirror-host .cm-gutters {
