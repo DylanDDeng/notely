@@ -214,7 +214,6 @@ function App() {
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
-  const [manualSaveKey, setManualSaveKey] = useState(0);
   const [draftNote, setDraftNote] = useState<EditorNote | null>(() => {
     if (isNewDocumentWindow()) return createDraftNote();
     return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
@@ -534,6 +533,12 @@ function App() {
       });
       lastSavedContentRef.current = latestContentRef.current;
       if (current.isDraft) writeUnsavedDraft(draftStorageKey, null);
+      window.__notelyUnsavedState = {
+        dirty: false,
+        title: current.title || 'Untitled',
+        isDraft: Boolean(current.isDraft || !current.filename),
+        draftStorageKey,
+      };
       return true;
     } catch (error) {
       console.error('Failed to save current document:', error);
@@ -668,7 +673,7 @@ function App() {
           break;
         case 'save-note':
           setView('main');
-          setManualSaveKey((prev) => prev + 1);
+          void saveCurrentDocument(true);
           break;
         case 'export-pdf':
           setView('main');
@@ -817,7 +822,6 @@ function App() {
         onRegisterExportHtmlGetter={handleRegisterExportHtmlGetter}
         isLoading={isLoading && !currentNote}
         outlineToggleKey={outlineToggleKey}
-        saveRequestKey={manualSaveKey}
       />
       <QuickOpen
         isOpen={isQuickOpenOpen}
