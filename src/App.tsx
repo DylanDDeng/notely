@@ -21,6 +21,18 @@ const UNSAVED_DRAFT_KEY = 'notes:unsavedDraft';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
+const getWindowParams = () => {
+  if (typeof window === 'undefined') return new URLSearchParams();
+  return new URLSearchParams(window.location.search);
+};
+
+const getWindowDraftStorageKey = (): string => {
+  const draftKey = getWindowParams().get('draftKey')?.trim();
+  return draftKey ? `${UNSAVED_DRAFT_KEY}:${draftKey}` : UNSAVED_DRAFT_KEY;
+};
+
+const isNewDocumentWindow = (): boolean => getWindowParams().get('newDocument') === '1';
+
 const getSavedStoragePath = (): string => localStorage.getItem(STORAGE_PATH_KEY) || '';
 
 const saveStoragePath = (path: string) => {
@@ -94,9 +106,9 @@ const saveRecentNoteIds = (noteIds: string[]) => {
   }
 };
 
-const readUnsavedDraft = (): EditorNote | null => {
+const readUnsavedDraft = (storageKey: string): EditorNote | null => {
   try {
-    const raw = localStorage.getItem(UNSAVED_DRAFT_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<EditorNote> | null;
     if (!parsed || typeof parsed.content !== 'string') return null;
@@ -117,13 +129,13 @@ const readUnsavedDraft = (): EditorNote | null => {
   }
 };
 
-const writeUnsavedDraft = (draft: EditorNote | null) => {
+const writeUnsavedDraft = (storageKey: string, draft: EditorNote | null) => {
   try {
     if (!draft || !draft.isDraft) {
-      localStorage.removeItem(UNSAVED_DRAFT_KEY);
+      localStorage.removeItem(storageKey);
       return;
     }
-    localStorage.setItem(UNSAVED_DRAFT_KEY, JSON.stringify(draft));
+    localStorage.setItem(storageKey, JSON.stringify(draft));
   } catch {
     // ignore
   }
@@ -188,6 +200,7 @@ const markdownToExportHtml = async (markdown: string): Promise<string> => {
 };
 
 function App() {
+  const draftStorageKey = useMemo(() => getWindowDraftStorageKey(), []);
   const [view, setView] = useState<ViewType>('main');
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -202,7 +215,10 @@ function App() {
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
   const [manualSaveKey, setManualSaveKey] = useState(0);
-  const [draftNote, setDraftNote] = useState<EditorNote | null>(() => readUnsavedDraft() ?? createDraftNote());
+  const [draftNote, setDraftNote] = useState<EditorNote | null>(() => {
+    if (isNewDocumentWindow()) return createDraftNote();
+    return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
+  });
   const notesRef = useRef<Note[]>([]);
   const storagePathRef = useRef(storagePath);
   const currentNoteRef = useRef<EditorNote | null>(draftNote);
@@ -434,7 +450,7 @@ function App() {
           saveStoragePath(saveAsResult.directory);
         }
 
-        writeUnsavedDraft(null);
+        writeUnsavedDraft(draftStorageKey, null);
         setNotes((prev) => [...prev.filter((note) => note.filepath !== savedNote.filepath), savedNote].sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
         setDraftNote(null);
         setSelectedNoteId(savedNote.id);
@@ -517,7 +533,7 @@ function App() {
         isDraft: current.isDraft,
       });
       lastSavedContentRef.current = latestContentRef.current;
-      if (current.isDraft) writeUnsavedDraft(null);
+      if (current.isDraft) writeUnsavedDraft(draftStorageKey, null);
       return true;
     } catch (error) {
       console.error('Failed to save current document:', error);
@@ -549,15 +565,16 @@ function App() {
         };
       });
 
-      writeUnsavedDraft(nextDraft);
+      writeUnsavedDraft(draftStorageKey, nextDraft);
     }
 
     window.__notelyUnsavedState = {
       dirty: Boolean(current) && nextContent !== lastSavedContentRef.current,
       title: current?.title || 'Untitled',
       isDraft: Boolean(current?.isDraft || !current?.filename),
+      draftStorageKey,
     };
-  }, []);
+  }, [draftStorageKey]);
 
   const exportCurrentDocument = useCallback(async (): Promise<boolean> => {
     const current = currentNoteRef.current;
@@ -739,13 +756,14 @@ function App() {
       dirty: Boolean(current) && latestContentRef.current !== lastSavedContentRef.current,
       title: current?.title || 'Untitled',
       isDraft: Boolean(current?.isDraft || !current?.filename),
+      draftStorageKey,
     };
 
     return () => {
       delete window.__notelySaveCurrent;
       delete window.__notelyUnsavedState;
     };
-  }, [currentNote, saveCurrentDocument]);
+  }, [currentNote, draftStorageKey, saveCurrentDocument]);
 
   if (view === 'settings') {
     return (

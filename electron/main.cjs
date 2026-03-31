@@ -11,6 +11,15 @@ let isAppQuitting = false;
 
 let currentNotesDir = DEFAULT_NOTES_DIR;
 
+function buildWindowUrl(baseUrl, options = {}) {
+  const url = new URL(baseUrl);
+  if (options.newDocument) {
+    url.searchParams.set('newDocument', '1');
+    url.searchParams.set('draftKey', options.draftKey || `draft-${Date.now()}`);
+  }
+  return url.toString();
+}
+
 async function ensureNotesDir() {
   try {
     await fs.mkdir(currentNotesDir, { recursive: true });
@@ -54,6 +63,10 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
   const safeBaseHref = baseHref ? escapeHtml(baseHref) : '';
   const family = sanitizeCssFontFamily(fontFamily);
   const defaultFontStack = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+  const cjkFontStack = "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Heiti SC', sans-serif";
+  const fullFontStack = family
+    ? `${family}, ${defaultFontStack}, ${cjkFontStack}`
+    : `${defaultFontStack}, ${cjkFontStack}`;
 
   const titleBlock = includeTitle ? `<h1 class="note-title">${safeTitle}</h1>` : '';
   const dateBlock = includeDate && safeDate ? `<div class="note-date">${safeDate}</div>` : '';
@@ -66,7 +79,7 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
     <title>${safeTitle}</title>
     <style>
       :root {
-        --app-font-family: ${family || defaultFontStack};
+        --app-font-family: ${fullFontStack};
       }
 
       * { box-sizing: border-box; }
@@ -126,6 +139,11 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
       .note-content h6 { font-size: 14px; }
 
       .note-content p { margin-bottom: 16px; }
+      .note-content p,
+      .note-content li,
+      .note-content blockquote {
+        white-space: pre-wrap;
+      }
 
       .note-content img {
         max-width: min(100%, 720px);
@@ -228,7 +246,7 @@ function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeD
 </html>`;
 }
 
-async function createWindow() {
+async function createWindow(options = {}) {
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -295,8 +313,9 @@ async function createWindow() {
       }
 
       if (response === 1) {
+        const draftStorageKey = typeof state?.draftStorageKey === 'string' ? state.draftStorageKey : 'notes:unsavedDraft';
         await mainWindow.webContents.executeJavaScript(
-          'try { localStorage.removeItem("notes:unsavedDraft"); } catch {}',
+          `try { localStorage.removeItem(${JSON.stringify(draftStorageKey)}); } catch {}`,
           true
         );
       }
@@ -320,7 +339,7 @@ async function createWindow() {
       : '';
     if (preferredUrl) {
       try {
-        await mainWindow.loadURL(preferredUrl);
+        await mainWindow.loadURL(buildWindowUrl(preferredUrl, options));
         console.log(`Loaded dev server at ${preferredUrl}`);
         mainWindow.webContents.openDevTools({ mode: 'detach' });
         return;
@@ -338,7 +357,7 @@ async function createWindow() {
 
       const url = `http://localhost:${port}`;
       try {
-        await mainWindow.loadURL(url);
+        await mainWindow.loadURL(buildWindowUrl(url, options));
         loaded = true;
         console.log(`Loaded dev server at ${url}`);
         mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -357,7 +376,8 @@ async function createWindow() {
     return;
   }
 
-  await mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  const fileUrl = pathToFileURL(path.join(__dirname, '../dist/index.html')).toString();
+  await mainWindow.loadURL(buildWindowUrl(fileUrl, options));
 }
 
 ipcMain.handle('notes:getStoragePath', async () => currentNotesDir);
@@ -661,7 +681,7 @@ function buildApplicationMenu(mainWindow) {
     {
       label: 'File',
       submenu: [
-        { label: 'New Document', accelerator: 'CmdOrCtrl+N', click: () => send('new-note') },
+        { label: 'New Document', accelerator: 'CmdOrCtrl+N', click: () => void createWindow({ newDocument: true }) },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('save-note') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-note') },

@@ -193,6 +193,7 @@ declare global {
       dirty: boolean;
       title: string;
       isDraft: boolean;
+      draftStorageKey?: string;
     };
     __notelySaveCurrent?: (interactive?: boolean) => Promise<boolean>;
   }
