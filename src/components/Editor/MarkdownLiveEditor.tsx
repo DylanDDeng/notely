@@ -1,13 +1,16 @@
 import { useEffect, useRef } from 'react';
-import { Editor, rootCtx, defaultValueCtx, remarkPluginsCtx } from '@milkdown/kit/core';
-import { commonmark } from '@milkdown/kit/preset/commonmark';
+import { Editor, rootCtx, defaultValueCtx, remarkPluginsCtx, editorViewCtx, commandsCtx } from '@milkdown/kit/core';
+import { commonmark, insertImageCommand } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { trailing } from '@milkdown/kit/plugin/trailing';
 import { replaceAll } from '@milkdown/kit/utils';
+import { DOMSerializer } from '@milkdown/kit/prose/model';
+import { TextSelection } from '@milkdown/kit/prose/state';
 import { htmlView } from './htmlView';
+import { customImageView } from './imageView';
 import { customCodeBlockView } from './codeBlockView';
 import '@milkdown/kit/prose/view/style/prosemirror.css';
 
@@ -17,16 +20,164 @@ interface MarkdownLiveEditorProps {
   onOpenExternal?: (url: string) => void;
   onOpenImagePreview?: (url: string) => void;
   onEditorDomReady?: (root: HTMLDivElement | null) => void;
+  onRegisterExportHtmlGetter?: (getter: (() => string) | null) => void;
   documentKey?: string;
 }
 
 const normalizeUrl = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed) return '';
-  if (/^(https?:\/\/|mailto:|file:)/i.test(trimmed)) return trimmed;
+  if (
+    trimmed.startsWith('/Users/') ||
+    trimmed.startsWith('/Volumes/') ||
+    trimmed.startsWith('/private/') ||
+    trimmed.startsWith('/tmp/') ||
+    /^[A-Za-z]:[\\/]/.test(trimmed)
+  ) {
+    const normalizedPath = trimmed.replace(/\\/g, '/');
+    const prefixed = /^[A-Za-z]:\//.test(normalizedPath)
+      ? `file:///${normalizedPath}`
+      : `file://${normalizedPath}`;
+    return encodeURI(prefixed);
+  }
+  if (/^(https?:\/\/|mailto:|file:|data:|blob:)/i.test(trimmed)) return trimmed;
   if (trimmed.startsWith('//')) return `https:${trimmed}`;
   return `https://${trimmed}`;
 };
+
+const syncRenderableMediaSources = (root: HTMLElement) => {
+  root.querySelectorAll('a[href]').forEach((node) => {
+    if (node instanceof HTMLAnchorElement) {
+      const raw = node.dataset.originalHref || node.getAttribute('href')?.trim() || '';
+      if (!raw) return;
+      const normalized = normalizeUrl(raw);
+      if (!node.dataset.originalHref) {
+        node.dataset.originalHref = raw;
+      }
+      if (node.getAttribute('href') !== normalized) {
+        node.setAttribute('href', normalized);
+      }
+    }
+  });
+};
+
+const isLikelyLocalPath = (value: string): boolean => {
+  const trimmed = value.trim();
+  return (
+    trimmed.startsWith('/Users/') ||
+    trimmed.startsWith('/Volumes/') ||
+    trimmed.startsWith('/private/') ||
+    trimmed.startsWith('/tmp/') ||
+    /^[A-Za-z]:[\\/]/.test(trimmed) ||
+    /^file:\/\//i.test(trimmed)
+  );
+};
+
+const toFilesystemPath = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (/^file:\/\//i.test(trimmed)) {
+    const withoutProtocol = decodeURI(trimmed.replace(/^file:\/\//i, ''));
+    return withoutProtocol.replace(/^\/([A-Za-z]:\/)/, '$1');
+  }
+  return trimmed;
+};
+
+const isLikelyLocalImagePath = (value: string): boolean => {
+  const normalized = toFilesystemPath(value);
+  return isLikelyLocalPath(normalized) && /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(normalized);
+};
+
+const extractLocalImagePathFromPaste = (event: ClipboardEvent): string | null => {
+  const data = event.clipboardData;
+  if (!data) return null;
+
+  const imageFile = Array.from(data.files || []).find((file) => file.type.startsWith('image/')) as (File & { path?: string }) | undefined;
+  if (imageFile?.path && isLikelyLocalImagePath(imageFile.path)) {
+    return toFilesystemPath(imageFile.path);
+  }
+
+  const uriList = data
+    .getData('text/uri-list')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => item && !item.startsWith('#'));
+
+  if (uriList && isLikelyLocalImagePath(uriList)) {
+    return toFilesystemPath(uriList);
+  }
+
+  const plainText = data.getData('text/plain').trim();
+  if (plainText && isLikelyLocalImagePath(plainText)) {
+    return toFilesystemPath(plainText);
+  }
+
+  return null;
+};
+
+const getImageFileFromPaste = (event: ClipboardEvent): File | null => {
+  const data = event.clipboardData;
+  if (!data) return null;
+  const imageFile = Array.from(data.files || []).find((file) => file.type.startsWith('image/'));
+  return imageFile || null;
+};
+
+const stripNullChars = (value: string): string => value.replace(/\0/g, '').trim();
+
+const extractLocalImagePathFromNativePayload = (
+  payload?: {
+    success: boolean;
+    formats?: Array<{
+      format: string;
+      kind: 'text' | 'buffer' | 'error';
+      value?: string;
+      utf8?: string;
+    }>;
+  } | null
+): string | null => {
+  if (!payload?.success || !payload.formats?.length) return null;
+
+  const candidates = payload.formats.flatMap((entry) => {
+    const values = [entry.value, entry.utf8]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .map(stripNullChars)
+      .filter(Boolean);
+    return values.map((value) => ({ format: entry.format, value }));
+  });
+
+  for (const candidate of candidates) {
+    const fileUrlMatch = candidate.value.match(/file:\/\/[^\s]+/i);
+    if (fileUrlMatch && isLikelyLocalImagePath(fileUrlMatch[0])) {
+      return toFilesystemPath(fileUrlMatch[0]);
+    }
+
+    const absolutePathMatch = candidate.value.match(/(?:\/Users\/|\/Volumes\/|\/private\/|\/tmp\/)[^\s]+/);
+    if (absolutePathMatch && isLikelyLocalImagePath(absolutePathMatch[0])) {
+      return toFilesystemPath(absolutePathMatch[0]);
+    }
+
+    const windowsPathMatch = candidate.value.match(/[A-Za-z]:[\\/][^\s]+/);
+    if (windowsPathMatch && isLikelyLocalImagePath(windowsPathMatch[0])) {
+      return toFilesystemPath(windowsPathMatch[0]);
+    }
+  }
+
+  return null;
+};
+
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error('Failed to read image data'));
+    };
+    reader.onerror = () => reject(reader.error || new Error('Failed to read image data'));
+    reader.readAsDataURL(file);
+  });
 
 function MarkdownLiveEditor({
   value,
@@ -34,6 +185,7 @@ function MarkdownLiveEditor({
   onOpenExternal,
   onOpenImagePreview,
   onEditorDomReady,
+  onRegisterExportHtmlGetter,
   documentKey,
 }: MarkdownLiveEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -71,6 +223,7 @@ function MarkdownLiveEditor({
         .use(clipboard)
         .use(trailing)
         .use(customCodeBlockView)
+        .use(customImageView)
         .use(htmlView)
         .create();
 
@@ -82,13 +235,48 @@ function MarkdownLiveEditor({
       editorRef.current = editor;
       currentMarkdownRef.current = initialValue;
       onEditorDomReady?.(root);
+      syncRenderableMediaSources(root);
+      onRegisterExportHtmlGetter?.(() => {
+        return editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx);
+          const serializer = DOMSerializer.fromSchema(view.state.schema);
+          const container = document.createElement('div');
+          container.appendChild(serializer.serializeFragment(view.state.doc.content));
+          return container.innerHTML.trim();
+        });
+      });
     };
 
     void setup();
 
+    const observer = new MutationObserver(() => {
+      syncRenderableMediaSources(root);
+    });
+
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+    });
+
     const handleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target) return;
+
+      if (target === root) {
+        const editor = editorRef.current;
+        if (!editor) return;
+
+        event.preventDefault();
+        editor.action((ctx) => {
+          const view = ctx.get(editorViewCtx);
+          const end = view.state.doc.content.size;
+          view.focus();
+          view.dispatch(
+            view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(end)))
+          );
+        });
+        return;
+      }
 
       const copyButton = target.closest('.copy-button');
       if (copyButton) {
@@ -123,7 +311,7 @@ function MarkdownLiveEditor({
 
       const image = target.closest('img');
       if (image) {
-        const src = image.getAttribute('src')?.trim() || '';
+        const src = image.getAttribute('data-original-src')?.trim() || image.getAttribute('src')?.trim() || '';
         if (!src) return;
         event.preventDefault();
         onOpenImagePreview?.(normalizeUrl(src));
@@ -142,12 +330,96 @@ function MarkdownLiveEditor({
       onOpenExternal?.(normalized);
     };
 
+    const handlePaste = (event: ClipboardEvent) => {
+      const clipboardData = event.clipboardData;
+      const imageFile = getImageFileFromPaste(event);
+      if (clipboardData) {
+        const files = Array.from(clipboardData.files || []).map((file) => ({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          path: (file as File & { path?: string }).path || null,
+        }));
+        console.log('[notely][paste] clipboard payload', {
+          types: Array.from(clipboardData.types || []),
+          files,
+          textPlain: clipboardData.getData('text/plain'),
+          textUriList: clipboardData.getData('text/uri-list'),
+          textHtml: clipboardData.getData('text/html'),
+        });
+      }
+
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      event.preventDefault();
+      void (async () => {
+        const nativePathResult = await window.electronAPI.getClipboardLocalImagePath?.();
+        const nativePayload = await window.electronAPI.getClipboardDebugPayload?.();
+        console.log('[notely][paste] native clipboard payload', nativePayload);
+        console.log('[notely][paste] native clipboard local image path', nativePathResult);
+
+        const filePath =
+          extractLocalImagePathFromPaste(event) ||
+          nativePathResult?.filePath ||
+          extractLocalImagePathFromNativePayload(nativePayload);
+
+        console.log('[notely][paste] resolved local image path', filePath);
+
+      if (filePath) {
+        editor.action((ctx) => {
+          const commands = ctx.get(commandsCtx);
+          console.log('[notely][paste] inserting image node', { src: filePath, mode: 'path' });
+            commands.call(insertImageCommand.key, {
+              src: filePath,
+              alt: imageFile?.name || '',
+              title: imageFile?.name || '',
+            });
+        });
+        return;
+      }
+
+        if (!imageFile) return;
+
+        const dataUrl = await readFileAsDataUrl(imageFile);
+        const savedAsset = await window.electronAPI.saveClipboardImageAsset?.({
+          dataUrl,
+          suggestedName: imageFile.name || 'pasted-image',
+        });
+
+        const src = savedAsset?.success && savedAsset.filePath ? savedAsset.filePath : dataUrl;
+        editor.action((ctx) => {
+          const commands = ctx.get(commandsCtx);
+          console.log('[notely][paste] inserting image node', {
+            mode: savedAsset?.success && savedAsset.filePath ? 'saved-asset-path' : 'data-url',
+            type: imageFile.type,
+            size: imageFile.size,
+            src,
+          });
+          commands.call(insertImageCommand.key, {
+            src,
+            alt: imageFile.name || '',
+            title: imageFile.name || '',
+          });
+        });
+      })().catch((error) => {
+        console.error('[notely][paste] failed to handle clipboard image paste', error);
+      });
+
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+    };
+
     root.addEventListener('click', handleClick);
+    root.addEventListener('paste', handlePaste, true);
 
     return () => {
       disposed = true;
+      observer.disconnect();
       root.removeEventListener('click', handleClick);
+      root.removeEventListener('paste', handlePaste, true);
       onEditorDomReady?.(null);
+      onRegisterExportHtmlGetter?.(null);
       const editor = editorRef.current;
       editorRef.current = null;
       if (editor) {
@@ -159,7 +431,7 @@ function MarkdownLiveEditor({
       }
       root.innerHTML = '';
     };
-  }, [documentKey, onEditorDomReady, onOpenExternal, onOpenImagePreview]);
+  }, [documentKey, onEditorDomReady, onOpenExternal, onOpenImagePreview, onRegisterExportHtmlGetter]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -168,6 +440,12 @@ function MarkdownLiveEditor({
 
     currentMarkdownRef.current = value;
     editor.action(replaceAll(value));
+    const root = hostRef.current;
+    if (root) {
+      requestAnimationFrame(() => {
+        syncRenderableMediaSources(root);
+      });
+    }
   }, [value]);
 
   return <div ref={hostRef} className="editor-milkdown-root" />;
