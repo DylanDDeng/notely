@@ -73,6 +73,81 @@ function isLikelyImagePath(value) {
   return /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(value);
 }
 
+function guessImageMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return ({
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.bmp': 'image/bmp',
+    '.ico': 'image/x-icon',
+    '.avif': 'image/avif',
+  })[ext];
+}
+
+async function resolveImagePathToDataUrl(filePath) {
+  const mimeType = guessImageMimeType(filePath);
+  if (!mimeType) return null;
+  const buffer = await fs.readFile(filePath);
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+function resolveLocalImageSource(src, baseDir) {
+  const trimmed = String(src || '').trim();
+  if (!trimmed) return null;
+  if (/^(data:|blob:|https?:\/\/|mailto:)/i.test(trimmed)) return null;
+
+  if (/^file:\/\//i.test(trimmed)) {
+    const localPath = fileUrlToPath(trimmed);
+    return localPath && isLikelyImagePath(localPath) ? localPath : null;
+  }
+
+  if ((trimmed.startsWith('/') || /^[A-Za-z]:[\\/]/.test(trimmed)) && isLikelyImagePath(trimmed)) {
+    return trimmed;
+  }
+
+  const candidate = path.resolve(baseDir, trimmed);
+  return isLikelyImagePath(candidate) ? candidate : null;
+}
+
+async function inlineLocalImagesInHtml(html, baseDir) {
+  const source = String(html || '');
+  const matches = [...source.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1[^>]*>/gi)];
+  if (matches.length === 0) return source;
+
+  let result = source;
+  const cache = new Map();
+
+  for (const match of matches) {
+    const fullMatch = match[0];
+    const quote = match[1];
+    const rawSrc = match[2];
+    const localPath = resolveLocalImageSource(rawSrc, baseDir);
+    if (!localPath) continue;
+
+    let dataUrl = cache.get(localPath);
+    if (dataUrl === undefined) {
+      try {
+        dataUrl = await resolveImagePathToDataUrl(localPath);
+      } catch {
+        dataUrl = null;
+      }
+      cache.set(localPath, dataUrl);
+    }
+
+    if (!dataUrl) continue;
+
+    const escapedSrc = rawSrc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const attrPattern = new RegExp(`src=${quote}${escapedSrc}${quote}`);
+    result = result.replace(fullMatch, fullMatch.replace(attrPattern, `src=${quote}${dataUrl}${quote}`));
+  }
+
+  return result;
+}
+
 function extractImagePathFromClipboardEntries(entries) {
   const prioritized = [...entries].sort((a, b) => {
     const score = (format) => {
@@ -622,10 +697,11 @@ ipcMain.handle('notes:exportPdf', async (_event, data) => {
     const fontFamily = typeof options.fontFamily === 'string' ? options.fontFamily : '';
 
     const baseHref = pathToFileURL(`${currentNotesDir}${path.sep}`).toString();
+    const inlinedBodyHtml = await inlineLocalImagesInHtml(html, currentNotesDir);
     const exportHtml = buildNoteExportHtml({
       title,
       dateText,
-      bodyHtml: html,
+      bodyHtml: inlinedBodyHtml,
       includeTitle,
       includeDate,
       includeHeader,
@@ -848,27 +924,13 @@ ipcMain.handle('media:resolveLocalImage', async (_event, filePath) => {
       .replace(/^file:\/\//i, '')
       .replace(/^\/([A-Za-z]:\/)/, '$1');
 
-    const ext = path.extname(normalizedPath).toLowerCase();
-    const mimeType = ({
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-      '.svg': 'image/svg+xml',
-      '.bmp': 'image/bmp',
-      '.ico': 'image/x-icon',
-      '.avif': 'image/avif',
-    })[ext];
-
-    if (!mimeType) {
-      return { success: false, error: `Unsupported image type: ${ext || 'unknown'}` };
+    const dataUrl = await resolveImagePathToDataUrl(normalizedPath);
+    if (!dataUrl) {
+      return { success: false, error: `Unsupported image type: ${path.extname(normalizedPath).toLowerCase() || 'unknown'}` };
     }
-
-    const buffer = await fs.readFile(normalizedPath);
     return {
       success: true,
-      dataUrl: `data:${mimeType};base64,${buffer.toString('base64')}`,
+      dataUrl,
     };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
