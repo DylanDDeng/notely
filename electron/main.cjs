@@ -249,6 +249,50 @@ async function createWindow() {
     },
   });
 
+  let allowClose = false;
+  mainWindow.on('close', async (event) => {
+    if (allowClose) return;
+
+    try {
+      const rawState = await mainWindow.webContents.executeJavaScript(
+        'JSON.stringify(window.__notelyUnsavedState ?? null)',
+        true
+      );
+      const state = rawState ? JSON.parse(rawState) : null;
+      if (!state?.dirty) return;
+
+      event.preventDefault();
+
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Save', "Don't Save", 'Cancel'],
+        defaultId: 0,
+        cancelId: 2,
+        message: `Save changes to "${state.title || 'Untitled'}"?`,
+        detail: state.isDraft
+          ? 'Your markdown document is not saved yet.'
+          : 'Your recent changes will be lost if you do not save them.',
+      });
+
+      if (response === 2) {
+        return;
+      }
+
+      if (response === 0) {
+        const saved = await mainWindow.webContents.executeJavaScript(
+          'window.__notelySaveCurrent ? window.__notelySaveCurrent(true) : Promise.resolve(false)',
+          true
+        );
+        if (!saved) return;
+      }
+
+      allowClose = true;
+      mainWindow.close();
+    } catch (err) {
+      console.error('Failed to handle close/save flow:', err);
+    }
+  });
+
   buildApplicationMenu(mainWindow);
 
   if (isDev) {
@@ -379,6 +423,42 @@ ipcMain.handle('notes:save', async (_event, { filename, content, preserveModifie
     }
 
     return { success: true };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+});
+
+ipcMain.handle('notes:saveAs', async (_event, { suggestedFilename, content } = {}) => {
+  try {
+    await ensureNotesDir();
+
+    const fallbackName = typeof suggestedFilename === 'string' && suggestedFilename.trim() ? suggestedFilename.trim() : 'Untitled.md';
+    const saveResult = await dialog.showSaveDialog({
+      title: 'Save Markdown Document',
+      defaultPath: path.join(currentNotesDir, fallbackName),
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const outPath = /\.(md|markdown)$/i.test(saveResult.filePath)
+      ? saveResult.filePath
+      : `${saveResult.filePath}.md`;
+
+    await fs.mkdir(path.dirname(outPath), { recursive: true });
+    await fs.writeFile(outPath, content, 'utf-8');
+
+    currentNotesDir = path.dirname(outPath);
+
+    return {
+      success: true,
+      filepath: outPath,
+      filename: path.basename(outPath),
+      directory: currentNotesDir,
+    };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
   }
@@ -563,6 +643,9 @@ function buildApplicationMenu(mainWindow) {
       label: 'File',
       submenu: [
         { label: 'New Document', accelerator: 'CmdOrCtrl+N', click: () => send('new-note') },
+        { type: 'separator' },
+        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('save-note') },
+        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-note') },
         { type: 'separator' },
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('open-folder') },
         { type: 'separator' },

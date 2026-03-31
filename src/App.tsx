@@ -3,11 +3,10 @@ import Sidebar from './components/Sidebar/Sidebar';
 import Editor from './components/Editor/Editor';
 import Settings from './components/Settings/Settings';
 import QuickOpen from './components/QuickOpen/QuickOpen';
-import Welcome from './components/Welcome/Welcome';
 import { generateFilename, generateNoteContent, parseNote } from './utils/noteUtils';
 import type { EditorNote, Note, RawNote, SaveNoteData } from './types';
 import './styles/App.css';
-type ViewType = 'welcome' | 'main' | 'settings';
+type ViewType = 'main' | 'settings';
 type Theme = 'light' | 'dark' | 'system';
 
 const STORAGE_PATH_KEY = 'notes:storagePath';
@@ -17,12 +16,6 @@ const THEME_KEY = 'notes:theme';
 const RECENT_NOTE_IDS_KEY = 'notes:recentNoteIds';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
-
-const hasCompletedWelcome = (): boolean => localStorage.getItem('notes:hasCompletedWelcome') === 'true';
-
-const markWelcomeCompleted = () => {
-  localStorage.setItem('notes:hasCompletedWelcome', 'true');
-};
 
 const getSavedStoragePath = (): string => localStorage.getItem(STORAGE_PATH_KEY) || '';
 
@@ -106,6 +99,7 @@ const applyTheme = (theme: Theme) => {
 const toEditorNote = (note: Note): EditorNote => ({
   id: note.id,
   filename: note.filename,
+  filepath: note.filepath,
   title: note.title,
   content: note.contentBody,
   tags: [],
@@ -114,14 +108,27 @@ const toEditorNote = (note: Note): EditorNote => ({
   modifiedAt: note.modifiedAt,
 });
 
+const createDraftNote = (): EditorNote => {
+  const now = new Date();
+  return {
+    id: `draft-${now.getTime()}`,
+    title: 'Untitled',
+    content: '',
+    tags: [],
+    date: now.toISOString(),
+    createdAt: now,
+    modifiedAt: now,
+    isDraft: true,
+  };
+};
+
 function App() {
-  const [view, setView] = useState<ViewType>('welcome');
+  const [view, setView] = useState<ViewType>('main');
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [storagePath, setStoragePath] = useState<string>('');
-  const [isFirstLaunch, setIsFirstLaunch] = useState(true);
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => getSavedSidebarOpen());
   const [theme, setTheme] = useState<Theme>(() => getSavedTheme());
@@ -129,9 +136,13 @@ function App() {
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
+  const [manualSaveKey, setManualSaveKey] = useState(0);
+  const [draftNote, setDraftNote] = useState<EditorNote | null>(() => createDraftNote());
   const notesRef = useRef<Note[]>([]);
   const storagePathRef = useRef(storagePath);
-  const emptyVaultBootstrapPathRef = useRef<string | null>(null);
+  const currentNoteRef = useRef<EditorNote | null>(draftNote);
+  const latestContentRef = useRef('');
+  const lastSavedContentRef = useRef('');
 
   useEffect(() => {
     notesRef.current = notes;
@@ -213,17 +224,10 @@ function App() {
 
   useEffect(() => {
     const init = async () => {
-      const completed = hasCompletedWelcome();
-      setIsFirstLaunch(!completed);
-
-      if (!completed) return;
-
       const savedPath = getSavedStoragePath();
       const result = await window.electronAPI.setStoragePath(savedPath);
       if (!result.success) {
         console.error('Failed to restore storage path:', result.error);
-        setView('welcome');
-        setIsFirstLaunch(true);
         return;
       }
 
@@ -243,17 +247,27 @@ function App() {
       return;
     }
 
+    if (draftNote) return;
+
     if (selectedNoteId) {
       if (notes.some((note) => note.id === selectedNoteId)) return;
     }
 
     setSelectedNoteId(notes[0].id);
-  }, [notes, selectedNoteId]);
+  }, [draftNote, notes, selectedNoteId]);
 
   const handleSelectNote = useCallback((noteId: string) => {
+    setDraftNote(null);
     setSelectedNoteId(noteId);
     setIsSidebarOpen(false);
   }, []);
+
+  useEffect(() => {
+    if (view !== 'main') return;
+    if (selectedNoteId) return;
+    if (draftNote) return;
+    setDraftNote(createDraftNote());
+  }, [draftNote, selectedNoteId, view]);
 
   useEffect(() => {
     if (!selectedNoteId) return;
@@ -278,40 +292,89 @@ function App() {
   }, []);
 
   const handleCreateNote = useCallback(async () => {
-    const now = new Date();
-    const title = 'Untitled';
-    const filename = makeUniqueFilename(title);
-    const content = generateNoteContent(
-      {
-        title,
-        date: now.toISOString(),
-        tags: [],
-      },
-      ''
-    );
-
-    try {
-      const result = await window.electronAPI.createNote({ filename, content });
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create document');
-      }
-      setSearchQuery('');
-      await loadNotes();
-      handleSelectNote(filename.replace(/\.md$/i, ''));
-    } catch (err) {
-      console.error('Failed to create document:', err);
-    }
-  }, [handleSelectNote, loadNotes, makeUniqueFilename]);
+    setSelectedNoteId(null);
+    setSearchQuery('');
+    setDraftNote(createDraftNote());
+  }, []);
 
   const handleSaveNote = useCallback(
     async (noteData: SaveNoteData) => {
       const now = new Date();
+      const isDraft = Boolean(noteData.isDraft || !noteData.filename);
+      const nextTitle = noteData.title.trim() || 'Untitled';
+
+      if (isDraft) {
+        if (!noteData.interactive) {
+          setDraftNote((prev) => ({
+            ...(prev ?? createDraftNote()),
+            id: noteData.id || prev?.id || `draft-${Date.now()}`,
+            title: nextTitle,
+            content: noteData.content,
+            tags: noteData.tags,
+            date: noteData.date || prev?.date || now.toISOString(),
+            createdAt: prev?.createdAt || now,
+            modifiedAt: now,
+            isDraft: true,
+          }));
+          return;
+        }
+
+        const suggestedFilename = makeUniqueFilename(nextTitle);
+        const draftContent = generateNoteContent(
+          {
+            title: nextTitle,
+            date: noteData.date || now.toISOString(),
+            tags: [],
+          },
+          noteData.content
+        );
+
+        const saveAsResult = await window.electronAPI.saveNoteAs?.({
+          suggestedFilename,
+          content: draftContent,
+        });
+
+        if (!saveAsResult || saveAsResult.canceled) {
+          return;
+        }
+
+        if (!saveAsResult.success || !saveAsResult.filename || !saveAsResult.filepath) {
+          throw new Error(saveAsResult.error || 'Failed to save document');
+        }
+
+        const parsed = parseNote(draftContent, saveAsResult.filename);
+        const savedNote: Note = {
+          id: saveAsResult.filename.replace(/\.md$/i, ''),
+          filename: saveAsResult.filename,
+          filepath: saveAsResult.filepath,
+          content: draftContent,
+          title: parsed.title,
+          date: parsed.date,
+          tags: [],
+          contentBody: parsed.contentBody,
+          rawContent: parsed.rawContent,
+          type: parsed.type,
+          kanban: parsed.kanban,
+          modifiedAt: now,
+          createdAt: now,
+        };
+
+        if (saveAsResult.directory) {
+          setStoragePath(saveAsResult.directory);
+          saveStoragePath(saveAsResult.directory);
+        }
+
+        setNotes((prev) => [...prev.filter((note) => note.filepath !== savedNote.filepath), savedNote].sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
+        setDraftNote(null);
+        setSelectedNoteId(savedNote.id);
+        return;
+      }
+
       const previousFilename = noteData.filename?.trim();
       const forcedFilename = noteData.forceFilename?.trim();
       const filename = forcedFilename || previousFilename || generateFilename(noteData.title);
       const noteId = (filename || '').replace(/\.md$/i, '');
       const existingNote = notesRef.current.find((note) => note.id === noteData.id || note.filename === previousFilename);
-      const nextTitle = noteData.title.trim() || 'Untitled';
       const nextDate = noteData.date || existingNote?.date || now.toISOString();
       const fileContent = generateNoteContent(
         {
@@ -363,38 +426,32 @@ function App() {
 
       setSelectedNoteId(noteId);
     },
-    []
+    [makeUniqueFilename]
   );
 
-  const handleGetStarted = useCallback(async () => {
-    const result = await window.electronAPI.setStoragePath('');
-    if (!result.success) {
-      console.error('Failed to initialize default storage path:', result.error);
-      return;
+  const saveCurrentDocument = useCallback(async (interactive = true): Promise<boolean> => {
+    const current = currentNoteRef.current;
+    if (!current) return false;
+
+    try {
+      await handleSaveNote({
+        id: current.id,
+        filename: current.filename,
+        filepath: current.filepath,
+        title: current.title,
+        content: latestContentRef.current,
+        tags: current.tags,
+        date: current.date,
+        interactive,
+        isDraft: current.isDraft,
+      });
+      lastSavedContentRef.current = latestContentRef.current;
+      return true;
+    } catch (error) {
+      console.error('Failed to save current document:', error);
+      return false;
     }
-
-    const nextPath = result.path || '';
-    setStoragePath(nextPath);
-    saveStoragePath(nextPath);
-    markWelcomeCompleted();
-    setIsFirstLaunch(false);
-    setView('main');
-    await loadNotes();
-  }, [loadNotes]);
-
-  useEffect(() => {
-    if (view !== 'main') return;
-    if (isLoading) return;
-    if (notes.length > 0) {
-      emptyVaultBootstrapPathRef.current = null;
-      return;
-    }
-
-    const bootstrapKey = storagePath || '__default__';
-    if (emptyVaultBootstrapPathRef.current === bootstrapKey) return;
-    emptyVaultBootstrapPathRef.current = bootstrapKey;
-    void handleCreateNote();
-  }, [handleCreateNote, isLoading, notes.length, storagePath, view]);
+  }, [handleSaveNote]);
 
   const handleOpenFolder = useCallback(async () => {
     const selectedPath = await window.electronAPI.selectDirectory();
@@ -406,9 +463,8 @@ function App() {
     const nextPath = result.path || selectedPath;
     setStoragePath(nextPath);
     saveStoragePath(nextPath);
-    markWelcomeCompleted();
-    setIsFirstLaunch(false);
     setView('main');
+    setDraftNote(null);
     await loadNotes();
   }, [loadNotes]);
 
@@ -447,6 +503,10 @@ function App() {
         case 'new-note':
           setView('main');
           void handleCreateNote();
+          break;
+        case 'save-note':
+          setView('main');
+          setManualSaveKey((prev) => prev + 1);
           break;
         case 'open-folder':
           void handleOpenFolder();
@@ -508,18 +568,35 @@ function App() {
       .slice(0, 40);
   }, [notes, quickOpenQuery, recentNotes]);
   const currentNote = useMemo<EditorNote | null>(() => {
-    if (!selectedNoteId) return null;
-    const selected = notes.find((note) => note.id === selectedNoteId);
-    return selected ? toEditorNote(selected) : null;
-  }, [notes, selectedNoteId]);
+    if (selectedNoteId) {
+      const selected = notes.find((note) => note.id === selectedNoteId);
+      if (selected) return toEditorNote(selected);
+    }
+    if (draftNote) return draftNote;
+    return null;
+  }, [draftNote, notes, selectedNoteId]);
 
-  if (view === 'welcome' || isFirstLaunch) {
-    return (
-      <div className="app app-welcome">
-        <Welcome onGetStarted={handleGetStarted} onOpenFolder={handleOpenFolder} />
-      </div>
-    );
-  }
+  useEffect(() => {
+    const current = currentNote;
+    currentNoteRef.current = current;
+    latestContentRef.current = current?.content || '';
+    lastSavedContentRef.current = current?.content || '';
+  }, [currentNote?.id]);
+
+  useEffect(() => {
+    const current = currentNote;
+    window.__notelySaveCurrent = saveCurrentDocument;
+    window.__notelyUnsavedState = {
+      dirty: Boolean(current) && latestContentRef.current !== lastSavedContentRef.current,
+      title: current?.title || 'Untitled',
+      isDraft: Boolean(current?.isDraft || !current?.filename),
+    };
+
+    return () => {
+      delete window.__notelySaveCurrent;
+      delete window.__notelyUnsavedState;
+    };
+  }, [currentNote, saveCurrentDocument]);
 
   if (view === 'settings') {
     return (
@@ -569,8 +646,17 @@ function App() {
       <Editor
         note={currentNote}
         onSave={handleSaveNote}
+        onContentChange={(nextContent) => {
+          latestContentRef.current = nextContent;
+          window.__notelyUnsavedState = {
+            dirty: Boolean(currentNote) && nextContent !== lastSavedContentRef.current,
+            title: currentNote?.title || 'Untitled',
+            isDraft: Boolean(currentNote?.isDraft || !currentNote?.filename),
+          };
+        }}
         isLoading={isLoading && !currentNote}
         outlineToggleKey={outlineToggleKey}
+        saveRequestKey={manualSaveKey}
       />
       <QuickOpen
         isOpen={isQuickOpenOpen}

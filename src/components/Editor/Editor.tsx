@@ -6,8 +6,10 @@ import './Editor.css';
 interface EditorProps {
   note: EditorNote | null;
   onSave: (note: SaveNoteData) => Promise<void>;
+  onContentChange?: (content: string) => void;
   isLoading: boolean;
   outlineToggleKey?: number;
+  saveRequestKey?: number;
 }
 
 interface OutlineItem {
@@ -64,7 +66,7 @@ const fallbackTitleFromFilename = (filename?: string): string => {
   return filename.replace(/\.md$/i, '').trim() || 'Untitled';
 };
 
-function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) {
+function Editor({ note, onSave, onContentChange, isLoading, outlineToggleKey = 0, saveRequestKey = 0 }: EditorProps) {
   const [content, setContent] = useState('');
   const [isOutlineOpen, setIsOutlineOpen] = useState(() => readBooleanSetting(OUTLINE_OPEN_KEY, false));
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -83,7 +85,8 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
 
   useEffect(() => {
     draftContentRef.current = content;
-  }, [content]);
+    onContentChange?.(content);
+  }, [content, onContentChange]);
 
   useEffect(() => {
     writeBooleanSetting(OUTLINE_OPEN_KEY, isOutlineOpen);
@@ -122,16 +125,19 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
   }, []);
 
   const flushSave = useCallback(
-    async (noteSnapshot: EditorNote | null | undefined) => {
+    async (noteSnapshot: EditorNote | null | undefined, interactive = false) => {
       if (!noteSnapshot) return;
       clearPendingSave();
       await onSaveRef.current({
         id: noteSnapshot.id,
         filename: noteSnapshot.filename,
+        filepath: noteSnapshot.filepath,
         title: documentTitleRef.current,
         content: draftContentRef.current,
         tags: [],
         date: noteSnapshot.date,
+        interactive,
+        isDraft: noteSnapshot.isDraft,
       });
     },
     [clearPendingSave]
@@ -144,7 +150,7 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
 
     return () => {
       if (activeNote) {
-        void flushSave(activeNote);
+        void flushSave(activeNote, false);
       }
     };
   }, [flushSave, note?.id]);
@@ -159,7 +165,7 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
     const activeNote = note;
     clearPendingSave();
     saveTimerRef.current = setTimeout(() => {
-      void flushSave(activeNote);
+      void flushSave(activeNote, false);
     }, SAVE_DEBOUNCE_MS);
 
     return clearPendingSave;
@@ -179,6 +185,11 @@ function Editor({ note, onSave, isLoading, outlineToggleKey = 0 }: EditorProps) 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [lightboxSrc]);
+
+  useEffect(() => {
+    if (saveRequestKey === 0) return;
+    void flushSave(note, true);
+  }, [flushSave, note, saveRequestKey]);
 
   const handleOpenImagePreview = useCallback((src: string) => {
     setLightboxSrc(src);

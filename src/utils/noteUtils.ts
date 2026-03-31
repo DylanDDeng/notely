@@ -52,12 +52,19 @@ export interface ParsedNote {
   kanban?: KanbanFrontmatter;
 }
 
+export function normalizeSavedMarkdown(markdown: string): string {
+  return String(markdown || '')
+    .replace(/^\s*<br\s*\/?>\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 /**
- * 生成笔记内容（frontmatter + body）
+ * 生成笔记内容
+ * 当前编辑器走 Typora 风格单文档模型，保存时直接写回用户编辑的 Markdown，
+ * 不再自动注入 frontmatter。
  */
-export function generateNoteContent(frontmatter: NoteFrontmatter, body: string): string {
-  const fm = matter.stringify(body, frontmatter);
-  return fm;
+export function generateNoteContent(_frontmatter: NoteFrontmatter, body: string): string {
+  return normalizeSavedMarkdown(body);
 }
 
 /**

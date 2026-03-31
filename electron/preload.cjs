@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllNotes: () => ipcRenderer.invoke('notes:getAll'),
   readNote: (filename) => ipcRenderer.invoke('notes:read', filename),
   saveNote: (data) => ipcRenderer.invoke('notes:save', data),
+  saveNoteAs: (data) => ipcRenderer.invoke('notes:saveAs', data),
   createNote: (data) => ipcRenderer.invoke('notes:create', data),
   deleteNote: (filename) => ipcRenderer.invoke('notes:delete', filename),
   listNoteHistory: (data) => ipcRenderer.invoke('notes:history:list', data),

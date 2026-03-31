@@ -128,24 +128,29 @@ export interface WriteClipboardTextResult {
 
 export interface EditorNote {
   id: string;
-  filename: string;
+  filename?: string;
+  filepath?: string;
   title: string;
   content: string;
   tags: string[];
   date?: string;
   createdAt: Date;
   modifiedAt: Date;
+  isDraft?: boolean;
 }
 
 export interface SaveNoteData {
   id?: string;
   filename?: string;
+  filepath?: string;
   forceFilename?: string;
   title: string;
   content: string;
   tags: string[];
   date?: string;
   preserveModifiedAt?: boolean;
+  interactive?: boolean;
+  isDraft?: boolean;
 }
 
 export interface SettingsMenuItem {
@@ -161,6 +166,7 @@ export interface ElectronAPI {
   getAllNotes: () => Promise<RawNote[]>;
   readNote: (filename: string) => Promise<{ success: boolean; content?: string; error?: string }>;
   saveNote: (data: { filename: string; content: string; preserveModifiedAt?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  saveNoteAs?: (data: { suggestedFilename: string; content: string }) => Promise<{ success: boolean; canceled?: boolean; filepath?: string; filename?: string; directory?: string; error?: string }>;
   createNote: (data: { filename: string; content: string }) => Promise<{ success: boolean; error?: string }>;
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
 
@@ -183,5 +189,11 @@ declare global {
   interface Window {
     electronAPI: ElectronAPI;
     queryLocalFonts?: () => Promise<Array<{ family?: string }>>;
+    __notelyUnsavedState?: {
+      dirty: boolean;
+      title: string;
+      isDraft: boolean;
+    };
+    __notelySaveCurrent?: (interactive?: boolean) => Promise<boolean>;
   }
 }

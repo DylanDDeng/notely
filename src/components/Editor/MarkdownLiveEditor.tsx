@@ -7,7 +7,6 @@ import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { trailing } from '@milkdown/kit/plugin/trailing';
 import { replaceAll } from '@milkdown/kit/utils';
-import remarkBreaks from 'remark-breaks';
 import { htmlView } from './htmlView';
 import { customCodeBlockView } from './codeBlockView';
 import '@milkdown/kit/prose/view/style/prosemirror.css';
@@ -59,7 +58,7 @@ function MarkdownLiveEditor({
         .config((ctx) => {
           ctx.set(rootCtx, root);
           ctx.set(defaultValueCtx, initialValue);
-          ctx.set(remarkPluginsCtx, [{ plugin: remarkBreaks, options: {} }]);
+          ctx.set(remarkPluginsCtx, []);
           ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
             currentMarkdownRef.current = markdown;
             latestOnChangeRef.current(markdown);
