@@ -252,6 +252,7 @@ async function createWindow() {
   let allowClose = false;
   mainWindow.on('close', async (event) => {
     if (allowClose) return;
+    event.preventDefault();
 
     try {
       const rawState = await mainWindow.webContents.executeJavaScript(
@@ -259,9 +260,11 @@ async function createWindow() {
         true
       );
       const state = rawState ? JSON.parse(rawState) : null;
-      if (!state?.dirty) return;
-
-      event.preventDefault();
+      if (!state?.dirty) {
+        allowClose = true;
+        mainWindow.close();
+        return;
+      }
 
       const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'question',
@@ -284,6 +287,13 @@ async function createWindow() {
           true
         );
         if (!saved) return;
+      }
+
+      if (response === 1) {
+        await mainWindow.webContents.executeJavaScript(
+          'try { localStorage.removeItem("notes:unsavedDraft"); } catch {}',
+          true
+        );
       }
 
       allowClose = true;

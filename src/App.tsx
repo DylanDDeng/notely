@@ -14,6 +14,7 @@ const FONT_FAMILY_KEY = 'notes:fontFamily';
 const SIDEBAR_OPEN_KEY = 'notes:sidebarOpen';
 const THEME_KEY = 'notes:theme';
 const RECENT_NOTE_IDS_KEY = 'notes:recentNoteIds';
+const UNSAVED_DRAFT_KEY = 'notes:unsavedDraft';
 const DEFAULT_FONT_STACK =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
@@ -90,6 +91,41 @@ const saveRecentNoteIds = (noteIds: string[]) => {
   }
 };
 
+const readUnsavedDraft = (): EditorNote | null => {
+  try {
+    const raw = localStorage.getItem(UNSAVED_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<EditorNote> | null;
+    if (!parsed || typeof parsed.content !== 'string') return null;
+    const createdAt = parsed.createdAt ? new Date(parsed.createdAt) : new Date();
+    const modifiedAt = parsed.modifiedAt ? new Date(parsed.modifiedAt) : createdAt;
+    return {
+      id: parsed.id || `draft-${modifiedAt.getTime()}`,
+      title: typeof parsed.title === 'string' ? parsed.title : 'Untitled',
+      content: parsed.content,
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+      date: typeof parsed.date === 'string' ? parsed.date : modifiedAt.toISOString(),
+      createdAt,
+      modifiedAt,
+      isDraft: true,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeUnsavedDraft = (draft: EditorNote | null) => {
+  try {
+    if (!draft || !draft.isDraft) {
+      localStorage.removeItem(UNSAVED_DRAFT_KEY);
+      return;
+    }
+    localStorage.setItem(UNSAVED_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore
+  }
+};
+
 const applyTheme = (theme: Theme) => {
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const effectiveTheme = theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
@@ -137,7 +173,7 @@ function App() {
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
   const [manualSaveKey, setManualSaveKey] = useState(0);
-  const [draftNote, setDraftNote] = useState<EditorNote | null>(() => createDraftNote());
+  const [draftNote, setDraftNote] = useState<EditorNote | null>(() => readUnsavedDraft() ?? createDraftNote());
   const notesRef = useRef<Note[]>([]);
   const storagePathRef = useRef(storagePath);
   const currentNoteRef = useRef<EditorNote | null>(draftNote);
@@ -364,6 +400,7 @@ function App() {
           saveStoragePath(saveAsResult.directory);
         }
 
+        writeUnsavedDraft(null);
         setNotes((prev) => [...prev.filter((note) => note.filepath !== savedNote.filepath), savedNote].sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
         setDraftNote(null);
         setSelectedNoteId(savedNote.id);
@@ -446,6 +483,7 @@ function App() {
         isDraft: current.isDraft,
       });
       lastSavedContentRef.current = latestContentRef.current;
+      if (current.isDraft) writeUnsavedDraft(null);
       return true;
     } catch (error) {
       console.error('Failed to save current document:', error);
@@ -648,6 +686,14 @@ function App() {
         onSave={handleSaveNote}
         onContentChange={(nextContent) => {
           latestContentRef.current = nextContent;
+          if (currentNote?.isDraft) {
+            writeUnsavedDraft({
+              ...(currentNote ?? createDraftNote()),
+              content: nextContent,
+              modifiedAt: new Date(),
+              isDraft: true,
+            });
+          }
           window.__notelyUnsavedState = {
             dirty: Boolean(currentNote) && nextContent !== lastSavedContentRef.current,
             title: currentNote?.title || 'Untitled',
