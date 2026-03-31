@@ -369,11 +369,11 @@ function MarkdownLiveEditor({
       if (filePath) {
         editor.action((ctx) => {
           const commands = ctx.get(commandsCtx);
-          console.log('[notely][paste] inserting image node', { src: filePath, mode: 'path' });
+            console.log('[notely][paste] inserting image node', { src: filePath, mode: 'path' });
             commands.call(insertImageCommand.key, {
               src: filePath,
-              alt: imageFile?.name || '',
-              title: imageFile?.name || '',
+              alt: '',
+              title: '',
             });
         });
         return;
@@ -398,8 +398,8 @@ function MarkdownLiveEditor({
           });
           commands.call(insertImageCommand.key, {
             src,
-            alt: imageFile.name || '',
-            title: imageFile.name || '',
+            alt: '',
+            title: '',
           });
         });
       })().catch((error) => {
