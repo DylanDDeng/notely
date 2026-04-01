@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import remarkHtml from 'remark-html';
-import Sidebar from './components/Sidebar/Sidebar';
 import Editor from './components/Editor/Editor';
 import Settings from './components/Settings/Settings';
 import QuickOpen from './components/QuickOpen/QuickOpen';
@@ -14,7 +13,6 @@ type Theme = 'light' | 'dark' | 'system';
 
 const STORAGE_PATH_KEY = 'notes:storagePath';
 const FONT_FAMILY_KEY = 'notes:fontFamily';
-const SIDEBAR_OPEN_KEY = 'notes:sidebarOpen';
 const THEME_KEY = 'notes:theme';
 const RECENT_NOTE_IDS_KEY = 'notes:recentNoteIds';
 const UNSAVED_DRAFT_KEY = 'notes:unsavedDraft';
@@ -48,22 +46,6 @@ const saveFontFamily = (fontFamily: string) => {
     return;
   }
   localStorage.setItem(FONT_FAMILY_KEY, trimmed);
-};
-
-const getSavedSidebarOpen = (): boolean => {
-  try {
-    return localStorage.getItem(SIDEBAR_OPEN_KEY) === 'true';
-  } catch {
-    return false;
-  }
-};
-
-const saveSidebarOpen = (open: boolean) => {
-  try {
-    localStorage.setItem(SIDEBAR_OPEN_KEY, String(open));
-  } catch {
-    // ignore
-  }
 };
 
 const getSavedTheme = (): Theme => {
@@ -204,11 +186,9 @@ function App() {
   const [view, setView] = useState<ViewType>('main');
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [storagePath, setStoragePath] = useState<string>('');
   const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => getSavedSidebarOpen());
   const [theme, setTheme] = useState<Theme>(() => getSavedTheme());
   const [recentNoteIds, setRecentNoteIds] = useState<string[]>(() => getSavedRecentNoteIds());
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
@@ -236,10 +216,6 @@ function App() {
   useEffect(() => {
     storagePathRef.current = storagePath;
   }, [storagePath]);
-
-  useEffect(() => {
-    saveSidebarOpen(isSidebarOpen);
-  }, [isSidebarOpen]);
 
   const makeUniqueFilename = useCallback(
     (title: string, excludeFilename?: string) => {
@@ -344,7 +320,6 @@ function App() {
   const handleSelectNote = useCallback((noteId: string) => {
     setDraftNote(null);
     setSelectedNoteId(noteId);
-    setIsSidebarOpen(false);
   }, []);
 
   useEffect(() => {
@@ -378,7 +353,6 @@ function App() {
 
   const handleCreateNote = useCallback(async () => {
     setSelectedNoteId(null);
-    setSearchQuery('');
     setDraftNote(createDraftNote());
   }, []);
 
@@ -686,7 +660,6 @@ function App() {
       setStoragePath(nextPath);
       saveStoragePath(nextPath);
       setSelectedNoteId(null);
-      setSearchQuery('');
       await loadNotes();
     },
     [loadNotes]
@@ -728,10 +701,6 @@ function App() {
         case 'open-settings':
           setView('settings');
           break;
-        case 'toggle-sidebar':
-          setView('main');
-          setIsSidebarOpen((prev) => !prev);
-          break;
         case 'toggle-outline':
           setView('main');
           setOutlineToggleKey((prev) => prev + 1);
@@ -744,21 +713,6 @@ function App() {
     return unsubscribe;
   }, [exportCurrentDocument, handleCreateNote, handleOpenFolder, saveCurrentDocument, saveCurrentDocumentAs]);
 
-  const normalizedSearch = searchQuery.trim().toLowerCase();
-  const visibleNotes = useMemo(() => {
-    const filtered = notes.filter((note) => {
-      if (!normalizedSearch) return true;
-      return (
-        note.title.toLowerCase().includes(normalizedSearch) ||
-        note.contentBody.toLowerCase().includes(normalizedSearch) ||
-        note.filename.toLowerCase().includes(normalizedSearch)
-      );
-    });
-
-    return filtered.sort((a, b) => {
-      return b.modifiedAt.getTime() - a.modifiedAt.getTime();
-    });
-  }, [normalizedSearch, notes]);
   const recentNotes = useMemo(
     () =>
       recentNoteIds
@@ -831,33 +785,6 @@ function App() {
 
   return (
     <div className="app app-main">
-      {isSidebarOpen && (
-        <div className="app-sidebar-layer">
-          <button
-            type="button"
-            className="app-sidebar-backdrop"
-            aria-label="Close file browser"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-          <Sidebar
-            documentCount={notes.length}
-            notes={visibleNotes}
-            recentNotes={recentNotes}
-            selectedNoteId={selectedNoteId}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onOpenNote={handleSelectNote}
-            onOpenQuickOpen={() => {
-              setQuickOpenQuery('');
-              setIsQuickOpenOpen(true);
-            }}
-            onCreateNote={handleCreateNote}
-            onOpenFolder={handleOpenFolder}
-            storagePath={storagePath}
-            onClose={() => setIsSidebarOpen(false)}
-          />
-        </div>
-      )}
       <Editor
         note={currentNote}
         onSave={handleSaveNote}

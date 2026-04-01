@@ -35,24 +35,6 @@
   min-height: 0;
 }
 
-.app-sidebar-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: flex-start;
-  padding: 14px 0 18px 14px;
-}
-
-.app-sidebar-backdrop {
-  position: absolute;
-  inset: 0;
-  border: none;
-  background: rgba(239, 232, 220, 0.42);
-  backdrop-filter: blur(4px);
-  cursor: pointer;
-}
-
 button,
 input,
 textarea,
