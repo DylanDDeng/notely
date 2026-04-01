@@ -198,6 +198,13 @@
   font-size: 15px;
 }
 
+.editor-milkdown-root .ProseMirror .outline-heading-highlight {
+  background: var(--editor-selection);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background 0.16s ease;
+}
+
 .editor-milkdown-root .ProseMirror p {
   margin: 0.5em 0;
   line-height: 1.75;

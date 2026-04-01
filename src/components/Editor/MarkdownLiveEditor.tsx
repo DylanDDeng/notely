@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Editor, rootCtx, defaultValueCtx, remarkPluginsCtx, editorViewCtx, commandsCtx } from '@milkdown/kit/core';
 import type { EditorView } from '@milkdown/kit/prose/view';
+import { Decoration, DecorationSet } from '@milkdown/kit/prose/view';
 import { commonmark, insertImageCommand } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
@@ -9,7 +10,8 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { trailing } from '@milkdown/kit/plugin/trailing';
 import { replaceAll } from '@milkdown/kit/utils';
 import { DOMSerializer } from '@milkdown/kit/prose/model';
-import { TextSelection } from '@milkdown/kit/prose/state';
+import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
+import { $prose } from '@milkdown/utils';
 import { htmlView } from './htmlView';
 import { customImageView } from './imageView';
 import { customCodeBlockView } from './codeBlockView';
@@ -33,6 +35,47 @@ interface EditorOutlineItem {
   text: string;
   pos: number;
 }
+
+const outlineHeadingFlashKey = new PluginKey<DecorationSet>('NOTELY_OUTLINE_HEADING_FLASH');
+const OUTLINE_FLASH_META = 'notely-outline-heading-flash';
+
+const outlineHeadingFlashPlugin = $prose(() => {
+  return new Plugin<DecorationSet>({
+    key: outlineHeadingFlashKey,
+    state: {
+      init: () => DecorationSet.empty,
+      apply: (tr, value) => {
+        const meta = tr.getMeta(OUTLINE_FLASH_META) as
+          | { type: 'flash'; pos: number }
+          | { type: 'clear' }
+          | undefined;
+
+        if (meta?.type === 'clear') {
+          return DecorationSet.empty;
+        }
+
+        if (meta?.type === 'flash') {
+          const node = tr.doc.nodeAt(meta.pos);
+          if (!node || node.type.name !== 'heading') {
+            return DecorationSet.empty;
+          }
+
+          return DecorationSet.create(tr.doc, [
+            Decoration.node(meta.pos, meta.pos + node.nodeSize, {
+              class: 'outline-heading-highlight',
+            }),
+          ]);
+        }
+
+        if (!tr.docChanged) return value;
+        return value.map(tr.mapping, tr.doc);
+      },
+    },
+    props: {
+      decorations: (state) => outlineHeadingFlashKey.getState(state),
+    },
+  });
+});
 
 const collectOutlineItems = (view: EditorView): EditorOutlineItem[] => {
   const items: EditorOutlineItem[] = [];
@@ -223,6 +266,7 @@ function MarkdownLiveEditor({
   const latestOnOutlineChangeRef = useRef(onOutlineChange);
   const outlineItemsRef = useRef<EditorOutlineItem[]>([]);
   const copyResetTimerRef = useRef<number | null>(null);
+  const headingHighlightTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     latestOnOutlineChangeRef.current = onOutlineChange;
@@ -260,6 +304,7 @@ function MarkdownLiveEditor({
         .use(listener)
         .use(clipboard)
         .use(trailing)
+        .use(outlineHeadingFlashPlugin)
         .use(customCodeBlockView)
         .use(customImageView)
         .use(htmlView)
@@ -291,7 +336,30 @@ function MarkdownLiveEditor({
           const resolvedPos = Math.min(target.pos + 1, maxPos);
           const selection = TextSelection.near(view.state.doc.resolve(resolvedPos));
           view.focus();
-          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+          view.dispatch(
+            view.state.tr
+              .setSelection(selection)
+              .scrollIntoView()
+              .setMeta(OUTLINE_FLASH_META, { type: 'flash', pos: target.pos })
+          );
+
+          if (headingHighlightTimerRef.current) {
+            window.clearTimeout(headingHighlightTimerRef.current);
+            headingHighlightTimerRef.current = null;
+          }
+
+          headingHighlightTimerRef.current = window.setTimeout(() => {
+            const currentEditor = editorRef.current;
+            if (!currentEditor) return;
+
+            currentEditor.action((innerCtx) => {
+              const innerView = innerCtx.get(editorViewCtx);
+              innerView.dispatch(
+                innerView.state.tr.setMeta(OUTLINE_FLASH_META, { type: 'clear' })
+              );
+            });
+            headingHighlightTimerRef.current = null;
+          }, 1200);
         });
       });
       syncRenderableMediaSources(root);
@@ -489,6 +557,10 @@ function MarkdownLiveEditor({
       if (copyResetTimerRef.current) {
         window.clearTimeout(copyResetTimerRef.current);
         copyResetTimerRef.current = null;
+      }
+      if (headingHighlightTimerRef.current) {
+        window.clearTimeout(headingHighlightTimerRef.current);
+        headingHighlightTimerRef.current = null;
       }
       root.innerHTML = '';
     };
