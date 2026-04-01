@@ -87,6 +87,19 @@ function Editor({
   }, [content]);
   const wordCountLabel = wordCount === 1 ? '1 Word' : `${wordCount} Words`;
 
+  const outlineRailActiveIndex = useMemo(() => {
+    const railLineCount = 4;
+    if (outlineItems.length <= 1) return 0;
+
+    const activeIndex = outlineItems.findIndex((item) => item.id === activeOutlineItemId);
+    if (activeIndex <= 0) return 0;
+
+    return Math.min(
+      railLineCount - 1,
+      Math.round((activeIndex / (outlineItems.length - 1)) * (railLineCount - 1))
+    );
+  }, [activeOutlineItemId, outlineItems]);
+
   const clearPendingSave = useCallback(() => {
     if (!saveTimerRef.current) return;
     clearTimeout(saveTimerRef.current);
@@ -322,10 +335,12 @@ function Editor({
                     aria-label="Show document outline"
                     title="Show document outline"
                   >
-                    <span className="editor-outline-rail-line active" />
-                    <span className="editor-outline-rail-line" />
-                    <span className="editor-outline-rail-line" />
-                    <span className="editor-outline-rail-line" />
+                    {Array.from({ length: 4 }, (_, index) => (
+                      <span
+                        key={index}
+                        className={`editor-outline-rail-line${index === outlineRailActiveIndex ? ' active' : ''}`}
+                      />
+                    ))}
                   </button>
                   <div className="editor-outline-card">
                     <div className="editor-outline-card-header">Outline</div>
