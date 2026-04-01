@@ -43,7 +43,6 @@ function Editor({
   const [isOutlineHovered, setIsOutlineHovered] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-  const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outlineHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outlineItemRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -52,7 +51,6 @@ function Editor({
   const draftContentRef = useRef('');
   const documentTitleRef = useRef('');
   const onSaveRef = useRef(onSave);
-  const editorRootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -191,12 +189,12 @@ function Editor({
     void window.electronAPI.openExternal(url);
   }, []);
 
-  const handleEditorDomReady = useCallback((root: HTMLDivElement | null) => {
-    editorRootRef.current = root;
-  }, []);
-
   const handleRegisterOutlineNavigator = useCallback((navigator: ((itemId: string) => void) | null) => {
     outlineNavigatorRef.current = navigator;
+  }, []);
+
+  const handleActiveOutlineItemChange = useCallback((itemId: string | null) => {
+    setActiveOutlineItemId((prev) => (prev === itemId ? prev : itemId));
   }, []);
 
   useEffect(() => {
@@ -231,61 +229,10 @@ function Editor({
   }, [activeOutlineItemId]);
 
   useEffect(() => {
-    if (!isOutlineOpen) return;
-
-    const root = editorRootRef.current;
-    const scrollContainer = editorScrollRef.current;
-    if (!root || !scrollContainer) return;
-
-    let frame = 0;
-    const updateActiveHeading = () => {
-      frame = 0;
-      const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-      if (headings.length === 0 || outlineItems.length === 0) {
-        setActiveOutlineItemId(null);
-        return;
-      }
-
-      const scrollerTop = scrollContainer.getBoundingClientRect().top;
-      const threshold = scrollerTop + 120;
-      let activeIndex = 0;
-
-      headings.forEach((heading, index) => {
-        if (!(heading instanceof HTMLElement)) return;
-        if (heading.getBoundingClientRect().top <= threshold) {
-          activeIndex = index;
-        }
-      });
-
-      const activeItem = outlineItems[Math.min(activeIndex, outlineItems.length - 1)] || null;
-      setActiveOutlineItemId((prev) => (prev === activeItem?.id ? prev : activeItem?.id || null));
-    };
-
-    const scheduleUpdate = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(updateActiveHeading);
-    };
-
-    scheduleUpdate();
-    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true });
-    window.addEventListener('resize', scheduleUpdate);
-
-    const observer = new MutationObserver(scheduleUpdate);
-    observer.observe(root, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    });
-
-    return () => {
-      scrollContainer.removeEventListener('scroll', scheduleUpdate);
-      window.removeEventListener('resize', scheduleUpdate);
-      observer.disconnect();
-      if (frame) {
-        window.cancelAnimationFrame(frame);
-      }
-    };
-  }, [isOutlineOpen, outlineItems]);
+    if (!activeOutlineItemId) return;
+    if (outlineItems.some((item) => item.id === activeOutlineItemId)) return;
+    setActiveOutlineItemId(outlineItems[0]?.id || null);
+  }, [activeOutlineItemId, outlineItems]);
 
   if (isLoading) {
     return (
@@ -320,7 +267,7 @@ function Editor({
       </header>
 
       <div className="editor-content-shell">
-        <div className="editor-content" ref={editorScrollRef}>
+        <div className="editor-content">
           <div className="editor-content-inner">
             {isOutlineOpen && (
               <div className="editor-outline-floating">
@@ -378,8 +325,8 @@ function Editor({
                 onChange={setContent}
                 onOpenImagePreview={handleOpenImagePreview}
                 onOpenExternal={handleOpenExternal}
-                onEditorDomReady={handleEditorDomReady}
                 onOutlineChange={setOutlineItems}
+                onActiveOutlineItemChange={handleActiveOutlineItemChange}
                 onRegisterOutlineNavigator={handleRegisterOutlineNavigator}
                 onRegisterExportHtmlGetter={onRegisterExportHtmlGetter}
                 documentKey={note.id}
