@@ -638,7 +638,7 @@
   flex-direction: column;
   border: 1px solid rgba(120, 102, 76, 0.12);
   border-radius: 18px;
-  background: rgba(248, 243, 235, 0.94);
+  background: #f0eee6;
   backdrop-filter: blur(12px);
   box-shadow: 0 18px 48px rgba(48, 38, 26, 0.12);
   opacity: 0;
