@@ -17,50 +17,10 @@ interface OutlineItem {
   id: string;
   level: number;
   text: string;
-  offset: number;
+  pos: number;
 }
 
 const SAVE_DEBOUNCE_MS = 800;
-const OUTLINE_OPEN_KEY = 'notes:editor:outlineOpen';
-
-const readBooleanSetting = (key: string, fallback = false): boolean => {
-  try {
-    const saved = localStorage.getItem(key);
-    if (saved === null) return fallback;
-    return saved === 'true';
-  } catch {
-    return fallback;
-  }
-};
-
-const writeBooleanSetting = (key: string, value: boolean) => {
-  try {
-    localStorage.setItem(key, String(value));
-  } catch {
-    // ignore
-  }
-};
-
-const parseOutline = (markdown: string): OutlineItem[] => {
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
-  const items: OutlineItem[] = [];
-  let offset = 0;
-
-  lines.forEach((line, index) => {
-    const match = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*$/);
-    if (match) {
-      items.push({
-        id: `${index}-${offset}`,
-        level: match[1].length,
-        text: match[2].trim(),
-        offset,
-      });
-    }
-    offset += line.length + 1;
-  });
-
-  return items;
-};
 
 const fallbackTitleFromFilename = (filename?: string): string => {
   if (!filename) return 'Untitled';
@@ -77,11 +37,17 @@ function Editor({
   saveRequestKey = 0,
 }: EditorProps) {
   const [content, setContent] = useState('');
-  const [isOutlineOpen, setIsOutlineOpen] = useState(() => readBooleanSetting(OUTLINE_OPEN_KEY, false));
+  const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
+  const [isOutlineOpen, setIsOutlineOpen] = useState(true);
+  const [activeOutlineItemId, setActiveOutlineItemId] = useState<string | null>(null);
+  const [isOutlineHovered, setIsOutlineHovered] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const editorScrollRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outlineHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const outlineItemRefs = useRef(new Map<string, HTMLButtonElement>());
+  const outlineNavigatorRef = useRef<((itemId: string) => void) | null>(null);
   const skipNextAutoSaveRef = useRef(true);
   const draftContentRef = useRef('');
   const documentTitleRef = useRef('');
@@ -98,15 +64,9 @@ function Editor({
   }, [content, onContentChange]);
 
   useEffect(() => {
-    writeBooleanSetting(OUTLINE_OPEN_KEY, isOutlineOpen);
-  }, [isOutlineOpen]);
-
-  useEffect(() => {
     if (outlineToggleKey === 0) return;
     setIsOutlineOpen((prev) => !prev);
   }, [outlineToggleKey]);
-
-  const outlineItems = useMemo(() => parseOutline(content), [content]);
 
   const documentTitle = useMemo(() => {
     const firstHeading = outlineItems[0]?.text?.trim();
@@ -131,6 +91,12 @@ function Editor({
     if (!saveTimerRef.current) return;
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = null;
+  }, []);
+
+  const clearOutlineHoverTimer = useCallback(() => {
+    if (!outlineHoverTimerRef.current) return;
+    clearTimeout(outlineHoverTimerRef.current);
+    outlineHoverTimerRef.current = null;
   }, []);
 
   const flushSave = useCallback(
@@ -185,6 +151,12 @@ function Editor({
   }, [clearPendingSave]);
 
   useEffect(() => {
+    return () => {
+      clearOutlineHoverTimer();
+    };
+  }, [clearOutlineHoverTimer]);
+
+  useEffect(() => {
     if (!lightboxSrc) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setLightboxSrc(null);
@@ -210,6 +182,10 @@ function Editor({
     editorRootRef.current = root;
   }, []);
 
+  const handleRegisterOutlineNavigator = useCallback((navigator: ((itemId: string) => void) | null) => {
+    outlineNavigatorRef.current = navigator;
+  }, []);
+
   useEffect(() => {
     return () => {
       onRegisterExportHtmlGetter?.(null);
@@ -217,18 +193,86 @@ function Editor({
   }, [onRegisterExportHtmlGetter]);
 
   const jumpToOutlineItem = useCallback((item: OutlineItem) => {
-    requestAnimationFrame(() => {
-      const root = editorRootRef.current;
-      if (!root) return;
-
-      const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-      const match = headings.find((heading) => heading.textContent?.trim() === item.text.trim());
-      if (match instanceof HTMLElement) {
-        match.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        match.click();
-      }
-    });
+    setActiveOutlineItemId(item.id);
+    outlineNavigatorRef.current?.(item.id);
   }, []);
+
+  const handleOutlineMouseEnter = useCallback(() => {
+    clearOutlineHoverTimer();
+    setIsOutlineHovered(true);
+  }, [clearOutlineHoverTimer]);
+
+  const handleOutlineMouseLeave = useCallback(() => {
+    clearOutlineHoverTimer();
+    outlineHoverTimerRef.current = setTimeout(() => {
+      setIsOutlineHovered(false);
+      outlineHoverTimerRef.current = null;
+    }, 140);
+  }, [clearOutlineHoverTimer]);
+
+  useEffect(() => {
+    if (!activeOutlineItemId) return;
+    const target = outlineItemRefs.current.get(activeOutlineItemId);
+    if (!target) return;
+    target.scrollIntoView({ block: 'nearest' });
+  }, [activeOutlineItemId]);
+
+  useEffect(() => {
+    if (!isOutlineOpen) return;
+
+    const root = editorRootRef.current;
+    const scrollContainer = editorScrollRef.current;
+    if (!root || !scrollContainer) return;
+
+    let frame = 0;
+    const updateActiveHeading = () => {
+      frame = 0;
+      const headings = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+      if (headings.length === 0 || outlineItems.length === 0) {
+        setActiveOutlineItemId(null);
+        return;
+      }
+
+      const scrollerTop = scrollContainer.getBoundingClientRect().top;
+      const threshold = scrollerTop + 120;
+      let activeIndex = 0;
+
+      headings.forEach((heading, index) => {
+        if (!(heading instanceof HTMLElement)) return;
+        if (heading.getBoundingClientRect().top <= threshold) {
+          activeIndex = index;
+        }
+      });
+
+      const activeItem = outlineItems[Math.min(activeIndex, outlineItems.length - 1)] || null;
+      setActiveOutlineItemId((prev) => (prev === activeItem?.id ? prev : activeItem?.id || null));
+    };
+
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateActiveHeading);
+    };
+
+    scheduleUpdate();
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+
+    const observer = new MutationObserver(scheduleUpdate);
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      observer.disconnect();
+      if (frame) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [isOutlineOpen, outlineItems]);
 
   if (isLoading) {
     return (
@@ -265,6 +309,54 @@ function Editor({
       <div className="editor-content-shell">
         <div className="editor-content" ref={editorScrollRef}>
           <div className="editor-content-inner">
+            {isOutlineOpen && (
+              <div className="editor-outline-floating">
+                <div
+                  className={`editor-outline-dock${isOutlineHovered ? ' expanded' : ''}`}
+                  onMouseEnter={handleOutlineMouseEnter}
+                  onMouseLeave={handleOutlineMouseLeave}
+                >
+                  <button
+                    type="button"
+                    className="editor-outline-rail"
+                    aria-label="Show document outline"
+                    title="Show document outline"
+                  >
+                    <span className="editor-outline-rail-line active" />
+                    <span className="editor-outline-rail-line" />
+                    <span className="editor-outline-rail-line" />
+                    <span className="editor-outline-rail-line" />
+                  </button>
+                  <div className="editor-outline-card">
+                    <div className="editor-outline-card-header">Outline</div>
+                    {outlineItems.length === 0 ? (
+                      <div className="editor-outline-empty">Add headings to see the document outline.</div>
+                    ) : (
+                      <div className="editor-outline-card-list">
+                        {outlineItems.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            ref={(node) => {
+                              if (node) {
+                                outlineItemRefs.current.set(item.id, node);
+                              } else {
+                                outlineItemRefs.current.delete(item.id);
+                              }
+                            }}
+                            className={`editor-outline-item level-${item.level}${activeOutlineItemId === item.id ? ' active' : ''}`}
+                            onClick={() => jumpToOutlineItem(item)}
+                            title={item.text}
+                          >
+                            {item.text}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="editor-container editor-writing-surface">
               <MarkdownLiveEditor
                 value={content}
@@ -272,6 +364,8 @@ function Editor({
                 onOpenImagePreview={handleOpenImagePreview}
                 onOpenExternal={handleOpenExternal}
                 onEditorDomReady={handleEditorDomReady}
+                onOutlineChange={setOutlineItems}
+                onRegisterOutlineNavigator={handleRegisterOutlineNavigator}
                 onRegisterExportHtmlGetter={onRegisterExportHtmlGetter}
                 documentKey={note.id}
               />
@@ -279,28 +373,6 @@ function Editor({
           </div>
         </div>
 
-        {isOutlineOpen && (
-          <aside className="editor-outline-panel">
-            <div className="editor-outline-header">Outline</div>
-            {outlineItems.length === 0 ? (
-              <div className="editor-outline-empty">Add headings to see the document outline.</div>
-            ) : (
-              <div className="editor-outline-list">
-                {outlineItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`editor-outline-item level-${item.level}`}
-                    onClick={() => jumpToOutlineItem(item)}
-                    title={item.text}
-                  >
-                    {item.text}
-                  </button>
-                ))}
-              </div>
-            )}
-          </aside>
-        )}
       </div>
 
       {lightboxSrc && (

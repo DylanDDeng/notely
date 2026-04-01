@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Editor, rootCtx, defaultValueCtx, remarkPluginsCtx, editorViewCtx, commandsCtx } from '@milkdown/kit/core';
+import type { EditorView } from '@milkdown/kit/prose/view';
 import { commonmark, insertImageCommand } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { history } from '@milkdown/kit/plugin/history';
@@ -20,9 +21,34 @@ interface MarkdownLiveEditorProps {
   onOpenExternal?: (url: string) => void;
   onOpenImagePreview?: (url: string) => void;
   onEditorDomReady?: (root: HTMLDivElement | null) => void;
+  onOutlineChange?: (items: Array<{ id: string; level: number; text: string; pos: number }>) => void;
+  onRegisterOutlineNavigator?: (navigator: ((itemId: string) => void) | null) => void;
   onRegisterExportHtmlGetter?: (getter: (() => string) | null) => void;
   documentKey?: string;
 }
+
+interface EditorOutlineItem {
+  id: string;
+  level: number;
+  text: string;
+  pos: number;
+}
+
+const collectOutlineItems = (view: EditorView): EditorOutlineItem[] => {
+  const items: EditorOutlineItem[] = [];
+
+  view.state.doc.descendants((node, pos) => {
+    if (node.type.name !== 'heading') return;
+    items.push({
+      id: `heading-${pos}`,
+      level: typeof node.attrs.level === 'number' ? node.attrs.level : 1,
+      text: node.textContent.trim() || 'Untitled',
+      pos,
+    });
+  });
+
+  return items;
+};
 
 const normalizeUrl = (value: string): string => {
   const trimmed = value.trim();
@@ -185,6 +211,8 @@ function MarkdownLiveEditor({
   onOpenExternal,
   onOpenImagePreview,
   onEditorDomReady,
+  onOutlineChange,
+  onRegisterOutlineNavigator,
   onRegisterExportHtmlGetter,
   documentKey,
 }: MarkdownLiveEditorProps) {
@@ -192,7 +220,13 @@ function MarkdownLiveEditor({
   const editorRef = useRef<Editor | null>(null);
   const currentMarkdownRef = useRef(value);
   const latestOnChangeRef = useRef(onChange);
+  const latestOnOutlineChangeRef = useRef(onOutlineChange);
+  const outlineItemsRef = useRef<EditorOutlineItem[]>([]);
   const copyResetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    latestOnOutlineChangeRef.current = onOutlineChange;
+  }, [onOutlineChange]);
 
   useEffect(() => {
     latestOnChangeRef.current = onChange;
@@ -214,6 +248,10 @@ function MarkdownLiveEditor({
           ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
             currentMarkdownRef.current = markdown;
             latestOnChangeRef.current(markdown);
+            const view = _ctx.get(editorViewCtx);
+            const nextOutlineItems = collectOutlineItems(view);
+            outlineItemsRef.current = nextOutlineItems;
+            latestOnOutlineChangeRef.current?.(nextOutlineItems);
           });
         })
         .use(commonmark)
@@ -235,6 +273,27 @@ function MarkdownLiveEditor({
       editorRef.current = editor;
       currentMarkdownRef.current = initialValue;
       onEditorDomReady?.(root);
+      const initialOutlineItems = editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        return collectOutlineItems(view);
+      });
+      outlineItemsRef.current = initialOutlineItems;
+      latestOnOutlineChangeRef.current?.(initialOutlineItems);
+      onRegisterOutlineNavigator?.((itemId) => {
+        const activeEditor = editorRef.current;
+        if (!activeEditor) return;
+
+        activeEditor.action((ctx) => {
+          const view = ctx.get(editorViewCtx);
+          const target = outlineItemsRef.current.find((item) => item.id === itemId);
+          if (!target) return;
+          const maxPos = view.state.doc.content.size;
+          const resolvedPos = Math.min(target.pos + 1, maxPos);
+          const selection = TextSelection.near(view.state.doc.resolve(resolvedPos));
+          view.focus();
+          view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+        });
+      });
       syncRenderableMediaSources(root);
       onRegisterExportHtmlGetter?.(() => {
         return editor.action((ctx) => {
@@ -419,6 +478,8 @@ function MarkdownLiveEditor({
       root.removeEventListener('click', handleClick);
       root.removeEventListener('paste', handlePaste, true);
       onEditorDomReady?.(null);
+      latestOnOutlineChangeRef.current?.([]);
+      onRegisterOutlineNavigator?.(null);
       onRegisterExportHtmlGetter?.(null);
       const editor = editorRef.current;
       editorRef.current = null;
@@ -431,7 +492,14 @@ function MarkdownLiveEditor({
       }
       root.innerHTML = '';
     };
-  }, [documentKey, onEditorDomReady, onOpenExternal, onOpenImagePreview, onRegisterExportHtmlGetter]);
+  }, [
+    documentKey,
+    onEditorDomReady,
+    onOpenExternal,
+    onOpenImagePreview,
+    onRegisterExportHtmlGetter,
+    onRegisterOutlineNavigator,
+  ]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -440,6 +508,12 @@ function MarkdownLiveEditor({
 
     currentMarkdownRef.current = value;
     editor.action(replaceAll(value));
+    const nextOutlineItems = editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      return collectOutlineItems(view);
+    });
+    outlineItemsRef.current = nextOutlineItems;
+    latestOnOutlineChangeRef.current?.(nextOutlineItems);
     const root = hostRef.current;
     if (root) {
       requestAnimationFrame(() => {
