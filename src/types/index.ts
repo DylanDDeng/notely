@@ -121,6 +121,28 @@ export interface ExportNotePdfResult {
   error?: string;
 }
 
+export interface ExportImageOptions {
+  includeTitle?: boolean;
+  includeDate?: boolean;
+  dateText?: string;
+  fontFamily?: string;
+  width?: number;
+}
+
+export interface ExportNoteImageRequest {
+  title: string;
+  html: string;
+  options: ExportImageOptions;
+  suggestedFileName: string;
+}
+
+export interface ExportNoteImageResult {
+  success: boolean;
+  canceled?: boolean;
+  filePath?: string;
+  error?: string;
+}
+
 export interface WriteClipboardTextResult {
   success: boolean;
   error?: string;
@@ -212,6 +234,7 @@ export interface ElectronAPI {
   resolveLocalImage?: (filePath: string) => Promise<ResolveLocalImageResult>;
   exportNotePdf: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
   exportNotePDF?: (data: ExportNotePdfRequest) => Promise<ExportNotePdfResult>;
+  exportNoteImage: (data: ExportNoteImageRequest) => Promise<ExportNoteImageResult>;
   generateWechatHtmlWithAi?: (data: unknown) => Promise<unknown>;
   getGitSyncConfig?: () => Promise<GitSyncConfig | null>;
   setupGitSync?: (data: GitSyncSetupRequest) => Promise<GitSyncSetupResult>;

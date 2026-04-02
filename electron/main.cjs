@@ -781,6 +781,103 @@ ipcMain.handle('notes:exportPdf', async (_event, data) => {
   }
 });
 
+ipcMain.handle('notes:exportImage', async (_event, data) => {
+  try {
+    await ensureNotesDir();
+
+    const title = data?.title || 'Untitled';
+    const html = data?.html || '';
+    const options = data?.options || {};
+    const suggestedFileName = typeof data?.suggestedFileName === 'string' ? data.suggestedFileName.trim() : 'note.png';
+
+    const saveResult = await dialog.showSaveDialog({
+      title: 'Export as Image',
+      defaultPath: path.join(currentNotesDir, suggestedFileName || 'note.png'),
+      filters: [{ name: 'PNG Image', extensions: ['png'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const outPath = saveResult.filePath.toLowerCase().endsWith('.png')
+      ? saveResult.filePath
+      : `${saveResult.filePath}.png`;
+
+    const includeTitle = Boolean(options.includeTitle);
+    const includeDate = Boolean(options.includeDate);
+    const fontFamily = typeof options.fontFamily === 'string' ? options.fontFamily : '';
+    const dateText = typeof options.dateText === 'string' ? options.dateText : '';
+    const exportWidth = Math.max(400, Math.min(Number(options.width) || 900, 1920));
+
+    const baseHref = pathToFileURL(`${currentNotesDir}${path.sep}`).toString();
+    const inlinedBodyHtml = await inlineLocalImagesInHtml(html, currentNotesDir);
+    const exportHtml = buildNoteExportHtml({
+      title,
+      dateText,
+      bodyHtml: inlinedBodyHtml,
+      includeTitle,
+      includeDate,
+      includeHeader: false,
+      fontFamily,
+      baseHref,
+    });
+
+    const captureWindow = new BrowserWindow({
+      show: false,
+      width: exportWidth,
+      height: 800,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        devTools: false,
+        offscreen: true,
+      },
+    });
+
+    try {
+      await captureWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(exportHtml)}`);
+
+      await captureWindow.webContents.executeJavaScript(
+        `Promise.race([
+          Promise.all(Array.from(document.images || []).map(img => img && img.complete ? Promise.resolve() : new Promise(resolve => { if (!img) return resolve(); img.addEventListener('load', resolve, { once: true }); img.addEventListener('error', resolve, { once: true }); }))),
+          new Promise(resolve => setTimeout(resolve, 15000)),
+        ])`,
+        true
+      );
+
+      const contentHeight = await captureWindow.webContents.executeJavaScript(
+        `Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)`,
+        true
+      );
+
+      const devicePixelRatio = 2;
+      captureWindow.setSize(exportWidth, contentHeight);
+
+      // Allow a repaint after resize
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const image = await captureWindow.webContents.capturePage({
+        x: 0,
+        y: 0,
+        width: exportWidth,
+        height: contentHeight,
+      });
+
+      await fs.writeFile(outPath, image.toPNG());
+    } finally {
+      captureWindow.destroy();
+    }
+
+    return { success: true, filePath: outPath };
+  } catch (err) {
+    console.error('Failed to export image:', err);
+    return { success: false, error: err?.message || String(err) };
+  }
+});
+
 ipcMain.handle('settings:selectDirectory', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
@@ -975,6 +1072,7 @@ function buildApplicationMenu(mainWindow) {
         { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('open-folder') },
         { type: 'separator' },
         { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-pdf') },
+        { label: 'Export Image…', click: () => send('export-image') },
         { type: 'separator' },
         { role: 'closeWindow' },
       ],

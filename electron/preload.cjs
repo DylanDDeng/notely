@@ -30,8 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Export
   exportNotePdf: (data) => ipcRenderer.invoke('notes:exportPdf', data),
-  // Backward-compatible alias (older builds may call exportNotePDF)
   exportNotePDF: (data) => ipcRenderer.invoke('notes:exportPdf', data),
+  exportNoteImage: (data) => ipcRenderer.invoke('notes:exportImage', data),
 
   // AI
   generateWechatHtmlWithAi: (data) => ipcRenderer.invoke('wechat:generateHtmlWithAi', data),

@@ -633,6 +633,41 @@ function App() {
     }
   }, [appFontFamily]);
 
+  const exportCurrentDocumentAsImage = useCallback(async (): Promise<boolean> => {
+    const current = currentNoteRef.current;
+    if (!current) return false;
+
+    try {
+      const markdown = latestContentRef.current;
+      const documentTitle = deriveDocumentTitle(markdown, current.title, current.filename);
+      const renderedHtml = exportHtmlGetterRef.current?.() || '';
+      const html = renderedHtml || await markdownToExportHtml(markdown);
+      const suggestedBaseName = current.filename
+        ? current.filename.replace(/\.md$/i, '')
+        : generateFilename(documentTitle).replace(/\.md$/i, '');
+
+      const result = await window.electronAPI.exportNoteImage({
+        title: documentTitle,
+        html,
+        suggestedFileName: `${suggestedBaseName || 'note'}.png`,
+        options: {
+          includeTitle: false,
+          includeDate: false,
+          fontFamily: appFontFamily.trim(),
+        },
+      });
+
+      if (!result.success && !result.canceled) {
+        console.error('Failed to export image:', result.error);
+      }
+
+      return Boolean(result.success);
+    } catch (error) {
+      console.error('Failed to export current document as image:', error);
+      return false;
+    }
+  }, [appFontFamily]);
+
   const handleOpenFolder = useCallback(async () => {
     const selectedPath = await window.electronAPI.selectDirectory();
     if (!selectedPath) return;
@@ -695,6 +730,10 @@ function App() {
           setView('main');
           void exportCurrentDocument();
           break;
+        case 'export-image':
+          setView('main');
+          void exportCurrentDocumentAsImage();
+          break;
         case 'open-folder':
           void handleOpenFolder();
           break;
@@ -711,7 +750,7 @@ function App() {
     });
 
     return unsubscribe;
-  }, [exportCurrentDocument, handleCreateNote, handleOpenFolder, saveCurrentDocument, saveCurrentDocumentAs]);
+  }, [exportCurrentDocument, exportCurrentDocumentAsImage, handleCreateNote, handleOpenFolder, saveCurrentDocument, saveCurrentDocumentAs]);
 
   const recentNotes = useMemo(
     () =>
