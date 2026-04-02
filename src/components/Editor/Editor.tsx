@@ -87,7 +87,8 @@ function Editor({
 
   const outlineRailActiveIndex = useMemo(() => {
     const railLineCount = 4;
-    if (outlineItems.length <= 1) return 0;
+    if (outlineItems.length === 0) return -1;
+    if (outlineItems.length === 1) return 0;
 
     const activeIndex = outlineItems.findIndex((item) => item.id === activeOutlineItemId);
     if (activeIndex <= 0) return 0;
