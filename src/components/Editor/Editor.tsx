@@ -225,7 +225,15 @@ function Editor({
     if (!activeOutlineItemId) return;
     const target = outlineItemRefs.current.get(activeOutlineItemId);
     if (!target) return;
-    target.scrollIntoView({ block: 'nearest' });
+    const scrollContainer = target.closest('.editor-outline-card-list');
+    if (!scrollContainer) return;
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    if (targetRect.top < containerRect.top) {
+      scrollContainer.scrollTop += targetRect.top - containerRect.top;
+    } else if (targetRect.bottom > containerRect.bottom) {
+      scrollContainer.scrollTop += targetRect.bottom - containerRect.bottom;
+    }
   }, [activeOutlineItemId]);
 
   useEffect(() => {
