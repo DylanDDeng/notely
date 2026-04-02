@@ -12,6 +12,7 @@ import { replaceAll } from '@milkdown/kit/utils';
 import { DOMSerializer } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection } from '@milkdown/kit/prose/state';
 import { $prose } from '@milkdown/utils';
+import { customCodeBlockView } from './codeBlockView';
 import { htmlView } from './htmlView';
 import '@milkdown/kit/prose/view/style/prosemirror.css';
 
@@ -174,6 +175,7 @@ function MarkdownLiveEditor({
         .use(listener)
         .use(clipboard)
         .use(outlineHeadingFlashPlugin)
+        .use(customCodeBlockView)
         .use(htmlView)
         .create();
 
