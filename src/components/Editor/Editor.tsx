@@ -276,58 +276,58 @@ function Editor({
       </header>
 
       <div className="editor-content-shell">
+        {isOutlineOpen && (
+          <div className="editor-outline-floating">
+            <div
+              className={`editor-outline-dock${isOutlineHovered ? ' expanded' : ''}`}
+              onMouseEnter={handleOutlineMouseEnter}
+              onMouseLeave={handleOutlineMouseLeave}
+            >
+              <button
+                type="button"
+                className="editor-outline-rail"
+                aria-label="Show document outline"
+                title="Show document outline"
+              >
+                {Array.from({ length: 4 }, (_, index) => (
+                  <span
+                    key={index}
+                    className={`editor-outline-rail-line${index === outlineRailActiveIndex ? ' active' : ''}`}
+                  />
+                ))}
+              </button>
+              <div className="editor-outline-card">
+                <div className="editor-outline-card-header">Outline</div>
+                {outlineItems.length === 0 ? (
+                  <div className="editor-outline-empty">Add headings to see the document outline.</div>
+                ) : (
+                  <div className="editor-outline-card-list">
+                    {outlineItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        ref={(node) => {
+                          if (node) {
+                            outlineItemRefs.current.set(item.id, node);
+                          } else {
+                            outlineItemRefs.current.delete(item.id);
+                          }
+                        }}
+                        className={`editor-outline-item level-${item.level}${activeOutlineItemId === item.id ? ' active' : ''}`}
+                        onClick={() => jumpToOutlineItem(item)}
+                        title={item.text}
+                      >
+                        {item.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <div className="editor-content">
           <div className="editor-content-inner">
-            {isOutlineOpen && (
-              <div className="editor-outline-floating">
-                <div
-                  className={`editor-outline-dock${isOutlineHovered ? ' expanded' : ''}`}
-                  onMouseEnter={handleOutlineMouseEnter}
-                  onMouseLeave={handleOutlineMouseLeave}
-                >
-                  <button
-                    type="button"
-                    className="editor-outline-rail"
-                    aria-label="Show document outline"
-                    title="Show document outline"
-                  >
-                    {Array.from({ length: 4 }, (_, index) => (
-                      <span
-                        key={index}
-                        className={`editor-outline-rail-line${index === outlineRailActiveIndex ? ' active' : ''}`}
-                      />
-                    ))}
-                  </button>
-                  <div className="editor-outline-card">
-                    <div className="editor-outline-card-header">Outline</div>
-                    {outlineItems.length === 0 ? (
-                      <div className="editor-outline-empty">Add headings to see the document outline.</div>
-                    ) : (
-                      <div className="editor-outline-card-list">
-                        {outlineItems.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            ref={(node) => {
-                              if (node) {
-                                outlineItemRefs.current.set(item.id, node);
-                              } else {
-                                outlineItemRefs.current.delete(item.id);
-                              }
-                            }}
-                            className={`editor-outline-item level-${item.level}${activeOutlineItemId === item.id ? ' active' : ''}`}
-                            onClick={() => jumpToOutlineItem(item)}
-                            title={item.text}
-                          >
-                            {item.text}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
             <div className="editor-container editor-writing-surface">
               <MarkdownLiveEditor
                 value={content}
