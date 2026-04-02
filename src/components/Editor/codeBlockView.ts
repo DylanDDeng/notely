@@ -229,8 +229,9 @@ class CustomCodeBlockView {
     this.dom.classList.remove('selected');
   }
 
-  stopEvent() {
-    return true;
+  stopEvent(event: Event) {
+    const target = event.target as Node | null;
+    return Boolean(target && this.host.contains(target));
   }
 
   ignoreMutation() {

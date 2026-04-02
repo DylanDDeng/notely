@@ -39,6 +39,21 @@ interface EditorOutlineItem {
 const outlineHeadingFlashKey = new PluginKey<DecorationSet>('NOTELY_OUTLINE_HEADING_FLASH');
 const OUTLINE_FLASH_META = 'notely-outline-heading-flash';
 
+const trailingParagraphPlugin = $prose(() => {
+  return new Plugin({
+    appendTransaction: (_transactions, _oldState, newState) => {
+      const lastNode = newState.doc.lastChild;
+      if (!lastNode || lastNode.type.name !== 'paragraph') {
+        return newState.tr.insert(
+          newState.doc.content.size,
+          newState.schema.nodes.paragraph.create()
+        );
+      }
+      return null;
+    },
+  });
+});
+
 const outlineHeadingFlashPlugin = $prose(() => {
   return new Plugin<DecorationSet>({
     key: outlineHeadingFlashKey,
@@ -174,6 +189,7 @@ function MarkdownLiveEditor({
         .use(history)
         .use(listener)
         .use(clipboard)
+        .use(trailingParagraphPlugin)
         .use(outlineHeadingFlashPlugin)
         .use(customCodeBlockView)
         .use(htmlView)
