@@ -391,6 +391,7 @@ async function createWindow(options = {}) {
     height: 900,
     minWidth: 900,
     minHeight: 600,
+    show: false,
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#00000000',
     transparent: process.platform === 'darwin',
@@ -405,6 +406,10 @@ async function createWindow(options = {}) {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.cjs'),
     },
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 
   let allowClose = false;
