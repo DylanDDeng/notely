@@ -108,6 +108,7 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
@@ -118,8 +119,8 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "${FILES[@]}" --clobber
+          if gh release view "$TAG_NAME" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "${FILES[@]}" --repo "$GH_REPO" --clobber
           else
-            gh release create "$TAG_NAME" "${FILES[@]}" --title "$TAG_NAME" --generate-notes
+            gh release create "$TAG_NAME" "${FILES[@]}" --repo "$GH_REPO" --title "$TAG_NAME" --generate-notes
           fi
