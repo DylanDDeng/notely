@@ -1,15 +1,13 @@
-const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } = require('electron');
 const fs = require('fs').promises;
 const http = require('http');
-const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 
-const DEFAULT_NOTES_DIR = path.join(os.homedir(), 'Documents', 'Notes');
 const isDev = !app.isPackaged;
 let isAppQuitting = false;
 
-let currentNotesDir = DEFAULT_NOTES_DIR;
+let currentNotesDir = '';
 
 function buildWindowUrl(baseUrl, options = {}) {
   const url = new URL(baseUrl);
@@ -21,6 +19,7 @@ function buildWindowUrl(baseUrl, options = {}) {
 }
 
 async function ensureNotesDir() {
+  if (!currentNotesDir) return;
   try {
     await fs.mkdir(currentNotesDir, { recursive: true });
   } catch (err) {
@@ -474,13 +473,14 @@ async function createWindow(options = {}) {
 
 ipcMain.handle('notes:setStoragePath', async (_event, newPath) => {
   try {
-    if (newPath && String(newPath).trim() !== '') {
-      await fs.mkdir(newPath, { recursive: true });
-      currentNotesDir = newPath;
-    } else {
-      currentNotesDir = DEFAULT_NOTES_DIR;
-      await fs.mkdir(currentNotesDir, { recursive: true });
+    const nextPath = typeof newPath === 'string' ? newPath.trim() : '';
+    if (!nextPath) {
+      currentNotesDir = '';
+      return { success: true, path: currentNotesDir };
     }
+
+    await fs.mkdir(nextPath, { recursive: true });
+    currentNotesDir = nextPath;
 
     return { success: true, path: currentNotesDir };
   } catch (err) {
@@ -490,6 +490,7 @@ ipcMain.handle('notes:setStoragePath', async (_event, newPath) => {
 
 ipcMain.handle('notes:getAll', async () => {
   try {
+    if (!currentNotesDir) return [];
     await ensureNotesDir();
     const files = await fs.readdir(currentNotesDir);
     const mdFiles = files.filter((file) => file.endsWith('.md'));
@@ -519,6 +520,9 @@ ipcMain.handle('notes:getAll', async () => {
 
 ipcMain.handle('notes:save', async (_event, { filename, content, preserveModifiedAt } = {}) => {
   try {
+    if (!currentNotesDir) {
+      return { success: false, error: 'No active document directory. Use Save As first.' };
+    }
     await ensureNotesDir();
     const filepath = path.join(currentNotesDir, filename);
 
@@ -549,12 +553,11 @@ ipcMain.handle('notes:save', async (_event, { filename, content, preserveModifie
 
 ipcMain.handle('notes:saveAs', async (_event, { suggestedFilename, content } = {}) => {
   try {
-    await ensureNotesDir();
-
     const fallbackName = typeof suggestedFilename === 'string' && suggestedFilename.trim() ? suggestedFilename.trim() : 'Untitled.md';
+    const defaultDirectory = currentNotesDir || app.getPath('documents');
     const saveResult = await dialog.showSaveDialog({
       title: 'Save Markdown Document',
-      defaultPath: path.join(currentNotesDir, fallbackName),
+      defaultPath: path.join(defaultDirectory, fallbackName),
       filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
@@ -585,6 +588,9 @@ ipcMain.handle('notes:saveAs', async (_event, { suggestedFilename, content } = {
 
 ipcMain.handle('notes:delete', async (_event, filename) => {
   try {
+    if (!currentNotesDir) {
+      return { success: false, error: 'No active document directory.' };
+    }
     const filepath = path.join(currentNotesDir, filename);
     await fs.unlink(filepath);
     return { success: true };
@@ -595,16 +601,15 @@ ipcMain.handle('notes:delete', async (_event, filename) => {
 
 ipcMain.handle('notes:exportPdf', async (_event, data) => {
   try {
-    await ensureNotesDir();
-
     const title = data?.title || 'Untitled';
     const html = data?.html || '';
     const options = data?.options || {};
     const suggestedFileName = typeof data?.suggestedFileName === 'string' ? data.suggestedFileName.trim() : 'note.pdf';
+    const defaultDirectory = currentNotesDir || app.getPath('documents');
 
     const saveResult = await dialog.showSaveDialog({
       title: 'Export as PDF',
-      defaultPath: path.join(currentNotesDir, suggestedFileName || 'note.pdf'),
+      defaultPath: path.join(defaultDirectory, suggestedFileName || 'note.pdf'),
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
@@ -626,8 +631,9 @@ ipcMain.handle('notes:exportPdf', async (_event, data) => {
     const dateText = typeof options.dateText === 'string' ? options.dateText : '';
     const fontFamily = typeof options.fontFamily === 'string' ? options.fontFamily : '';
 
-    const baseHref = pathToFileURL(`${currentNotesDir}${path.sep}`).toString();
-    const inlinedBodyHtml = await inlineLocalImagesInHtml(html, currentNotesDir);
+    const baseDir = currentNotesDir || defaultDirectory;
+    const baseHref = pathToFileURL(baseDir + path.sep).toString();
+    const inlinedBodyHtml = await inlineLocalImagesInHtml(html, baseDir);
     const exportHtml = buildNoteExportHtml({
       title,
       dateText,
@@ -708,16 +714,15 @@ ipcMain.handle('notes:exportPdf', async (_event, data) => {
 
 ipcMain.handle('notes:exportImage', async (_event, data) => {
   try {
-    await ensureNotesDir();
-
     const title = data?.title || 'Untitled';
     const html = data?.html || '';
     const options = data?.options || {};
     const suggestedFileName = typeof data?.suggestedFileName === 'string' ? data.suggestedFileName.trim() : 'note.png';
+    const defaultDirectory = currentNotesDir || app.getPath('documents');
 
     const saveResult = await dialog.showSaveDialog({
       title: 'Export as Image',
-      defaultPath: path.join(currentNotesDir, suggestedFileName || 'note.png'),
+      defaultPath: path.join(defaultDirectory, suggestedFileName || 'note.png'),
       filters: [{ name: 'PNG Image', extensions: ['png'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
@@ -736,8 +741,9 @@ ipcMain.handle('notes:exportImage', async (_event, data) => {
     const dateText = typeof options.dateText === 'string' ? options.dateText : '';
     const exportWidth = Math.max(400, Math.min(Number(options.width) || 900, 1920));
 
-    const baseHref = pathToFileURL(`${currentNotesDir}${path.sep}`).toString();
-    const inlinedBodyHtml = await inlineLocalImagesInHtml(html, currentNotesDir);
+    const baseDir = currentNotesDir || defaultDirectory;
+    const baseHref = pathToFileURL(baseDir + path.sep).toString();
+    const inlinedBodyHtml = await inlineLocalImagesInHtml(html, baseDir);
     const exportHtml = buildNoteExportHtml({
       title,
       dateText,
@@ -858,8 +864,6 @@ function buildApplicationMenu(mainWindow) {
     ...(isMac ? [{
       label: app.name,
       submenu: [
-        { label: 'Preferences…', accelerator: 'CmdOrCtrl+,', click: () => send('open-settings') },
-        { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
         { role: 'unhide' },
@@ -922,14 +926,6 @@ function buildApplicationMenu(mainWindow) {
 }
 
 app.whenReady().then(() => {
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    if (permission === 'local-fonts') {
-      callback(true);
-      return;
-    }
-    callback(false);
-  });
-
   void createWindow();
 
   app.on('activate', () => {

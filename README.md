@@ -29,14 +29,12 @@ A clean, focused Markdown writing app for macOS. Built with Electron + React, st
 - **PNG Image** — full-page screenshot export via menu bar
 
 ### Local-first Storage
-- Notes stored as standard `.md` files in a folder you choose
+- Notes stored as standard `.md` files wherever you choose to save them
 - Existing YAML frontmatter is preserved and read when present
-- Portable — move, sync, or version-control your notes folder however you like
+- Portable — move, sync, or version-control your notes however you like
 
 ### Appearance
 - macOS-native vibrancy and hidden title bar
-- Light / Dark / System theme support
-- Custom font family setting
 - Window opens only after content renders (no blank flash)
 
 ## Tech Stack
@@ -89,7 +87,6 @@ notes-app/
 │   ├── components/
 │   │   ├── Editor/            # Milkdown editor, code block view, outline
 │   │   ├── QuickOpen/         # Cmd+P note search
-│   │   ├── Settings/          # Preferences UI
 │   ├── utils/                 # Note parsing, path helpers
 │   ├── types/                 # TypeScript interfaces
 │   ├── styles/                # Global CSS
@@ -110,7 +107,6 @@ notes-app/
 | `Cmd+Shift+E` | Export PDF |
 | `Cmd+Shift+L` | Toggle outline |
 | `Cmd+Shift+O` | Open folder |
-| `Cmd+,` | Preferences |
 
 ## License
 

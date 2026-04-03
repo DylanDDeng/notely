@@ -4,18 +4,9 @@ import { generateFilename, generateNoteContent, parseNote } from './utils/noteUt
 import type { EditorNote, Note, RawNote, SaveNoteData } from './types';
 import './styles/App.css';
 
-const Settings = lazy(() => import('./components/Settings/Settings'));
 const QuickOpen = lazy(() => import('./components/QuickOpen/QuickOpen'));
-type ViewType = 'main' | 'settings';
-type Theme = 'light' | 'dark' | 'system';
-
-const STORAGE_PATH_KEY = 'notes:storagePath';
-const FONT_FAMILY_KEY = 'notes:fontFamily';
-const THEME_KEY = 'notes:theme';
 const RECENT_NOTE_IDS_KEY = 'notes:recentNoteIds';
 const UNSAVED_DRAFT_KEY = 'notes:unsavedDraft';
-const DEFAULT_FONT_STACK =
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 const getWindowParams = () => {
   if (typeof window === 'undefined') return new URLSearchParams();
@@ -28,43 +19,6 @@ const getWindowDraftStorageKey = (): string => {
 };
 
 const isNewDocumentWindow = (): boolean => getWindowParams().get('newDocument') === '1';
-
-const getSavedStoragePath = (): string => localStorage.getItem(STORAGE_PATH_KEY) || '';
-
-const saveStoragePath = (path: string) => {
-  localStorage.setItem(STORAGE_PATH_KEY, path);
-};
-
-const getSavedFontFamily = (): string => localStorage.getItem(FONT_FAMILY_KEY) || '';
-
-const saveFontFamily = (fontFamily: string) => {
-  const trimmed = fontFamily.trim();
-  if (!trimmed) {
-    localStorage.removeItem(FONT_FAMILY_KEY);
-    return;
-  }
-  localStorage.setItem(FONT_FAMILY_KEY, trimmed);
-};
-
-const getSavedTheme = (): Theme => {
-  try {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (saved === 'light' || saved === 'dark' || saved === 'system') {
-      return saved;
-    }
-  } catch {
-    // ignore
-  }
-  return 'system';
-};
-
-const saveTheme = (theme: Theme) => {
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    // ignore
-  }
-};
 
 const getSavedRecentNoteIds = (): string[] => {
   try {
@@ -119,12 +73,6 @@ const writeUnsavedDraft = (storageKey: string, draft: EditorNote | null) => {
   } catch {
     // ignore
   }
-};
-
-const applyTheme = (theme: Theme) => {
-  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const effectiveTheme = theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme;
-  document.documentElement.setAttribute('data-theme', effectiveTheme);
 };
 
 const toEditorNote = (note: Note): EditorNote => ({
@@ -187,13 +135,10 @@ const markdownToExportHtml = async (markdown: string): Promise<string> => {
 
 function App() {
   const draftStorageKey = useMemo(() => getWindowDraftStorageKey(), []);
-  const [view, setView] = useState<ViewType>('main');
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [storagePath, setStoragePath] = useState<string>('');
-  const [appFontFamily, setAppFontFamily] = useState<string>(() => getSavedFontFamily());
-  const [theme, setTheme] = useState<Theme>(() => getSavedTheme());
+  const [isOpeningFolder, setIsOpeningFolder] = useState(false);
   const [recentNoteIds, setRecentNoteIds] = useState<string[]>(() => getSavedRecentNoteIds());
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
@@ -203,7 +148,7 @@ function App() {
     return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
   });
   const notesRef = useRef<Note[]>([]);
-  const storagePathRef = useRef(storagePath);
+  const activeDirectoryRef = useRef('');
   const currentNoteRef = useRef<EditorNote | null>(draftNote);
   const latestContentRef = useRef('');
   const lastSavedContentRef = useRef('');
@@ -216,10 +161,6 @@ function App() {
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
-
-  useEffect(() => {
-    storagePathRef.current = storagePath;
-  }, [storagePath]);
 
   const makeUniqueFilename = useCallback(
     (title: string, excludeFilename?: string) => {
@@ -247,25 +188,6 @@ function App() {
     [notes]
   );
 
-  useEffect(() => {
-    const trimmed = appFontFamily.trim();
-    if (!trimmed) {
-      document.documentElement.style.removeProperty('--app-font-family');
-      return;
-    }
-    document.documentElement.style.setProperty('--app-font-family', `${trimmed}, ${DEFAULT_FONT_STACK}`);
-  }, [appFontFamily]);
-
-  useEffect(() => {
-    applyTheme(theme);
-    if (theme !== 'system') return;
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => applyTheme('system');
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [theme]);
-
   const loadNotes = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -288,25 +210,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const init = async () => {
-      const savedPath = getSavedStoragePath();
-      const result = await window.electronAPI.setStoragePath(savedPath);
-      if (!result.success) {
-        console.error('Failed to restore storage path:', result.error);
-        return;
-      }
-
-      const nextPath = result.path || savedPath;
-      setStoragePath(nextPath);
-      saveStoragePath(nextPath);
-      setView('main');
-      await loadNotes();
-    };
-
-    void init();
-  }, [loadNotes]);
-
-  useEffect(() => {
     if (notes.length === 0) {
       setSelectedNoteId(null);
       return;
@@ -327,11 +230,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== 'main') return;
+    if (isOpeningFolder) return;
     if (selectedNoteId) return;
     if (draftNote) return;
     setDraftNote(createDraftNote());
-  }, [draftNote, selectedNoteId, view]);
+  }, [draftNote, isOpeningFolder, selectedNoteId]);
 
   useEffect(() => {
     if (!selectedNoteId) return;
@@ -376,6 +279,8 @@ function App() {
           draftStorageKey,
         };
       };
+
+      const previousDirectory = activeDirectoryRef.current;
 
       if (isDraft || shouldSaveAs) {
         if (isDraft && !noteData.interactive && !shouldSaveAs) {
@@ -430,15 +335,17 @@ function App() {
         };
 
         if (saveAsResult.directory) {
-          setStoragePath(saveAsResult.directory);
-          saveStoragePath(saveAsResult.directory);
+          activeDirectoryRef.current = saveAsResult.directory;
         }
 
         if (isDraft) {
           writeUnsavedDraft(draftStorageKey, null);
           setDraftNote(null);
         }
-        setNotes((prev) => [...prev.filter((note) => note.filepath !== savedNote.filepath), savedNote].sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
+        const nextNotes = previousDirectory && saveAsResult.directory && previousDirectory !== saveAsResult.directory
+          ? [savedNote]
+          : [...notesRef.current.filter((note) => note.filepath !== savedNote.filepath), savedNote];
+        setNotes(nextNotes.sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
         setSelectedNoteId(savedNote.id);
         markPersisted(savedNote.title);
         return true;
@@ -472,7 +379,7 @@ function App() {
       const nextNote: Note = {
         id: noteId,
         filename,
-        filepath: existingNote?.filepath?.replace(/[^/\\]+$/, filename) || `${storagePathRef.current}/${filename}`,
+        filepath: existingNote?.filepath?.replace(/[^/\\]+$/, filename) || `${activeDirectoryRef.current}/${filename}`,
         content: fileContent,
         title: parsed.title,
         date: parsed.date,
@@ -603,7 +510,6 @@ function App() {
           includeTitle: false,
           includeDate: false,
           includePageNumbers: true,
-          fontFamily: appFontFamily.trim(),
         },
       });
 
@@ -616,7 +522,7 @@ function App() {
       console.error('Failed to export current document:', error);
       return false;
     }
-  }, [appFontFamily]);
+  }, []);
 
   const exportCurrentDocumentAsImage = useCallback(async (): Promise<boolean> => {
     const current = currentNoteRef.current;
@@ -638,7 +544,6 @@ function App() {
         options: {
           includeTitle: false,
           includeDate: false,
-          fontFamily: appFontFamily.trim(),
         },
       });
 
@@ -651,7 +556,7 @@ function App() {
       console.error('Failed to export current document as image:', error);
       return false;
     }
-  }, [appFontFamily]);
+  }, []);
 
   const handleOpenFolder = useCallback(async () => {
     const selectedPath = await window.electronAPI.selectDirectory();
@@ -661,72 +566,39 @@ function App() {
     if (!result.success) return;
 
     const nextPath = result.path || selectedPath;
-    setStoragePath(nextPath);
-    saveStoragePath(nextPath);
-    setView('main');
+    activeDirectoryRef.current = nextPath;
+    setIsOpeningFolder(true);
+    setSelectedNoteId(null);
     setDraftNote(null);
-    await loadNotes();
-  }, [loadNotes]);
-
-  const handleChangeStoragePath = useCallback(
-    async (newPath: string) => {
-      const result = await window.electronAPI.setStoragePath(newPath);
-      if (!result.success) {
-        console.error('Failed to change storage path:', result.error);
-        return;
-      }
-
-      const nextPath = result.path || newPath;
-      setStoragePath(nextPath);
-      saveStoragePath(nextPath);
-      setSelectedNoteId(null);
+    try {
       await loadNotes();
-    },
-    [loadNotes]
-  );
-
-  const handleChangeFontFamily = useCallback((nextFontFamily: string) => {
-    const trimmed = nextFontFamily.trim();
-    setAppFontFamily(trimmed);
-    saveFontFamily(trimmed);
-  }, []);
-
-  const handleChangeTheme = useCallback((nextTheme: Theme) => {
-    setTheme(nextTheme);
-    saveTheme(nextTheme);
-  }, []);
+    } finally {
+      setIsOpeningFolder(false);
+    }
+  }, [loadNotes]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onMenuAction((action) => {
       switch (action) {
         case 'new-note':
-          setView('main');
           void handleCreateNote();
           break;
         case 'save-note':
-          setView('main');
           void saveCurrentDocument(true);
           break;
         case 'save-note-as':
-          setView('main');
           void saveCurrentDocumentAs();
           break;
         case 'export-pdf':
-          setView('main');
           void exportCurrentDocument();
           break;
         case 'export-image':
-          setView('main');
           void exportCurrentDocumentAsImage();
           break;
         case 'open-folder':
           void handleOpenFolder();
           break;
-        case 'open-settings':
-          setView('settings');
-          break;
         case 'toggle-outline':
-          setView('main');
           setOutlineToggleKey((prev) => prev + 1);
           break;
         default:
@@ -790,24 +662,6 @@ function App() {
       delete window.__notelyUnsavedState;
     };
   }, [currentNote, draftStorageKey, saveCurrentDocument]);
-
-  if (view === 'settings') {
-    return (
-      <div className="app app-settings">
-        <Suspense fallback={null}>
-          <Settings
-            onBack={() => setView('main')}
-            storagePath={storagePath}
-            onChangeStoragePath={handleChangeStoragePath}
-            fontFamily={appFontFamily}
-            onChangeFontFamily={handleChangeFontFamily}
-            theme={theme}
-            onChangeTheme={handleChangeTheme}
-          />
-        </Suspense>
-      </div>
-    );
-  }
 
   return (
     <div className="app app-main">
