@@ -1,13 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { remark } from 'remark';
-import remarkGfm from 'remark-gfm';
-import remarkHtml from 'remark-html';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor/Editor';
-import Settings from './components/Settings/Settings';
-import QuickOpen from './components/QuickOpen/QuickOpen';
 import { generateFilename, generateNoteContent, parseNote } from './utils/noteUtils';
 import type { EditorNote, Note, RawNote, SaveNoteData } from './types';
 import './styles/App.css';
+
+const Settings = lazy(() => import('./components/Settings/Settings'));
+const QuickOpen = lazy(() => import('./components/QuickOpen/QuickOpen'));
 type ViewType = 'main' | 'settings';
 type Theme = 'light' | 'dark' | 'system';
 
@@ -173,6 +171,12 @@ const deriveDocumentTitle = (markdown: string, fallbackTitle?: string, filename?
 };
 
 const markdownToExportHtml = async (markdown: string): Promise<string> => {
+  const [{ remark }, { default: remarkGfm }, { default: remarkHtml }] = await Promise.all([
+    import('remark'),
+    import('remark-gfm'),
+    import('remark-html'),
+  ]);
+
   const result = await remark()
     .use(remarkGfm)
     .use(remarkHtml)
@@ -357,11 +361,21 @@ function App() {
   }, []);
 
   const handleSaveNote = useCallback(
-    async (noteData: SaveNoteData) => {
+    async (noteData: SaveNoteData): Promise<boolean> => {
       const now = new Date();
       const shouldSaveAs = Boolean(noteData.saveAs);
       const isDraft = Boolean(noteData.isDraft || !noteData.filename);
       const nextTitle = noteData.title.trim() || 'Untitled';
+
+      const markPersisted = (title: string) => {
+        lastSavedContentRef.current = noteData.content;
+        window.__notelyUnsavedState = {
+          dirty: false,
+          title,
+          isDraft: false,
+          draftStorageKey,
+        };
+      };
 
       if (isDraft || shouldSaveAs) {
         if (isDraft && !noteData.interactive && !shouldSaveAs) {
@@ -376,20 +390,13 @@ function App() {
             modifiedAt: now,
             isDraft: true,
           }));
-          return;
+          return false;
         }
 
         const suggestedFilename = shouldSaveAs
           ? makeUniqueFilename(nextTitle, noteData.filename)
           : makeUniqueFilename(nextTitle);
-        const fileContent = generateNoteContent(
-          {
-            title: nextTitle,
-            date: noteData.date || now.toISOString(),
-            tags: [],
-          },
-          noteData.content
-        );
+        const fileContent = generateNoteContent(noteData.content);
 
         const saveAsResult = await window.electronAPI.saveNoteAs?.({
           suggestedFilename,
@@ -397,7 +404,7 @@ function App() {
         });
 
         if (!saveAsResult || saveAsResult.canceled) {
-          return;
+          return false;
         }
 
         if (!saveAsResult.success || !saveAsResult.filename || !saveAsResult.filepath) {
@@ -418,8 +425,6 @@ function App() {
           tags: [],
           contentBody: parsed.contentBody,
           rawContent: parsed.rawContent,
-          type: parsed.type,
-          kanban: parsed.kanban,
           modifiedAt: now,
           createdAt: shouldSaveAs ? existingNote?.createdAt || now : now,
         };
@@ -435,7 +440,8 @@ function App() {
         }
         setNotes((prev) => [...prev.filter((note) => note.filepath !== savedNote.filepath), savedNote].sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime()));
         setSelectedNoteId(savedNote.id);
-        return;
+        markPersisted(savedNote.title);
+        return true;
       }
 
       const previousFilename = noteData.filename?.trim();
@@ -443,15 +449,7 @@ function App() {
       const filename = forcedFilename || previousFilename || generateFilename(noteData.title);
       const noteId = (filename || '').replace(/\.md$/i, '');
       const existingNote = notesRef.current.find((note) => note.id === noteData.id || note.filename === previousFilename);
-      const nextDate = noteData.date || existingNote?.date || now.toISOString();
-      const fileContent = generateNoteContent(
-        {
-          title: nextTitle,
-          date: nextDate,
-          tags: [],
-        },
-        noteData.content
-      );
+      const fileContent = generateNoteContent(noteData.content);
 
       const saveResult = await window.electronAPI.saveNote({
         filename,
@@ -481,8 +479,6 @@ function App() {
         tags: [],
         contentBody: parsed.contentBody,
         rawContent: parsed.rawContent,
-        type: parsed.type,
-        kanban: parsed.kanban,
         modifiedAt: noteData.preserveModifiedAt ? existingNote?.modifiedAt || now : now,
         createdAt: existingNote?.createdAt || now,
       };
@@ -493,8 +489,10 @@ function App() {
       });
 
       setSelectedNoteId(noteId);
+      markPersisted(nextNote.title);
+      return true;
     },
-    [makeUniqueFilename]
+    [draftStorageKey, makeUniqueFilename]
   );
 
   const saveCurrentDocument = useCallback(async (interactive = true): Promise<boolean> => {
@@ -502,7 +500,7 @@ function App() {
     if (!current) return false;
 
     try {
-      await handleSaveNote({
+      const saved = await handleSaveNote({
         id: current.id,
         filename: current.filename,
         filepath: current.filepath,
@@ -513,14 +511,8 @@ function App() {
         interactive,
         isDraft: current.isDraft,
       });
-      lastSavedContentRef.current = latestContentRef.current;
+      if (!saved) return false;
       if (current.isDraft) writeUnsavedDraft(draftStorageKey, null);
-      window.__notelyUnsavedState = {
-        dirty: false,
-        title: current.title || 'Untitled',
-        isDraft: Boolean(current.isDraft || !current.filename),
-        draftStorageKey,
-      };
       return true;
     } catch (error) {
       console.error('Failed to save current document:', error);
@@ -533,7 +525,7 @@ function App() {
     if (!current) return false;
 
     try {
-      await handleSaveNote({
+      const saved = await handleSaveNote({
         id: current.id,
         filename: current.filename,
         filepath: current.filepath,
@@ -545,14 +537,7 @@ function App() {
         isDraft: current.isDraft,
         saveAs: true,
       });
-      lastSavedContentRef.current = latestContentRef.current;
-      window.__notelyUnsavedState = {
-        dirty: false,
-        title: current.title || 'Untitled',
-        isDraft: Boolean(current.isDraft || !current.filename),
-        draftStorageKey,
-      };
-      return true;
+      return saved;
     } catch (error) {
       console.error('Failed to save current document as:', error);
       return false;
@@ -809,15 +794,17 @@ function App() {
   if (view === 'settings') {
     return (
       <div className="app app-settings">
-        <Settings
-          onBack={() => setView('main')}
-          storagePath={storagePath}
-          onChangeStoragePath={handleChangeStoragePath}
-          fontFamily={appFontFamily}
-          onChangeFontFamily={handleChangeFontFamily}
-          theme={theme}
-          onChangeTheme={handleChangeTheme}
-        />
+        <Suspense fallback={null}>
+          <Settings
+            onBack={() => setView('main')}
+            storagePath={storagePath}
+            onChangeStoragePath={handleChangeStoragePath}
+            fontFamily={appFontFamily}
+            onChangeFontFamily={handleChangeFontFamily}
+            theme={theme}
+            onChangeTheme={handleChangeTheme}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -832,15 +819,19 @@ function App() {
         isLoading={isLoading && !currentNote}
         outlineToggleKey={outlineToggleKey}
       />
-      <QuickOpen
-        isOpen={isQuickOpenOpen}
-        notes={quickOpenNotes}
-        selectedNoteId={selectedNoteId}
-        query={quickOpenQuery}
-        onQueryChange={setQuickOpenQuery}
-        onSelectNote={handleSelectNote}
-        onClose={() => setIsQuickOpenOpen(false)}
-      />
+      {isQuickOpenOpen && (
+        <Suspense fallback={null}>
+          <QuickOpen
+            isOpen={isQuickOpenOpen}
+            notes={quickOpenNotes}
+            selectedNoteId={selectedNoteId}
+            query={quickOpenQuery}
+            onQueryChange={setQuickOpenQuery}
+            onSelectNote={handleSelectNote}
+            onClose={() => setIsQuickOpenOpen(false)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

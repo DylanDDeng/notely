@@ -1,171 +1,117 @@
-# Notes
+# Notely
 
-一款简洁优雅的 macOS Markdown 笔记应用，基于 Electron + React 构建，采用本地文件存储，让你的笔记永远属于自己。
+A clean, focused Markdown writing app for macOS. Built with Electron + React, stored as local files — your notes stay yours.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)
 ![Electron](https://img.shields.io/badge/Electron-40.x-9fe2bf.svg)
 ![React](https://img.shields.io/badge/React-19.x-61dafb.svg)
 
-## 特性
+## Features
 
-### 📝 即时渲染编辑器
-- 所见即所得的 Markdown 编辑体验
-- 支持粗体、斜体、列表、链接等常用格式
-- 点击预览区即可快速进入编辑模式
+### Live Markdown Editor
+- WYSIWYG editing powered by [Milkdown](https://milkdown.dev/) (ProseMirror-based)
+- Code blocks with syntax highlighting via CodeMirror 6
+- GFM support: tables, task lists, strikethrough
+- Auto-save with 800ms debounce
 
-### 🏷️ 智能标签系统
-- 通过 YAML Frontmatter 管理笔记元数据
-- 支持多标签分类，快速筛选笔记
-- 预置 Work / Personal / Ideas / Projects 标签
+### Document Outline
+- Floating outline rail on the right side, always visible while scrolling
+- Hover to expand the full heading tree
+- Click to navigate; active heading indicator follows your scroll position
 
-### 💾 本地文件存储
-- 笔记以标准 Markdown 文件格式存储在本地
-- 存储位置：`~/Documents/Notes/`
-- 完全拥有你的数据，可随时导出或同步
+### Quick Open
+- `Cmd+P` to fuzzy-search notes by title, filename, or content
+- Recent documents shown by default
 
-### ⚡ 自动保存
-- 智能自动保存，默认 30 秒间隔
-- 可在设置中自定义保存间隔
-- 无需担心数据丢失
+### Export
+- **PDF** — `Cmd+Shift+E`, with configurable page size, headers, and page numbers
+- **PNG Image** — full-page screenshot export via menu bar
 
-### 🎯 三栏布局
-- 左侧：导航栏，支持文件夹和标签筛选
-- 中间：笔记列表，快速预览和选择
-- 右侧：编辑器，沉浸写作体验
+### Local-first Storage
+- Notes stored as standard `.md` files in a folder you choose
+- Existing YAML frontmatter is preserved and read when present
+- Portable — move, sync, or version-control your notes folder however you like
 
-### 🎨 精美界面
-- 遵循 macOS 设计规范
-- 隐藏式标题栏，更加沉浸
-- 精心设计的配色和间距
+### Appearance
+- macOS-native vibrancy and hidden title bar
+- Light / Dark / System theme support
+- Custom font family setting
+- Window opens only after content renders (no blank flash)
 
-## 技术栈
+## Tech Stack
 
-- **框架**: Electron 40.x + React 19.x
-- **构建工具**: Vite 7.x
-- **Markdown 渲染**: Remark + remark-gfm + remark-html
-- **Frontmatter 解析**: gray-matter
-- **日期处理**: date-fns
-- **图标**: Lucide React
+| Layer | Technology |
+|-------|-----------|
+| Framework | Electron 40 + React 19 |
+| Build | Vite 7 + TypeScript 5.9 |
+| Editor | Milkdown 7 (ProseMirror) + CodeMirror 6 |
+| Markdown | remark + remark-gfm + remark-html |
+| Frontmatter | gray-matter |
+| Icons | Lucide React |
 
-## 安装与运行
+## Getting Started
 
-### 环境要求
+### Requirements
 - Node.js >= 18
 - npm >= 9
 - macOS 10.15+
 
-### 开发模式
+### Development
 
 ```bash
-# 克隆仓库
-git clone <repository-url>
+git clone https://github.com/DylanDDeng/notely.git
 cd notes-app
 
-# 安装依赖
 npm install
 
-# 启动开发服务器
+# Start dev server + Electron
 npm run electron:dev
 ```
 
-### 打包发布
+### Build & Package
 
 ```bash
-# 构建生产版本
-npm run build
-
-# 打包为 dmg 安装包
+# Type-check, build, and package as dmg
 npm run dist
 ```
 
-打包后的应用位于 `release/` 目录。
+Output goes to `release/`.
 
-## 项目结构
+## Project Structure
 
 ```
 notes-app/
-├── electron/                 # Electron 主进程
-│   ├── main.cjs             # 主进程入口
-│   └── preload.cjs          # 预加载脚本
+├── electron/
+│   ├── main.cjs              # Main process, IPC handlers, menu, export
+│   └── preload.cjs            # Context bridge for renderer
 ├── src/
-│   ├── components/          # React 组件
-│   │   ├── Sidebar/         # 左侧边栏
-│   │   ├── NotesList/       # 笔记列表
-│   │   ├── Editor/          # Markdown 编辑器
-│   │   └── Settings/        # 设置页面
-│   ├── utils/
-│   │   └── noteUtils.js     # 笔记工具函数
-│   ├── styles/              # 全局样式
-│   ├── App.jsx              # 主应用组件
-│   └── main.jsx             # 渲染进程入口
+│   ├── components/
+│   │   ├── Editor/            # Milkdown editor, code block view, outline
+│   │   ├── QuickOpen/         # Cmd+P note search
+│   │   ├── Settings/          # Preferences UI
+│   ├── utils/                 # Note parsing, path helpers
+│   ├── types/                 # TypeScript interfaces
+│   ├── styles/                # Global CSS
+│   ├── App.tsx                # Root component, state management
+│   └── main.tsx               # Renderer entry
 ├── package.json
-└── vite.config.js
+└── vite.config.ts
 ```
 
-## 使用指南
+## Keyboard Shortcuts
 
-### 创建笔记
-- 点击左下角 "+ New Note" 按钮
-- 或使用快捷键（开发中）
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+N` | New document (new window) |
+| `Cmd+S` | Save |
+| `Cmd+Shift+S` | Save As |
+| `Cmd+P` | Quick Open |
+| `Cmd+Shift+E` | Export PDF |
+| `Cmd+Shift+L` | Toggle outline |
+| `Cmd+Shift+O` | Open folder |
+| `Cmd+,` | Preferences |
 
-### 编辑笔记
-1. 在中间列表选择笔记
-2. 点击右侧预览区域进入编辑模式
-3. 使用底部工具栏插入 Markdown 格式
-4. 支持直接输入 Markdown 语法
-
-### 添加标签
-在编辑器中输入标签名称，按回车确认。标签会保存在笔记的 Frontmatter 中：
-
-```markdown
----
-title: 笔记标题
-date: 2026-02-02T14:30:00.000Z
-tags:
-  - Work
-  - Ideas
----
-```
-
-### 筛选笔记
-- **All Notes**: 查看所有笔记
-- **Favorites**: 收藏笔记（标记 favorite 标签）
-- **Archive**: 归档笔记
-- **Tags**: 按标签筛选
-
-## 开发计划
-
-- [x] 基础三栏布局
-- [x] Markdown 即时渲染编辑器
-- [x] 本地文件存储
-- [x] Frontmatter 标签系统
-- [x] 自动保存
-- [x] 设置页面框架
-- [ ] 深色模式
-- [ ] 全局快捷键
-- [ ] 全文搜索
-- [ ] 图片粘贴与上传
-- [ ] 笔记导出（PDF/HTML）
-- [ ] iCloud 同步支持
-- [ ] 插件系统
-
-## 截图
-
-![Main Interface](./screenshots/main.png)
-*主界面 - 三栏布局*
-
-![Settings](./screenshots/settings.png)
-*设置页面*
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 许可证
+## License
 
 [MIT](./LICENSE)
-
----
-
-Made with ❤️ for macOS users

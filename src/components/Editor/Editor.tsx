@@ -5,12 +5,11 @@ import './Editor.css';
 
 interface EditorProps {
   note: EditorNote | null;
-  onSave: (note: SaveNoteData) => Promise<void>;
+  onSave: (note: SaveNoteData) => Promise<boolean>;
   onContentChange?: (content: string) => void;
   onRegisterExportHtmlGetter?: (getter: (() => string) | null) => void;
   isLoading: boolean;
   outlineToggleKey?: number;
-  saveRequestKey?: number;
 }
 
 interface OutlineItem {
@@ -34,7 +33,6 @@ function Editor({
   onRegisterExportHtmlGetter,
   isLoading,
   outlineToggleKey = 0,
-  saveRequestKey = 0,
 }: EditorProps) {
   const [content, setContent] = useState('');
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([]);
@@ -176,11 +174,6 @@ function Editor({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [lightboxSrc]);
-
-  useEffect(() => {
-    if (saveRequestKey === 0) return;
-    void flushSave(note, true);
-  }, [flushSave, note, saveRequestKey]);
 
   const handleOpenImagePreview = useCallback((src: string) => {
     setLightboxSrc(src);

@@ -57,10 +57,6 @@ function sanitizeCssFontFamily(value) {
     .trim();
 }
 
-function stripNullChars(value) {
-  return String(value || '').replace(/\0/g, '').trim();
-}
-
 function fileUrlToPath(value) {
   try {
     return decodeURI(new URL(value).pathname).replace(/^\/([A-Za-z]:\/)/, '$1');
@@ -146,54 +142,6 @@ async function inlineLocalImagesInHtml(html, baseDir) {
   }
 
   return result;
-}
-
-function extractImagePathFromClipboardEntries(entries) {
-  const prioritized = [...entries].sort((a, b) => {
-    const score = (format) => {
-      if (/file-url/i.test(format)) return 0;
-      if (/NSFilenamesPboardType|filenames/i.test(format)) return 1;
-      if (/public\.url|text\/uri-list/i.test(format)) return 2;
-      if (/text\/plain|public\.utf8-plain-text/i.test(format)) return 3;
-      return 10;
-    };
-    return score(a.format) - score(b.format);
-  });
-
-  for (const entry of prioritized) {
-    const textCandidates = [entry.value, entry.utf8]
-      .filter((value) => typeof value === 'string' && value.length > 0)
-      .map(stripNullChars)
-      .filter(Boolean);
-
-    for (const candidate of textCandidates) {
-      const fileUrlMatch = candidate.match(/file:\/\/[^\s]+/i);
-      if (fileUrlMatch) {
-        const filePath = fileUrlToPath(fileUrlMatch[0]);
-        if (filePath && isLikelyImagePath(filePath)) return filePath;
-      }
-
-      const absolutePathMatch = candidate.match(/(?:\/Users\/|\/Volumes\/|\/private\/|\/tmp\/)[^\s]+/);
-      if (absolutePathMatch && isLikelyImagePath(absolutePathMatch[0])) {
-        return absolutePathMatch[0];
-      }
-
-      const windowsPathMatch = candidate.match(/[A-Za-z]:[\\/][^\s]+/);
-      if (windowsPathMatch && isLikelyImagePath(windowsPathMatch[0])) {
-        return windowsPathMatch[0];
-      }
-    }
-  }
-
-  return null;
-}
-
-function sanitizeFilename(name) {
-  return String(name || 'pasted-image')
-    .replace(/[\\/:*?"<>|]/g, '-')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 function buildNoteExportHtml({ title, dateText, bodyHtml, includeTitle, includeDate, includeHeader, fontFamily, baseHref }) {
@@ -524,8 +472,6 @@ async function createWindow(options = {}) {
   await mainWindow.loadURL(buildWindowUrl(fileUrl, options));
 }
 
-ipcMain.handle('notes:getStoragePath', async () => currentNotesDir);
-
 ipcMain.handle('notes:setStoragePath', async (_event, newPath) => {
   try {
     if (newPath && String(newPath).trim() !== '') {
@@ -568,16 +514,6 @@ ipcMain.handle('notes:getAll', async () => {
   } catch (err) {
     console.error('Failed to get notes:', err);
     return [];
-  }
-});
-
-ipcMain.handle('notes:read', async (_event, filename) => {
-  try {
-    const filepath = path.join(currentNotesDir, filename);
-    const content = await fs.readFile(filepath, 'utf-8');
-    return { success: true, content };
-  } catch (err) {
-    return { success: false, error: err?.message || String(err) };
   }
 });
 
@@ -642,17 +578,6 @@ ipcMain.handle('notes:saveAs', async (_event, { suggestedFilename, content } = {
       filename: path.basename(outPath),
       directory: currentNotesDir,
     };
-  } catch (err) {
-    return { success: false, error: err?.message || String(err) };
-  }
-});
-
-ipcMain.handle('notes:create', async (_event, { filename, content } = {}) => {
-  try {
-    await ensureNotesDir();
-    const filepath = path.join(currentNotesDir, filename);
-    await fs.writeFile(filepath, content, 'utf-8');
-    return { success: true };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
   }
@@ -898,123 +823,6 @@ ipcMain.handle('clipboard:writeText', async (_event, text) => {
   }
 });
 
-ipcMain.handle('clipboard:getDebugPayload', async () => {
-  try {
-    const formats = clipboard.availableFormats();
-    const entries = formats.map((format) => {
-      try {
-        const text = clipboard.read(format);
-        if (text) {
-          return {
-            format,
-            kind: 'text',
-            value: text,
-          };
-        }
-      } catch {
-        // fall through to buffer read
-      }
-
-      try {
-        const buffer = clipboard.readBuffer(format);
-        return {
-          format,
-          kind: 'buffer',
-          utf8: buffer.toString('utf8'),
-          hexPreview: buffer.toString('hex').slice(0, 256),
-        };
-      } catch (err) {
-        return {
-          format,
-          kind: 'error',
-          error: err?.message || String(err),
-        };
-      }
-    });
-
-    return { success: true, formats: entries };
-  } catch (err) {
-    return { success: false, error: err?.message || String(err) };
-  }
-});
-
-ipcMain.handle('clipboard:getLocalImagePath', async () => {
-  try {
-    const formats = clipboard.availableFormats();
-    const entries = formats.map((format) => {
-      try {
-        const text = clipboard.read(format);
-        if (text) {
-          return { format, value: text };
-        }
-      } catch {
-        // ignore and try buffer
-      }
-
-      try {
-        const buffer = clipboard.readBuffer(format);
-        return { format, utf8: buffer.toString('utf8') };
-      } catch {
-        return { format };
-      }
-    });
-
-    const filePath = extractImagePathFromClipboardEntries(entries);
-    return {
-      success: Boolean(filePath),
-      filePath: filePath || undefined,
-    };
-  } catch (err) {
-    return { success: false, error: err?.message || String(err) };
-  }
-});
-
-ipcMain.handle('media:saveClipboardImageAsset', async (_event, data) => {
-  try {
-    await ensureNotesDir();
-
-    const dataUrl = typeof data?.dataUrl === 'string' ? data.dataUrl : '';
-    const suggestedName = typeof data?.suggestedName === 'string' ? data.suggestedName : 'pasted-image';
-    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) {
-      return { success: false, error: 'Invalid image data URL' };
-    }
-
-    const mimeType = match[1];
-    const base64 = match[2];
-    const ext = ({
-      'image/png': '.png',
-      'image/jpeg': '.jpg',
-      'image/gif': '.gif',
-      'image/webp': '.webp',
-      'image/svg+xml': '.svg',
-      'image/bmp': '.bmp',
-      'image/x-icon': '.ico',
-      'image/avif': '.avif',
-    })[mimeType];
-
-    if (!ext) {
-      return { success: false, error: `Unsupported image type: ${mimeType}` };
-    }
-
-    const assetDir = path.join(currentNotesDir, '.notely-assets');
-    await fs.mkdir(assetDir, { recursive: true });
-
-    const baseName = sanitizeFilename(path.basename(suggestedName, path.extname(suggestedName)) || 'pasted-image');
-    const filename = `${baseName || 'pasted-image'}-${Date.now()}${ext}`;
-    const filePath = path.join(assetDir, filename);
-    const buffer = Buffer.from(base64, 'base64');
-    await fs.writeFile(filePath, buffer);
-
-    return {
-      success: true,
-      filePath,
-    };
-  } catch (err) {
-    return { success: false, error: err?.message || String(err) };
-  }
-});
-
 ipcMain.handle('media:resolveLocalImage', async (_event, filePath) => {
   try {
     const rawPath = typeof filePath === 'string' ? filePath.trim() : '';
@@ -1050,8 +858,6 @@ function buildApplicationMenu(mainWindow) {
     ...(isMac ? [{
       label: app.name,
       submenu: [
-        { label: `About ${app.name}`, click: () => send('about') },
-        { type: 'separator' },
         { label: 'Preferences…', accelerator: 'CmdOrCtrl+,', click: () => send('open-settings') },
         { type: 'separator' },
         { role: 'hide' },
@@ -1087,8 +893,6 @@ function buildApplicationMenu(mainWindow) {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
-        { type: 'separator' },
-        { label: 'Find', accelerator: 'CmdOrCtrl+F', click: () => send('find') },
       ],
     },
     {
@@ -1096,39 +900,8 @@ function buildApplicationMenu(mainWindow) {
       submenu: [
         { label: 'Toggle Outline', accelerator: 'CmdOrCtrl+Shift+L', click: () => send('toggle-outline') },
         { type: 'separator' },
-        { label: 'Actual Size', accelerator: 'CmdOrCtrl+0', click: () => send('zoom-reset') },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => send('zoom-in') },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => send('zoom-out') },
-        { type: 'separator' },
         { role: 'togglefullscreen' },
         { role: 'toggleDevTools' },
-      ],
-    },
-    {
-      label: 'Format',
-      submenu: [
-        { label: 'Bold', accelerator: 'CmdOrCtrl+B', click: () => send('format-bold') },
-        { label: 'Italic', accelerator: 'CmdOrCtrl+I', click: () => send('format-italic') },
-        { label: 'Strikethrough', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('format-strikethrough') },
-        { label: 'Inline Code', accelerator: 'CmdOrCtrl+Shift+`', click: () => send('format-inline-code') },
-        { type: 'separator' },
-        { label: 'Hyperlink', accelerator: 'CmdOrCtrl+K', click: () => send('format-link') },
-        { label: 'Image', accelerator: 'CmdOrCtrl+Shift+I', click: () => send('format-image') },
-        { type: 'separator' },
-        { label: 'Heading 1', accelerator: 'CmdOrCtrl+1', click: () => send('format-heading-1') },
-        { label: 'Heading 2', accelerator: 'CmdOrCtrl+2', click: () => send('format-heading-2') },
-        { label: 'Heading 3', accelerator: 'CmdOrCtrl+3', click: () => send('format-heading-3') },
-        { label: 'Heading 4', accelerator: 'CmdOrCtrl+4', click: () => send('format-heading-4') },
-        { label: 'Heading 5', accelerator: 'CmdOrCtrl+5', click: () => send('format-heading-5') },
-        { label: 'Heading 6', accelerator: 'CmdOrCtrl+6', click: () => send('format-heading-6') },
-        { label: 'Paragraph', accelerator: 'CmdOrCtrl+0', click: () => send('format-heading-0') },
-        { type: 'separator' },
-        { label: 'Unordered List', accelerator: 'CmdOrCtrl+L', click: () => send('format-ul') },
-        { label: 'Ordered List', click: () => send('format-ol') },
-        { label: 'Blockquote', accelerator: 'CmdOrCtrl+Shift+B', click: () => send('format-blockquote') },
-        { label: 'Code Block', accelerator: 'CmdOrCtrl+Shift+K', click: () => send('format-code-block') },
-        { type: 'separator' },
-        { label: 'Horizontal Rule', accelerator: 'CmdOrCtrl+Shift+H', click: () => send('format-hr') },
       ],
     },
     {
@@ -1140,12 +913,6 @@ function buildApplicationMenu(mainWindow) {
           { type: 'separator' },
           { role: 'front' },
         ] : []),
-      ],
-    },
-    {
-      label: 'Help',
-      submenu: [
-        { label: `${app.name} Help`, click: () => send('help') },
       ],
     },
   ];
