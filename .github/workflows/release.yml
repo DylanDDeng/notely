@@ -112,7 +112,22 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
-          mapfile -d '' FILES < <(find release-artifacts -type f -print0 | sort -z)
+          mkdir -p release-upload
+
+          while IFS= read -r -d '' FILE; do
+            RELATIVE_PATH="${FILE#release-artifacts/}"
+            ARTIFACT_DIR="${RELATIVE_PATH%%/*}"
+            BASENAME="$(basename "$FILE")"
+            TARGET="release-upload/$BASENAME"
+
+            if [ -e "$TARGET" ]; then
+              TARGET="release-upload/${ARTIFACT_DIR}-${BASENAME}"
+            fi
+
+            cp "$FILE" "$TARGET"
+          done < <(find release-artifacts -type f -print0 | sort -z)
+
+          mapfile -d '' FILES < <(find release-upload -type f -print0 | sort -z)
 
           if [ "${#FILES[@]}" -eq 0 ]; then
             echo "No packaged artifacts found."
