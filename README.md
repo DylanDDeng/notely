@@ -106,7 +106,7 @@ notes-app/
 | `Cmd+P` | Quick Open |
 | `Cmd+Shift+E` | Export PDF |
 | `Cmd+Shift+L` | Toggle outline |
-| `Cmd+Shift+O` | Open folder |
+| `Cmd+O` | Open Markdown File |
 
 ## License
 

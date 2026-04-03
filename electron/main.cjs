@@ -493,7 +493,7 @@ ipcMain.handle('notes:getAll', async () => {
     if (!currentNotesDir) return [];
     await ensureNotesDir();
     const files = await fs.readdir(currentNotesDir);
-    const mdFiles = files.filter((file) => file.endsWith('.md'));
+    const mdFiles = files.filter((file) => file.match(/\.(md|markdown)$/i));
 
     const notes = await Promise.all(
       mdFiles.map(async (filename) => {
@@ -501,7 +501,7 @@ ipcMain.handle('notes:getAll', async () => {
         const stat = await fs.stat(filepath);
         const content = await fs.readFile(filepath, 'utf-8');
         return {
-          id: filename.replace(/\.md$/i, ''),
+          id: filename.replace(/\.(md|markdown)$/i, ""),
           filename,
           filepath,
           content,
@@ -809,6 +809,41 @@ ipcMain.handle('notes:exportImage', async (_event, data) => {
   }
 });
 
+ipcMain.handle('notes:openFile', async () => {
+  try {
+    const result = await dialog.showOpenDialog({
+      title: 'Open Markdown File',
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    const stat = await fs.stat(filePath);
+    const content = await fs.readFile(filePath, 'utf-8');
+
+    currentNotesDir = path.dirname(filePath);
+
+    return {
+      success: true,
+      directory: currentNotesDir,
+      note: {
+        id: path.basename(filePath).replace(/\.(md|markdown)$/i, ""),
+        filename: path.basename(filePath),
+        filepath: filePath,
+        content,
+        modifiedAt: stat.mtime.toISOString(),
+        createdAt: stat.birthtime.toISOString(),
+      },
+    };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+});
+
 ipcMain.handle('settings:selectDirectory', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
@@ -879,7 +914,7 @@ function buildApplicationMenu(mainWindow) {
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => send('save-note') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => send('save-note-as') },
         { type: 'separator' },
-        { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: () => send('open-folder') },
+        { label: 'Open Markdown File…', accelerator: 'CmdOrCtrl+O', click: () => send('open-file') },
         { type: 'separator' },
         { label: 'Export PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send('export-pdf') },
         { label: 'Export Image…', click: () => send('export-image') },
