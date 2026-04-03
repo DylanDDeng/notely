@@ -21,6 +21,14 @@ export interface RawNote {
   createdAt: string;
 }
 
+export interface OpenMarkdownFileResult {
+  success: boolean;
+  canceled?: boolean;
+  note?: RawNote;
+  directory?: string;
+  error?: string;
+}
+
 export interface ExportPdfOptions {
   pageSize: 'A4' | 'Letter';
   orientation: 'portrait' | 'landscape';
@@ -116,6 +124,7 @@ export interface SettingsMenuItem {
 export interface ElectronAPI {
   setStoragePath: (path: string) => Promise<{ success: boolean; path?: string; error?: string }>;
   getAllNotes: () => Promise<RawNote[]>;
+  openMarkdownFile?: () => Promise<OpenMarkdownFileResult>;
   saveNote: (data: { filename: string; content: string; preserveModifiedAt?: boolean }) => Promise<{ success: boolean; error?: string }>;
   saveNoteAs?: (data: { suggestedFilename: string; content: string }) => Promise<{ success: boolean; canceled?: boolean; filepath?: string; filename?: string; directory?: string; error?: string }>;
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
