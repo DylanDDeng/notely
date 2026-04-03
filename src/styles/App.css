@@ -22,15 +22,6 @@
   background: transparent;
 }
 
-.app-settings {
-  width: 100%;
-}
-
-.app-settings > .settings {
-  flex: 1;
-  min-width: 0;
-}
-
 .app-main > .editor {
   min-height: 0;
 }
