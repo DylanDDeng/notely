@@ -2,6 +2,12 @@
   "name": "notes-app",
   "private": true,
   "version": "0.1.2",
+  "description": "A clean, focused Markdown writing app for macOS with local-first file storage.",
+  "author": "Dylan Deng",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DylanDDeng/notely.git"
+  },
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
