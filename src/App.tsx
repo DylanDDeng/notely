@@ -138,6 +138,7 @@ function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpeningFolder, setIsOpeningFolder] = useState(false);
   const [recentNoteIds, setRecentNoteIds] = useState<string[]>(() => getSavedRecentNoteIds());
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
@@ -229,10 +230,11 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (isOpeningFolder) return;
     if (selectedNoteId) return;
     if (draftNote) return;
     setDraftNote(createDraftNote());
-  }, [draftNote, selectedNoteId]);
+  }, [draftNote, isOpeningFolder, selectedNoteId]);
 
   useEffect(() => {
     if (!selectedNoteId) return;
@@ -565,9 +567,14 @@ function App() {
 
     const nextPath = result.path || selectedPath;
     activeDirectoryRef.current = nextPath;
+    setIsOpeningFolder(true);
     setSelectedNoteId(null);
     setDraftNote(null);
-    await loadNotes();
+    try {
+      await loadNotes();
+    } finally {
+      setIsOpeningFolder(false);
+    }
   }, [loadNotes]);
 
   useEffect(() => {
