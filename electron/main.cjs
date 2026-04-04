@@ -939,6 +939,8 @@ function buildApplicationMenu(mainWindow) {
       submenu: [
         { label: 'Toggle Outline', accelerator: 'CmdOrCtrl+Shift+L', click: () => send('toggle-outline') },
         { type: 'separator' },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => send('open-settings') },
+        { type: 'separator' },
         { role: 'togglefullscreen' },
         { role: 'toggleDevTools' },
       ],

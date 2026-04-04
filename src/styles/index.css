@@ -69,11 +69,11 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 136, 121, 0.38);
+  background: var(--scrollbar-thumb, rgba(148, 136, 121, 0.38));
   border: 2px solid transparent;
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(112, 102, 89, 0.48);
+  background: var(--scrollbar-thumb-hover, rgba(112, 102, 89, 0.48));
 }

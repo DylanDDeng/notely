@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor/Editor';
 import { generateFilename, generateNoteContent, parseNote } from './utils/noteUtils';
-import type { EditorNote, Note, RawNote, SaveNoteData } from './types';
+import type { EditorNote, Note, SaveNoteData } from './types';
 import './styles/App.css';
 
+
 const QuickOpen = lazy(() => import('./components/QuickOpen/QuickOpen'));
+const Settings = lazy(() => import('./components/Settings/Settings'));
 const RECENT_NOTE_IDS_KEY = 'notes:recentNoteIds';
 const UNSAVED_DRAFT_KEY = 'notes:unsavedDraft';
 
@@ -137,11 +139,14 @@ function App() {
   const draftStorageKey = useMemo(() => getWindowDraftStorageKey(), []);
   const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [recentNoteIds, setRecentNoteIds] = useState<string[]>(() => getSavedRecentNoteIds());
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [storagePath, setStoragePath] = useState('');
+  const [fontFamily, setFontFamily] = useState('');
   const [draftNote, setDraftNote] = useState<EditorNote | null>(() => {
     if (isNewDocumentWindow()) return createDraftNote();
     return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
@@ -587,6 +592,9 @@ function App() {
         case 'toggle-outline':
           setOutlineToggleKey((prev) => prev + 1);
           break;
+        case 'open-settings':
+          setIsSettingsOpen(true);
+          break;
         default:
           break;
       }
@@ -594,6 +602,35 @@ function App() {
 
     return unsubscribe;
   }, [exportCurrentDocument, exportCurrentDocumentAsImage, handleCreateNote, handleOpenMarkdownFile, saveCurrentDocument, saveCurrentDocumentAs]);
+
+  // Settings handlers
+  const handleChangeStoragePath = useCallback(async (path: string) => {
+    setStoragePath(path);
+    const result = await window.electronAPI.setStoragePath(path);
+    if (result.success && result.path) {
+      // Refresh notes from new location
+      const rawNotes = await window.electronAPI.getAllNotes();
+      const parsedNotes: Note[] = rawNotes.map((n) => {
+        const parsed = parseNote(n.content, n.filename);
+        return {
+          ...n,
+          ...parsed,
+          modifiedAt: new Date(n.modifiedAt),
+          createdAt: new Date(n.createdAt),
+        };
+      });
+      setNotes(parsedNotes);
+    }
+  }, []);
+
+  const handleChangeFontFamily = useCallback((family: string) => {
+    setFontFamily(family);
+    if (family) {
+      document.documentElement.style.setProperty('--app-font-family', family);
+    } else {
+      document.documentElement.style.removeProperty('--app-font-family');
+    }
+  }, []);
 
   const recentNotes = useMemo(
     () =>
@@ -670,6 +707,19 @@ function App() {
             onSelectNote={handleSelectNote}
             onClose={() => setIsQuickOpenOpen(false)}
           />
+        </Suspense>
+      )}
+      {isSettingsOpen && (
+        <Suspense fallback={null}>
+          <div className="settings-overlay">
+            <Settings
+              onBack={() => setIsSettingsOpen(false)}
+              storagePath={storagePath}
+              onChangeStoragePath={handleChangeStoragePath}
+              fontFamily={fontFamily}
+              onChangeFontFamily={handleChangeFontFamily}
+            />
+          </div>
         </Suspense>
       )}
     </div>

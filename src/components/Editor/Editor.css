@@ -11,17 +11,19 @@
   --editor-prose-max-width: 780px;
   --editor-prose-padding: clamp(28px, 6vw, 72px);
   --editor-tail-space: 34vh;
-  --editor-bg: #f5f4ef;
-  --editor-surface: #fbf8f2;
-  --editor-surface-subtle: #f1ece3;
-  --editor-text: #141413;
-  --editor-text-muted: #87867f;
-  --editor-border: #ddd5c7;
-  --editor-border-subtle: #e8e1d4;
-  --editor-accent: #d97757;
+  /* Theme variables - these will be overridden by the active theme */
+  --editor-bg: var(--surface-canvas);
+  --editor-surface: var(--surface-paper);
+  --editor-surface-subtle: var(--surface-paper-strong);
+  --editor-text: var(--surface-ink);
+  --editor-text-muted: var(--text-secondary);
+  --editor-border: var(--surface-line);
+  --editor-border-subtle: var(--glass-border);
+  --editor-accent: var(--accent-primary);
   --editor-selection: rgba(217, 119, 87, 0.22);
-  --editor-code-surface: #fcfbf8;
-  --editor-code-border: #ddd7cc;
+  --editor-code-surface: var(--surface-paper);
+  --editor-code-border: var(--glass-border);
+  --editor-code-label: var(--text-secondary);
 }
 
 .editor-container {
@@ -213,28 +215,28 @@
 
 .editor-milkdown-root .ProseMirror strong {
   font-weight: 600;
-  color: rgb(193, 95, 60);
+  color: var(--editor-strong-color, rgb(193, 95, 60));
 }
 
 .editor-milkdown-root .ProseMirror a {
-  color: #8b5e3c;
+  color: var(--editor-link-color, #8b5e3c);
   text-decoration: none;
-  border-bottom: 1px solid rgba(139, 94, 60, 0.28);
+  border-bottom: 1px solid var(--editor-link-color, rgba(139, 94, 60, 0.28));
 }
 
 .editor-milkdown-root .ProseMirror code {
-  background: #f4efe8;
-  color: #a34832;
+  background: var(--editor-inline-code-bg, #f4efe8);
+  color: var(--editor-inline-code-color, #a34832);
   padding: 2px 7px;
   border-radius: 7px;
   font-size: 0.875em;
   font-family: "JetBrains Mono", "SF Mono", Menlo, Monaco, monospace;
-  border: 1px solid rgba(221, 215, 204, 0.9);
+  border: 1px solid var(--editor-code-border, rgba(221, 215, 204, 0.9));
 }
 
 .editor-milkdown-root .ProseMirror pre {
   background: var(--editor-code-surface);
-  color: #2f2924;
+  color: var(--editor-text);
   padding: 14px 18px 16px;
   border-radius: 10px;
   border: 1px solid var(--editor-code-border);
@@ -518,7 +520,7 @@
 }
 
 .editor-milkdown-root .ProseMirror blockquote {
-  border-left: 3px solid rgba(217, 119, 87, 0.45);
+  border-left: 3px solid var(--editor-blockquote-border, rgba(217, 119, 87, 0.45));
   padding-left: 16px;
   margin: 1em 0;
   color: var(--editor-text-muted);
@@ -545,7 +547,7 @@
 .editor-milkdown-root .ProseMirror th,
 .editor-milkdown-root .ProseMirror td {
   border: none;
-  border-bottom: 1px solid var(--editor-border);
+  border-bottom: 1px solid var(--editor-table-border, var(--editor-border));
   padding: 10px 16px 10px 0;
   text-align: left;
   vertical-align: middle;
@@ -558,7 +560,7 @@
 }
 
 .editor-milkdown-root .ProseMirror td {
-  color: #45413b;
+  color: var(--text-secondary);
 }
 
 .editor-milkdown-root .ProseMirror th:last-child,
@@ -628,11 +630,13 @@
   width: 14px;
   height: 2px;
   border-radius: 999px;
-  background: rgba(100, 91, 77, 0.22);
+  background: var(--editor-outline-border, rgba(100, 91, 77, 0.22));
+  opacity: 0.6;
 }
 
 .editor-outline-rail-line.active {
-  background: rgba(67, 73, 79, 0.72);
+  background: var(--editor-outline-active-text, rgba(67, 73, 79, 0.72));
+  opacity: 1;
 }
 
 .editor-outline-card {
@@ -644,11 +648,11 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(120, 102, 76, 0.12);
+  border: 1px solid var(--editor-outline-border, rgba(120, 102, 76, 0.12));
   border-radius: 18px;
-  background: #f0eee6;
+  background: var(--editor-outline-bg, #f0eee6);
   backdrop-filter: blur(12px);
-  box-shadow: 0 18px 48px rgba(48, 38, 26, 0.12);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
   opacity: 0;
   visibility: hidden;
   transform: translateY(8px) scale(0.98);
@@ -668,8 +672,8 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(100, 91, 77, 0.72);
-  border-bottom: 1px solid rgba(120, 102, 76, 0.08);
+  color: var(--editor-text-muted);
+  border-bottom: 1px solid var(--editor-outline-border, rgba(120, 102, 76, 0.08));
 }
 
 .editor-outline-empty {
@@ -691,7 +695,7 @@
   width: 100%;
   border: 1px solid transparent;
   background: transparent;
-  color: rgba(67, 73, 79, 0.86);
+  color: var(--editor-outline-text, rgba(67, 73, 79, 0.86));
   text-align: left;
   font-size: 13px;
   line-height: 1.4;
@@ -704,15 +708,15 @@
 }
 
 .editor-outline-item:hover {
-  background: rgba(255, 255, 255, 0.6);
-  border-color: rgba(120, 102, 76, 0.1);
-  color: #1f2732;
+  background: var(--editor-outline-active-bg, rgba(255, 255, 255, 0.6));
+  border-color: var(--editor-outline-border, rgba(120, 102, 76, 0.1));
+  color: var(--editor-outline-active-text, #1f2732);
 }
 
 .editor-outline-item.active {
-  background: rgba(255, 252, 247, 0.92);
-  border-color: rgba(120, 102, 76, 0.16);
-  color: #1f2732;
+  background: var(--editor-outline-active-bg, rgba(255, 252, 247, 0.92));
+  border-color: var(--editor-outline-border, rgba(120, 102, 76, 0.16));
+  color: var(--editor-outline-active-text, #1f2732);
   font-weight: 600;
 }
 
@@ -740,7 +744,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(243, 236, 226, 0.92);
+  background: var(--surface-paper);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -759,8 +763,8 @@
   position: absolute;
   top: 18px;
   right: 18px;
-  border: 1px solid rgba(120, 102, 76, 0.12);
-  background: rgba(255, 252, 247, 0.96);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
   color: var(--text-secondary);
   border-radius: 999px;
   padding: 9px 14px;

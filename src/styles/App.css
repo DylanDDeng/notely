@@ -3,7 +3,7 @@
   height: 100vh;
   overflow: hidden;
   position: relative;
-  background: #faf9f5;
+  background: var(--surface-canvas, #faf9f5);
 }
 
 .app::before {
@@ -33,4 +33,24 @@ select,
 .nav-item,
 .note-card {
   -webkit-app-region: no-drag;
+}
+
+/* Settings Overlay */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--surface-canvas, #faf9f5);
+  animation: settingsFadeIn 0.2s ease;
+}
+
+@keyframes settingsFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
