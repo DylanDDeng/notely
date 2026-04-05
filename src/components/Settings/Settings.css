@@ -1,50 +1,103 @@
-/* Settings - Desk Drawer Style */
-/* Like opening a notebook to adjust your writing environment */
+/* Settings Modal - Floating Paper Card */
+/* A true modal dialog that floats above the editor */
 
-.settings {
-  width: 100%;
-  height: 100%;
+/* Overlay backdrop */
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px 24px;
-  background: var(--surface-canvas);
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal container */
+.settings-modal {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 80px);
+  background: var(--surface-paper);
+  border-radius: 20px;
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.02),
+    0 4px 12px rgba(0, 0, 0, 0.04),
+    0 16px 32px rgba(0, 0, 0, 0.06),
+    0 32px 64px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Close button */
+.settings-modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 10;
+}
+
+.settings-modal-close:hover {
+  background: var(--surface-paper-strong);
+  color: var(--text-primary);
+}
+
+/* Modal content wrapper */
+.settings-modal-content {
+  max-height: calc(100vh - 80px);
   overflow-y: auto;
 }
 
-/* Floating Paper Card */
-.settings-paper {
-  width: 100%;
-  max-width: 520px;
-  background: var(--surface-paper);
-  border-radius: 16px;
-  box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.02),
-    0 4px 8px rgba(0, 0, 0, 0.03),
-    0 12px 24px rgba(0, 0, 0, 0.04),
-    0 24px 48px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--glass-border);
-  position: relative;
-}
-
-/* Subtle paper texture overlay */
-.settings-paper::before {
+/* Subtle paper texture */
+.settings-modal-content::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 16px;
+  border-radius: 20px;
   background: 
     repeating-linear-gradient(
       0deg,
       transparent,
       transparent 24px,
-      rgba(0, 0, 0, 0.01) 25px
+      rgba(0, 0, 0, 0.008) 25px
     );
   pointer-events: none;
 }
 
 /* Header */
-.settings-header {
+.settings-modal-header {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -90,7 +143,7 @@
 
 /* Section */
 .settings-section {
-  padding: 8px 0;
+  padding: 4px 0;
 }
 
 .settings-section-title {
@@ -139,7 +192,9 @@
 }
 
 .theme-swatch:hover .swatch-colors {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 
+    0 0 0 2px var(--glass-border),
+    0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .theme-swatch.active .swatch-colors {
@@ -147,14 +202,14 @@
 }
 
 .swatch-colors {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   position: relative;
   overflow: hidden;
   box-shadow: 
     inset 0 1px 2px rgba(255, 255, 255, 0.3),
-    0 1px 3px rgba(0, 0, 0, 0.08);
+    0 2px 4px rgba(0, 0, 0, 0.06);
   transition: box-shadow 0.2s ease;
 }
 
@@ -180,11 +235,11 @@
   position: absolute;
   bottom: 6px;
   right: 6px;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .swatch-name {
@@ -204,15 +259,15 @@
   background: linear-gradient(
     90deg,
     transparent,
-    var(--surface-line) 20%,
-    var(--surface-line) 80%,
+    var(--surface-line) 10%,
+    var(--surface-line) 90%,
     transparent
   );
-  margin: 28px 0;
+  margin: 24px 0;
 }
 
 .settings-section-gap {
-  height: 16px;
+  height: 8px;
 }
 
 /* Font Field */
@@ -284,7 +339,7 @@
   left: 0;
   right: 0;
   margin-top: 6px;
-  max-height: 240px;
+  max-height: 200px;
   overflow-y: auto;
   background: var(--surface-paper-strong);
   border: 1px solid var(--glass-border);
@@ -292,7 +347,7 @@
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.08),
     0 12px 24px rgba(0, 0, 0, 0.06);
-  z-index: 10;
+  z-index: 20;
   padding: 6px;
 }
 
@@ -339,10 +394,9 @@
 }
 
 .storage-path {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   font-family: "SF Mono", Menlo, monospace;
-  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -368,35 +422,52 @@
 }
 
 /* Scrollbar */
-.settings::-webkit-scrollbar {
-  width: 8px;
+.settings-modal-content::-webkit-scrollbar {
+  width: 6px;
 }
 
-.settings::-webkit-scrollbar-track {
+.settings-modal-content::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.settings::-webkit-scrollbar-thumb {
+.settings-modal-content::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
-.settings::-webkit-scrollbar-thumb:hover {
+.settings-modal-content::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 
 /* Responsive */
 @media (max-width: 600px) {
-  .settings {
-    padding: 20px 16px;
-    align-items: flex-start;
+  .settings-modal-overlay {
+    padding: 0;
+    align-items: flex-end;
   }
   
-  .settings-paper {
+  .settings-modal {
     max-width: 100%;
+    max-height: 85vh;
+    border-radius: 20px 20px 0 0;
+    animation: slideUpMobile 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
   
-  .settings-header {
+  @keyframes slideUpMobile {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+  
+  .settings-modal-close {
+    top: 12px;
+    right: 12px;
+  }
+  
+  .settings-modal-header {
     padding: 20px 20px 12px;
   }
   
@@ -410,8 +481,8 @@
   }
   
   .swatch-colors {
-    width: 44px;
-    height: 44px;
+    width: 48px;
+    height: 48px;
   }
 }
 
