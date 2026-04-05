@@ -8,6 +8,7 @@ const isDev = !app.isPackaged;
 let isAppQuitting = false;
 
 let currentNotesDir = '';
+let settingsWindow = null;
 
 function buildWindowUrl(baseUrl, options = {}) {
   const url = new URL(baseUrl);
@@ -888,6 +889,76 @@ ipcMain.handle('media:resolveLocalImage', async (_event, filePath) => {
   }
 });
 
+async function createSettingsWindow() {
+  // If settings window already exists, focus it
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return;
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 480,
+    height: 600,
+    minWidth: 400,
+    minHeight: 500,
+    show: false,
+    title: 'Settings',
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#00000000',
+    transparent: process.platform === 'darwin',
+    ...(process.platform === 'darwin'
+      ? {
+          vibrancy: 'sidebar',
+          visualEffectState: 'active',
+        }
+      : {}),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
+    },
+  });
+
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow.show();
+  });
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+
+  // Load settings page
+  if (isDev) {
+    const preferredUrl = typeof process.env.NOTELY_DEV_SERVER_URL === 'string'
+      ? process.env.NOTELY_DEV_SERVER_URL.trim()
+      : '';
+    if (preferredUrl) {
+      try {
+        await settingsWindow.loadURL(`${preferredUrl}?settings=1`);
+        return;
+      } catch (err) {
+        console.log(`Failed to load settings from preferred server:`, err?.message);
+      }
+    }
+
+    const ports = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
+    for (const port of ports) {
+      const isAvailable = await checkPort(port);
+      if (!isAvailable) continue;
+      try {
+        await settingsWindow.loadURL(`http://localhost:${port}?settings=1`);
+        return;
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  // Production: load from dist
+  const indexPath = path.join(__dirname, '../dist/index.html');
+  await settingsWindow.loadFile(indexPath, { query: { settings: '1' } });
+}
+
 function buildApplicationMenu(mainWindow) {
   const isMac = process.platform === 'darwin';
 
@@ -939,7 +1010,7 @@ function buildApplicationMenu(mainWindow) {
       submenu: [
         { label: 'Toggle Outline', accelerator: 'CmdOrCtrl+Shift+L', click: () => send('toggle-outline') },
         { type: 'separator' },
-        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => send('open-settings') },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => void createSettingsWindow() },
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { role: 'toggleDevTools' },

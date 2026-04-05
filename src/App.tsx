@@ -4,7 +4,6 @@ import { generateFilename, generateNoteContent, parseNote } from './utils/noteUt
 import type { EditorNote, Note, SaveNoteData } from './types';
 import './styles/App.css';
 
-
 const QuickOpen = lazy(() => import('./components/QuickOpen/QuickOpen'));
 const Settings = lazy(() => import('./components/Settings/Settings'));
 const RECENT_NOTE_IDS_KEY = 'notes:recentNoteIds';
@@ -14,6 +13,8 @@ const getWindowParams = () => {
   if (typeof window === 'undefined') return new URLSearchParams();
   return new URLSearchParams(window.location.search);
 };
+
+const isSettingsWindow = (): boolean => getWindowParams().get('settings') === '1';
 
 const getWindowDraftStorageKey = (): string => {
   const draftKey = getWindowParams().get('draftKey')?.trim();
@@ -144,9 +145,6 @@ function App() {
   const [isQuickOpenOpen, setIsQuickOpenOpen] = useState(false);
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [storagePath, setStoragePath] = useState('');
-  const [fontFamily, setFontFamily] = useState('');
   const [draftNote, setDraftNote] = useState<EditorNote | null>(() => {
     if (isNewDocumentWindow()) return createDraftNote();
     return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
@@ -592,9 +590,6 @@ function App() {
         case 'toggle-outline':
           setOutlineToggleKey((prev) => prev + 1);
           break;
-        case 'open-settings':
-          setIsSettingsOpen(true);
-          break;
         default:
           break;
       }
@@ -602,35 +597,6 @@ function App() {
 
     return unsubscribe;
   }, [exportCurrentDocument, exportCurrentDocumentAsImage, handleCreateNote, handleOpenMarkdownFile, saveCurrentDocument, saveCurrentDocumentAs]);
-
-  // Settings handlers
-  const handleChangeStoragePath = useCallback(async (path: string) => {
-    setStoragePath(path);
-    const result = await window.electronAPI.setStoragePath(path);
-    if (result.success && result.path) {
-      // Refresh notes from new location
-      const rawNotes = await window.electronAPI.getAllNotes();
-      const parsedNotes: Note[] = rawNotes.map((n) => {
-        const parsed = parseNote(n.content, n.filename);
-        return {
-          ...n,
-          ...parsed,
-          modifiedAt: new Date(n.modifiedAt),
-          createdAt: new Date(n.createdAt),
-        };
-      });
-      setNotes(parsedNotes);
-    }
-  }, []);
-
-  const handleChangeFontFamily = useCallback((family: string) => {
-    setFontFamily(family);
-    if (family) {
-      document.documentElement.style.setProperty('--app-font-family', family);
-    } else {
-      document.documentElement.style.removeProperty('--app-font-family');
-    }
-  }, []);
 
   const recentNotes = useMemo(
     () =>
@@ -709,21 +675,50 @@ function App() {
           />
         </Suspense>
       )}
-      {isSettingsOpen && (
-        <Suspense fallback={null}>
-          <div className="settings-overlay">
-            <Settings
-              onBack={() => setIsSettingsOpen(false)}
-              storagePath={storagePath}
-              onChangeStoragePath={handleChangeStoragePath}
-              fontFamily={fontFamily}
-              onChangeFontFamily={handleChangeFontFamily}
-            />
-          </div>
-        </Suspense>
-      )}
     </div>
   );
 }
 
-export default App;
+// Settings window app
+function SettingsApp() {
+  const [storagePath, setStoragePath] = useState('');
+  const [fontFamily, setFontFamily] = useState('');
+
+  const handleChangeStoragePath = useCallback(async (path: string) => {
+    setStoragePath(path);
+    const result = await window.electronAPI.setStoragePath(path);
+    if (result.success && result.path) {
+      // Storage path updated
+      console.log('Storage path updated:', result.path);
+    }
+  }, []);
+
+  const handleChangeFontFamily = useCallback((family: string) => {
+    setFontFamily(family);
+    if (family) {
+      document.documentElement.style.setProperty('--app-font-family', family);
+    } else {
+      document.documentElement.style.removeProperty('--app-font-family');
+    }
+  }, []);
+
+  // Close window when clicking back
+  const handleBack = useCallback(() => {
+    window.close();
+  }, []);
+
+  return (
+    <Suspense fallback={null}>
+      <Settings
+        onBack={handleBack}
+        storagePath={storagePath}
+        onChangeStoragePath={handleChangeStoragePath}
+        fontFamily={fontFamily}
+        onChangeFontFamily={handleChangeFontFamily}
+      />
+    </Suspense>
+  );
+}
+
+// Export appropriate component based on window type
+export default isSettingsWindow() ? SettingsApp : App;
