@@ -115,14 +115,11 @@ export default function Settings({
 
   return (
     <div className="settings-window">
-      <header className="settings-header">
-        <h1 className="settings-title">Settings</h1>
-        <button type="button" className="settings-close" onClick={onBack} aria-label="Close">
-          <X size={16} />
-        </button>
-      </header>
+      <div className="settings-titlebar" />
 
       <main className="settings-content">
+        <h1 className="settings-title">Settings</h1>
+
         <section className="settings-section">
           <h2 className="settings-section-label">Appearance</h2>
 

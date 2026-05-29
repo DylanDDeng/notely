@@ -6,50 +6,11 @@
   color: var(--text-primary);
 }
 
-/* Header ------------------------------------------------------------------ */
-.settings-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 22px;
-  background: color-mix(in srgb, var(--surface-canvas) 88%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border-bottom: 1px solid color-mix(in srgb, var(--surface-line) 70%, transparent);
+/* Draggable title strip (clears the macOS traffic lights) ----------------- */
+.settings-titlebar {
+  flex: 0 0 auto;
+  height: 38px;
   -webkit-app-region: drag;
-}
-
-.settings-title {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-}
-
-.settings-close {
-  -webkit-app-region: no-drag;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
-}
-
-.settings-close:hover {
-  background: color-mix(in srgb, var(--surface-line) 50%, transparent);
-  color: var(--text-primary);
 }
 
 /* Content ----------------------------------------------------------------- */
@@ -58,9 +19,18 @@
   width: 100%;
   max-width: 600px;
   margin: 0 auto;
-  padding: 12px 28px 40px;
+  padding: 8px 28px 40px;
   box-sizing: border-box;
   overflow-y: auto;
+}
+
+.settings-title {
+  margin: 0 0 4px;
+  font-size: 26px;
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .settings-section {
