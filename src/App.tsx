@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor/Editor';
-import { generateFilename, generateNoteContent, parseNote } from './utils/noteUtils';
-import type { EditorNote, Note, SaveNoteData } from './types';
+import { DEFAULT_EXT, generateFilename, generateNoteContent, getExtension, parseNote, stripExtension } from './utils/noteUtils';
+import type { EditorNote, Note, OpenMarkdownFileResult, SaveNoteData } from './types';
 import './styles/App.css';
 
 const QuickOpen = lazy(() => import('./components/QuickOpen/QuickOpen'));
@@ -22,6 +22,12 @@ const getWindowDraftStorageKey = (): string => {
 };
 
 const isNewDocumentWindow = (): boolean => getWindowParams().get('newDocument') === '1';
+
+// Absolute path of a file this window was spawned to open, if any.
+const getWindowOpenFilePath = (): string => {
+  const raw = getWindowParams().get('openFile');
+  return raw ? decodeURIComponent(raw) : '';
+};
 
 const getSavedRecentNoteIds = (): string[] => {
   try {
@@ -115,7 +121,7 @@ const deriveDocumentTitle = (markdown: string, fallbackTitle?: string, filename?
   const trimmedFallback = fallbackTitle?.trim();
   if (trimmedFallback && trimmedFallback !== 'Untitled') return trimmedFallback;
 
-  const trimmedFilename = filename?.replace(/\.(md|markdown)$/i, '').trim();
+  const trimmedFilename = stripExtension(filename).trim();
   if (trimmedFilename) return trimmedFilename;
 
   return 'Untitled';
@@ -146,6 +152,9 @@ function App() {
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
   const [draftNote, setDraftNote] = useState<EditorNote | null>(() => {
+    // A window spawned to open a specific file loads it asynchronously below;
+    // start with no draft to avoid flashing an empty document.
+    if (getWindowOpenFilePath()) return null;
     if (isNewDocumentWindow()) return createDraftNote();
     return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
   });
@@ -165,9 +174,9 @@ function App() {
   }, [notes]);
 
   const makeUniqueFilename = useCallback(
-    (title: string, excludeFilename?: string) => {
-      const baseFilename = generateFilename(title);
-      const baseName = baseFilename.replace(/\.(md|markdown)$/i, '');
+    (title: string, excludeFilename?: string, ext: string = DEFAULT_EXT) => {
+      const baseFilename = generateFilename(title, ext);
+      const baseName = stripExtension(baseFilename);
       const excluded = excludeFilename?.toLowerCase();
       const existingFilenames = new Set(
         notes
@@ -180,10 +189,10 @@ function App() {
       }
 
       let suffix = 2;
-      let candidate = `${baseName}-${suffix}.md`;
+      let candidate = `${baseName}-${suffix}${ext}`;
       while (existingFilenames.has(candidate.toLowerCase())) {
         suffix += 1;
-        candidate = `${baseName}-${suffix}.md`;
+        candidate = `${baseName}-${suffix}${ext}`;
       }
       return candidate;
     },
@@ -278,9 +287,10 @@ function App() {
           return false;
         }
 
+        const suggestedExt = getExtension(noteData.filename);
         const suggestedFilename = shouldSaveAs
-          ? makeUniqueFilename(nextTitle, noteData.filename)
-          : makeUniqueFilename(nextTitle);
+          ? makeUniqueFilename(nextTitle, noteData.filename, suggestedExt)
+          : makeUniqueFilename(nextTitle, undefined, suggestedExt);
         const fileContent = generateNoteContent(noteData.content);
 
         const saveAsResult = await window.electronAPI.saveNoteAs?.({
@@ -301,7 +311,7 @@ function App() {
           : undefined;
         const parsed = parseNote(fileContent, saveAsResult.filename);
         const savedNote: Note = {
-          id: saveAsResult.filename.replace(/\.(md|markdown)$/i, ''),
+          id: stripExtension(saveAsResult.filename),
           filename: saveAsResult.filename,
           filepath: saveAsResult.filepath,
           content: fileContent,
@@ -332,12 +342,15 @@ function App() {
       }
 
       const previousFilename = noteData.filename?.trim();
-      const forcedBase = noteData.forceFilename?.trim().replace(/\.(md|markdown)$/i, '');
+      // Preserve the note's existing extension (.md / .markdown / .mdx) across
+      // renames; brand-new notes fall back to the default.
+      const ext = getExtension(previousFilename);
+      const forcedBase = stripExtension(noteData.forceFilename?.trim());
       // A forced rename is treated as a desired base name: sanitize it and make
       // it unique so we never clobber another note's file.
-      const forcedFilename = forcedBase ? makeUniqueFilename(forcedBase, previousFilename) : '';
-      const filename = forcedFilename || previousFilename || generateFilename(noteData.title);
-      const noteId = (filename || '').replace(/\.(md|markdown)$/i, '');
+      const forcedFilename = forcedBase ? makeUniqueFilename(forcedBase, previousFilename, ext) : '';
+      const filename = forcedFilename || previousFilename || generateFilename(noteData.title, ext);
+      const noteId = stripExtension(filename);
       const existingNote = notesRef.current.find((note) => note.id === noteData.id || note.filename === previousFilename);
       const fileContent = generateNoteContent(noteData.content);
 
@@ -358,7 +371,10 @@ function App() {
         previousFilename &&
         forcedFilename &&
         forcedFilename !== previousFilename &&
-        forcedFilename.toLowerCase() !== previousFilename.toLowerCase()
+        forcedFilename.toLowerCase() !== previousFilename.toLowerCase() &&
+        // Defense-in-depth: both names must share the same extension, so a
+        // rename can never write one extension and delete another.
+        getExtension(forcedFilename) === getExtension(previousFilename)
       ) {
         const deleteResult = await window.electronAPI.deleteNote(previousFilename);
         if (!deleteResult.success) {
@@ -487,8 +503,8 @@ function App() {
       const renderedHtml = exportHtmlGetterRef.current?.() || '';
       const html = renderedHtml || await markdownToExportHtml(markdown);
       const suggestedBaseName = current.filename
-        ? current.filename.replace(/\.(md|markdown)$/i, '')
-        : generateFilename(documentTitle).replace(/\.(md|markdown)$/i, '');
+        ? stripExtension(current.filename)
+        : stripExtension(generateFilename(documentTitle));
 
       const result = await window.electronAPI.exportNotePdf({
         title: documentTitle,
@@ -525,8 +541,8 @@ function App() {
       const renderedHtml = exportHtmlGetterRef.current?.() || '';
       const html = renderedHtml || await markdownToExportHtml(markdown);
       const suggestedBaseName = current.filename
-        ? current.filename.replace(/\.(md|markdown)$/i, '')
-        : generateFilename(documentTitle).replace(/\.(md|markdown)$/i, '');
+        ? stripExtension(current.filename)
+        : stripExtension(generateFilename(documentTitle));
 
       const result = await window.electronAPI.exportNoteImage({
         title: documentTitle,
@@ -549,33 +565,51 @@ function App() {
     }
   }, []);
 
+  // Load a file's contents (read by the main process) into THIS window.
+  const loadOpenedNote = useCallback(
+    (result: OpenMarkdownFileResult | undefined): boolean => {
+      if (!result?.success || !result.note) {
+        if (result?.error) console.error('Failed to open markdown file:', result.error);
+        return false;
+      }
+      const nextRawNote = result.note;
+      const parsed = parseNote(nextRawNote.content, nextRawNote.filename);
+      const openedNote: Note = {
+        ...nextRawNote,
+        ...parsed,
+        modifiedAt: new Date(nextRawNote.modifiedAt),
+        createdAt: new Date(nextRawNote.createdAt),
+      };
+      if (result.directory) activeDirectoryRef.current = result.directory;
+      setDraftNote(null);
+      setNotes([openedNote]);
+      setSelectedNoteId(openedNote.id);
+      return true;
+    },
+    []
+  );
+
+  // The chosen file opens in a NEW window (handled by the main process), so this
+  // window is left untouched.
   const handleOpenMarkdownFile = useCallback(async () => {
-    const result = await window.electronAPI.openMarkdownFile?.();
-    if (!result || result.canceled) return;
-
-    if (!result.success || !result.note) {
-      console.error('Failed to open markdown file:', result.error);
-      return;
-    }
-
-    const nextRawNote = result.note;
-    const parsed = parseNote(nextRawNote.content, nextRawNote.filename);
-    const openedNote: Note = {
-      ...nextRawNote,
-      ...parsed,
-      modifiedAt: new Date(nextRawNote.modifiedAt),
-      createdAt: new Date(nextRawNote.createdAt),
-    };
-
-    if (result.directory) {
-      activeDirectoryRef.current = result.directory;
-    }
-
-    setDraftNote(null);
-    setNotes([openedNote]);
-    setSelectedNoteId(openedNote.id);
     setIsQuickOpenOpen(false);
+    await window.electronAPI.openMarkdownFile?.();
   }, []);
+
+  // If this window was spawned to open a specific file, load it once on mount.
+  useEffect(() => {
+    const openPath = getWindowOpenFilePath();
+    if (!openPath) return;
+    let cancelled = false;
+    void (async () => {
+      const result = await window.electronAPI.readFile?.(openPath);
+      if (cancelled) return;
+      loadOpenedNote(result);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadOpenedNote]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onMenuAction((action) => {

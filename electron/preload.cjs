@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setStoragePath: (path) => ipcRenderer.invoke('notes:setStoragePath', path),
   getAllNotes: () => ipcRenderer.invoke('notes:getAll'),
   openMarkdownFile: () => ipcRenderer.invoke('notes:openFile'),
+  readFile: (filePath) => ipcRenderer.invoke('notes:readFile', filePath),
   saveNote: (data) => ipcRenderer.invoke('notes:save', data),
   saveNoteAs: (data) => ipcRenderer.invoke('notes:saveAs', data),
   deleteNote: (filename) => ipcRenderer.invoke('notes:delete', filename),

@@ -9,8 +9,37 @@ let isAppQuitting = false;
 const DEV_SERVER_HOSTS = ['127.0.0.1', 'localhost'];
 const DEV_SERVER_PORTS = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
 
-let currentNotesDir = '';
 let settingsWindow = null;
+
+// Markdown-family extensions the app can open/save.
+const MD_EXT_RE = /\.(md|markdown|mdx)$/i;
+
+// Per-window notes directory, keyed by webContents.id. Each window owns its own
+// directory so saves in one window never write into another window's folder.
+const windowDirs = new Map();
+// App-wide fallback directory configured in Settings; used by any window that
+// hasn't opened a specific file or done Save As yet.
+let defaultNotesDir = '';
+// Normalized absolute file path -> BrowserWindow, so opening an already-open
+// file focuses its window instead of spawning a duplicate.
+const openFilePaths = new Map();
+
+function getDirFor(event) {
+  const id = event?.sender?.id;
+  return (id != null && windowDirs.get(id)) || defaultNotesDir || '';
+}
+
+function setDirFor(event, dir) {
+  const id = event?.sender?.id;
+  if (id != null) windowDirs.set(id, dir || '');
+}
+
+function normalizeFileKey(filePath) {
+  const normalized = path.normalize(filePath);
+  return process.platform === 'win32' || process.platform === 'darwin'
+    ? normalized.toLowerCase()
+    : normalized;
+}
 
 function buildWindowUrl(baseUrl, options = {}) {
   const url = new URL(baseUrl);
@@ -18,16 +47,37 @@ function buildWindowUrl(baseUrl, options = {}) {
     url.searchParams.set('newDocument', '1');
     url.searchParams.set('draftKey', options.draftKey || `draft-${Date.now()}`);
   }
+  if (options.openFilePath) {
+    url.searchParams.set('openFile', encodeURIComponent(options.openFilePath));
+  }
   return url.toString();
 }
 
-async function ensureNotesDir() {
-  if (!currentNotesDir) return;
+async function ensureNotesDir(dir) {
+  if (!dir) return;
   try {
-    await fs.mkdir(currentNotesDir, { recursive: true });
+    await fs.mkdir(dir, { recursive: true });
   } catch (err) {
     console.error('Failed to create notes directory:', err);
   }
+}
+
+// Reads a markdown file from disk and builds the raw note payload.
+async function readNoteFile(filePath) {
+  const stat = await fs.stat(filePath);
+  const content = await fs.readFile(filePath, 'utf-8');
+  const directory = path.dirname(filePath);
+  return {
+    directory,
+    note: {
+      id: path.basename(filePath).replace(MD_EXT_RE, ''),
+      filename: path.basename(filePath),
+      filepath: filePath,
+      content,
+      modifiedAt: stat.mtime.toISOString(),
+      createdAt: stat.birthtime.toISOString(),
+    },
+  };
 }
 
 function checkUrl(url) {
@@ -373,6 +423,22 @@ async function createWindow(options = {}) {
     mainWindow.show();
   });
 
+  // Seed this window's directory and remember which file it opened so the maps
+  // can be cleaned up and duplicate-open requests can focus it.
+  let openFileKey = null;
+  if (options.openFilePath) {
+    windowDirs.set(mainWindow.webContents.id, path.dirname(options.openFilePath));
+    openFileKey = normalizeFileKey(options.openFilePath);
+    openFilePaths.set(openFileKey, mainWindow);
+  }
+
+  mainWindow.on('closed', () => {
+    windowDirs.delete(mainWindow.webContents.id);
+    if (openFileKey && openFilePaths.get(openFileKey) === mainWindow) {
+      openFilePaths.delete(openFileKey);
+    }
+  });
+
   let allowClose = false;
   mainWindow.on('close', async (event) => {
     if (allowClose || isAppQuitting) return;
@@ -478,35 +544,38 @@ async function createWindow(options = {}) {
 
 ipcMain.handle('notes:setStoragePath', async (_event, newPath) => {
   try {
+    // Settings is a separate window; the chosen folder is the app-wide default
+    // that editor windows fall back to (not a per-window override).
     const nextPath = typeof newPath === 'string' ? newPath.trim() : '';
     if (!nextPath) {
-      currentNotesDir = '';
-      return { success: true, path: currentNotesDir };
+      defaultNotesDir = '';
+      return { success: true, path: '' };
     }
 
     await fs.mkdir(nextPath, { recursive: true });
-    currentNotesDir = nextPath;
+    defaultNotesDir = nextPath;
 
-    return { success: true, path: currentNotesDir };
+    return { success: true, path: nextPath };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
   }
 });
 
-ipcMain.handle('notes:getAll', async () => {
+ipcMain.handle('notes:getAll', async (event) => {
   try {
-    if (!currentNotesDir) return [];
-    await ensureNotesDir();
-    const files = await fs.readdir(currentNotesDir);
-    const mdFiles = files.filter((file) => file.match(/\.(md|markdown)$/i));
+    const dir = getDirFor(event);
+    if (!dir) return [];
+    await ensureNotesDir(dir);
+    const files = await fs.readdir(dir);
+    const mdFiles = files.filter((file) => MD_EXT_RE.test(file));
 
     const notes = await Promise.all(
       mdFiles.map(async (filename) => {
-        const filepath = path.join(currentNotesDir, filename);
+        const filepath = path.join(dir, filename);
         const stat = await fs.stat(filepath);
         const content = await fs.readFile(filepath, 'utf-8');
         return {
-          id: filename.replace(/\.(md|markdown)$/i, ""),
+          id: filename.replace(MD_EXT_RE, ""),
           filename,
           filepath,
           content,
@@ -523,13 +592,14 @@ ipcMain.handle('notes:getAll', async () => {
   }
 });
 
-ipcMain.handle('notes:save', async (_event, { filename, content, preserveModifiedAt } = {}) => {
+ipcMain.handle('notes:save', async (event, { filename, content, preserveModifiedAt } = {}) => {
   try {
-    if (!currentNotesDir) {
+    const dir = getDirFor(event);
+    if (!dir) {
       return { success: false, error: 'No active document directory. Use Save As first.' };
     }
-    await ensureNotesDir();
-    const filepath = path.join(currentNotesDir, filename);
+    await ensureNotesDir(dir);
+    const filepath = path.join(dir, filename);
 
     let previousStat = null;
     if (preserveModifiedAt) {
@@ -556,14 +626,14 @@ ipcMain.handle('notes:save', async (_event, { filename, content, preserveModifie
   }
 });
 
-ipcMain.handle('notes:saveAs', async (_event, { suggestedFilename, content } = {}) => {
+ipcMain.handle('notes:saveAs', async (event, { suggestedFilename, content } = {}) => {
   try {
     const fallbackName = typeof suggestedFilename === 'string' && suggestedFilename.trim() ? suggestedFilename.trim() : 'Untitled.md';
-    const defaultDirectory = currentNotesDir || app.getPath('documents');
+    const defaultDirectory = getDirFor(event) || app.getPath('documents');
     const saveResult = await dialog.showSaveDialog({
       title: 'Save Markdown Document',
       defaultPath: path.join(defaultDirectory, fallbackName),
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
 
@@ -571,32 +641,34 @@ ipcMain.handle('notes:saveAs', async (_event, { suggestedFilename, content } = {
       return { success: false, canceled: true };
     }
 
-    const outPath = /\.(md|markdown)$/i.test(saveResult.filePath)
+    const outPath = MD_EXT_RE.test(saveResult.filePath)
       ? saveResult.filePath
       : `${saveResult.filePath}.md`;
 
     await fs.mkdir(path.dirname(outPath), { recursive: true });
     await fs.writeFile(outPath, content, 'utf-8');
 
-    currentNotesDir = path.dirname(outPath);
+    const directory = path.dirname(outPath);
+    setDirFor(event, directory);
 
     return {
       success: true,
       filepath: outPath,
       filename: path.basename(outPath),
-      directory: currentNotesDir,
+      directory,
     };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
   }
 });
 
-ipcMain.handle('notes:delete', async (_event, filename) => {
+ipcMain.handle('notes:delete', async (event, filename) => {
   try {
-    if (!currentNotesDir) {
+    const dir = getDirFor(event);
+    if (!dir) {
       return { success: false, error: 'No active document directory.' };
     }
-    const filepath = path.join(currentNotesDir, filename);
+    const filepath = path.join(dir, filename);
     await fs.unlink(filepath);
     return { success: true };
   } catch (err) {
@@ -604,13 +676,13 @@ ipcMain.handle('notes:delete', async (_event, filename) => {
   }
 });
 
-ipcMain.handle('notes:exportPdf', async (_event, data) => {
+ipcMain.handle('notes:exportPdf', async (event, data) => {
   try {
     const title = data?.title || 'Untitled';
     const html = data?.html || '';
     const options = data?.options || {};
     const suggestedFileName = typeof data?.suggestedFileName === 'string' ? data.suggestedFileName.trim() : 'note.pdf';
-    const defaultDirectory = currentNotesDir || app.getPath('documents');
+    const defaultDirectory = getDirFor(event) || app.getPath('documents');
 
     const saveResult = await dialog.showSaveDialog({
       title: 'Export as PDF',
@@ -636,7 +708,7 @@ ipcMain.handle('notes:exportPdf', async (_event, data) => {
     const dateText = typeof options.dateText === 'string' ? options.dateText : '';
     const fontFamily = typeof options.fontFamily === 'string' ? options.fontFamily : '';
 
-    const baseDir = currentNotesDir || defaultDirectory;
+    const baseDir = getDirFor(event) || defaultDirectory;
     const baseHref = pathToFileURL(baseDir + path.sep).toString();
     const inlinedBodyHtml = await inlineLocalImagesInHtml(html, baseDir);
     const exportHtml = buildNoteExportHtml({
@@ -717,13 +789,13 @@ ipcMain.handle('notes:exportPdf', async (_event, data) => {
   }
 });
 
-ipcMain.handle('notes:exportImage', async (_event, data) => {
+ipcMain.handle('notes:exportImage', async (event, data) => {
   try {
     const title = data?.title || 'Untitled';
     const html = data?.html || '';
     const options = data?.options || {};
     const suggestedFileName = typeof data?.suggestedFileName === 'string' ? data.suggestedFileName.trim() : 'note.png';
-    const defaultDirectory = currentNotesDir || app.getPath('documents');
+    const defaultDirectory = getDirFor(event) || app.getPath('documents');
 
     const saveResult = await dialog.showSaveDialog({
       title: 'Export as Image',
@@ -746,7 +818,7 @@ ipcMain.handle('notes:exportImage', async (_event, data) => {
     const dateText = typeof options.dateText === 'string' ? options.dateText : '';
     const exportWidth = Math.max(400, Math.min(Number(options.width) || 900, 1920));
 
-    const baseDir = currentNotesDir || defaultDirectory;
+    const baseDir = getDirFor(event) || defaultDirectory;
     const baseHref = pathToFileURL(baseDir + path.sep).toString();
     const inlinedBodyHtml = await inlineLocalImagesInHtml(html, baseDir);
     const exportHtml = buildNoteExportHtml({
@@ -814,12 +886,14 @@ ipcMain.handle('notes:exportImage', async (_event, data) => {
   }
 });
 
-ipcMain.handle('notes:openFile', async () => {
+// Pick a markdown file and open it in a NEW window, leaving the caller alone.
+// If the file is already open, focus its existing window instead.
+ipcMain.handle('notes:openFile', async (event) => {
   try {
     const result = await dialog.showOpenDialog({
       title: 'Open Markdown File',
       properties: ['openFile'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
     });
 
     if (result.canceled || result.filePaths.length === 0) {
@@ -827,23 +901,30 @@ ipcMain.handle('notes:openFile', async () => {
     }
 
     const filePath = result.filePaths[0];
-    const stat = await fs.stat(filePath);
-    const content = await fs.readFile(filePath, 'utf-8');
+    const key = normalizeFileKey(filePath);
+    const existing = openFilePaths.get(key);
+    if (existing && !existing.isDestroyed()) {
+      existing.show();
+      existing.focus();
+      return { success: true, focused: true };
+    }
 
-    currentNotesDir = path.dirname(filePath);
+    await createWindow({ openFilePath: filePath });
+    return { success: true, opened: true };
+  } catch (err) {
+    return { success: false, error: err?.message || String(err) };
+  }
+});
 
-    return {
-      success: true,
-      directory: currentNotesDir,
-      note: {
-        id: path.basename(filePath).replace(/\.(md|markdown)$/i, ""),
-        filename: path.basename(filePath),
-        filepath: filePath,
-        content,
-        modifiedAt: stat.mtime.toISOString(),
-        createdAt: stat.birthtime.toISOString(),
-      },
-    };
+// Read a file by absolute path for a window spawned to open it.
+ipcMain.handle('notes:readFile', async (event, filePath) => {
+  try {
+    if (!filePath || typeof filePath !== 'string') {
+      return { success: false, error: 'No file path provided.' };
+    }
+    const { note, directory } = await readNoteFile(filePath);
+    setDirFor(event, directory);
+    return { success: true, note, directory };
   } catch (err) {
     return { success: false, error: err?.message || String(err) };
   }
@@ -964,8 +1045,11 @@ async function createSettingsWindow() {
 function buildApplicationMenu(mainWindow) {
   const isMac = process.platform === 'darwin';
 
+  // Resolve the focused window at click time: the application menu is global,
+  // so it must target whichever window is active, not the one it was built for.
   const send = (action) => {
-    mainWindow.webContents.send('menu-action', action);
+    const target = BrowserWindow.getFocusedWindow() || mainWindow;
+    target?.webContents.send('menu-action', action);
   };
 
   const template = [
