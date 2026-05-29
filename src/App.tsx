@@ -332,7 +332,10 @@ function App() {
       }
 
       const previousFilename = noteData.filename?.trim();
-      const forcedFilename = noteData.forceFilename?.trim();
+      const forcedBase = noteData.forceFilename?.trim().replace(/\.(md|markdown)$/i, '');
+      // A forced rename is treated as a desired base name: sanitize it and make
+      // it unique so we never clobber another note's file.
+      const forcedFilename = forcedBase ? makeUniqueFilename(forcedBase, previousFilename) : '';
       const filename = forcedFilename || previousFilename || generateFilename(noteData.title);
       const noteId = (filename || '').replace(/\.(md|markdown)$/i, '');
       const existingNote = notesRef.current.find((note) => note.id === noteData.id || note.filename === previousFilename);
@@ -348,7 +351,15 @@ function App() {
         throw new Error(saveResult.error || 'Failed to save document');
       }
 
-      if (previousFilename && forcedFilename && forcedFilename !== previousFilename) {
+      // Remove the old file after a rename, but never when the names differ only
+      // by case: on case-insensitive filesystems that is the same file and the
+      // delete would wipe what we just wrote.
+      if (
+        previousFilename &&
+        forcedFilename &&
+        forcedFilename !== previousFilename &&
+        forcedFilename.toLowerCase() !== previousFilename.toLowerCase()
+      ) {
         const deleteResult = await window.electronAPI.deleteNote(previousFilename);
         if (!deleteResult.success) {
           console.warn('Failed to remove old filename after rename:', deleteResult.error);
