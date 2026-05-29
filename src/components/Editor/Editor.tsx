@@ -269,7 +269,7 @@ function Editor({
       </header>
 
       <div className="editor-content-shell">
-        {isOutlineOpen && (
+        {isOutlineOpen && outlineItems.length > 0 && (
           <div className="editor-outline-floating">
             <div
               className={`editor-outline-dock${isOutlineHovered ? ' expanded' : ''}`}
