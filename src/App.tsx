@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor/Editor';
-import { DEFAULT_EXT, generateFilename, generateNoteContent, getExtension, parseNote, stripExtension } from './utils/noteUtils';
+import { generateFilename, generateNoteContent, parseNote } from './utils/noteUtils';
 import type { EditorNote, Note, OpenMarkdownFileResult, SaveNoteData } from './types';
 import './styles/App.css';
 
@@ -121,7 +121,7 @@ const deriveDocumentTitle = (markdown: string, fallbackTitle?: string, filename?
   const trimmedFallback = fallbackTitle?.trim();
   if (trimmedFallback && trimmedFallback !== 'Untitled') return trimmedFallback;
 
-  const trimmedFilename = stripExtension(filename).trim();
+  const trimmedFilename = filename?.replace(/\.(md|markdown)$/i, '').trim();
   if (trimmedFilename) return trimmedFilename;
 
   return 'Untitled';
@@ -174,9 +174,9 @@ function App() {
   }, [notes]);
 
   const makeUniqueFilename = useCallback(
-    (title: string, excludeFilename?: string, ext: string = DEFAULT_EXT) => {
-      const baseFilename = generateFilename(title, ext);
-      const baseName = stripExtension(baseFilename);
+    (title: string, excludeFilename?: string) => {
+      const baseFilename = generateFilename(title);
+      const baseName = baseFilename.replace(/\.(md|markdown)$/i, '');
       const excluded = excludeFilename?.toLowerCase();
       const existingFilenames = new Set(
         notes
@@ -189,10 +189,10 @@ function App() {
       }
 
       let suffix = 2;
-      let candidate = `${baseName}-${suffix}${ext}`;
+      let candidate = `${baseName}-${suffix}.md`;
       while (existingFilenames.has(candidate.toLowerCase())) {
         suffix += 1;
-        candidate = `${baseName}-${suffix}${ext}`;
+        candidate = `${baseName}-${suffix}.md`;
       }
       return candidate;
     },
@@ -287,10 +287,9 @@ function App() {
           return false;
         }
 
-        const suggestedExt = getExtension(noteData.filename);
         const suggestedFilename = shouldSaveAs
-          ? makeUniqueFilename(nextTitle, noteData.filename, suggestedExt)
-          : makeUniqueFilename(nextTitle, undefined, suggestedExt);
+          ? makeUniqueFilename(nextTitle, noteData.filename)
+          : makeUniqueFilename(nextTitle);
         const fileContent = generateNoteContent(noteData.content);
 
         const saveAsResult = await window.electronAPI.saveNoteAs?.({
@@ -311,7 +310,7 @@ function App() {
           : undefined;
         const parsed = parseNote(fileContent, saveAsResult.filename);
         const savedNote: Note = {
-          id: stripExtension(saveAsResult.filename),
+          id: saveAsResult.filename.replace(/\.(md|markdown)$/i, ''),
           filename: saveAsResult.filename,
           filepath: saveAsResult.filepath,
           content: fileContent,
@@ -342,15 +341,12 @@ function App() {
       }
 
       const previousFilename = noteData.filename?.trim();
-      // Preserve the note's existing extension (.md / .markdown / .mdx) across
-      // renames; brand-new notes fall back to the default.
-      const ext = getExtension(previousFilename);
-      const forcedBase = stripExtension(noteData.forceFilename?.trim());
+      const forcedBase = noteData.forceFilename?.trim().replace(/\.(md|markdown)$/i, '');
       // A forced rename is treated as a desired base name: sanitize it and make
       // it unique so we never clobber another note's file.
-      const forcedFilename = forcedBase ? makeUniqueFilename(forcedBase, previousFilename, ext) : '';
-      const filename = forcedFilename || previousFilename || generateFilename(noteData.title, ext);
-      const noteId = stripExtension(filename);
+      const forcedFilename = forcedBase ? makeUniqueFilename(forcedBase, previousFilename) : '';
+      const filename = forcedFilename || previousFilename || generateFilename(noteData.title);
+      const noteId = (filename || '').replace(/\.(md|markdown)$/i, '');
       const existingNote = notesRef.current.find((note) => note.id === noteData.id || note.filename === previousFilename);
       const fileContent = generateNoteContent(noteData.content);
 
@@ -371,10 +367,7 @@ function App() {
         previousFilename &&
         forcedFilename &&
         forcedFilename !== previousFilename &&
-        forcedFilename.toLowerCase() !== previousFilename.toLowerCase() &&
-        // Defense-in-depth: both names must share the same extension, so a
-        // rename can never write one extension and delete another.
-        getExtension(forcedFilename) === getExtension(previousFilename)
+        forcedFilename.toLowerCase() !== previousFilename.toLowerCase()
       ) {
         const deleteResult = await window.electronAPI.deleteNote(previousFilename);
         if (!deleteResult.success) {
@@ -503,8 +496,8 @@ function App() {
       const renderedHtml = exportHtmlGetterRef.current?.() || '';
       const html = renderedHtml || await markdownToExportHtml(markdown);
       const suggestedBaseName = current.filename
-        ? stripExtension(current.filename)
-        : stripExtension(generateFilename(documentTitle));
+        ? current.filename.replace(/\.(md|markdown)$/i, '')
+        : generateFilename(documentTitle).replace(/\.(md|markdown)$/i, '');
 
       const result = await window.electronAPI.exportNotePdf({
         title: documentTitle,
@@ -541,8 +534,8 @@ function App() {
       const renderedHtml = exportHtmlGetterRef.current?.() || '';
       const html = renderedHtml || await markdownToExportHtml(markdown);
       const suggestedBaseName = current.filename
-        ? stripExtension(current.filename)
-        : stripExtension(generateFilename(documentTitle));
+        ? current.filename.replace(/\.(md|markdown)$/i, '')
+        : generateFilename(documentTitle).replace(/\.(md|markdown)$/i, '');
 
       const result = await window.electronAPI.exportNoteImage({
         title: documentTitle,

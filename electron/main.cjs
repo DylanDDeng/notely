@@ -11,8 +11,8 @@ const DEV_SERVER_PORTS = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
 
 let settingsWindow = null;
 
-// Markdown-family extensions the app can open/save.
-const MD_EXT_RE = /\.(md|markdown|mdx)$/i;
+// Markdown extensions the app can open/save.
+const MD_EXT_RE = /\.(md|markdown)$/i;
 
 // Per-window notes directory, keyed by webContents.id. Each window owns its own
 // directory so saves in one window never write into another window's folder.
@@ -633,7 +633,7 @@ ipcMain.handle('notes:saveAs', async (event, { suggestedFilename, content } = {}
     const saveResult = await dialog.showSaveDialog({
       title: 'Save Markdown Document',
       defaultPath: path.join(defaultDirectory, fallbackName),
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
 
@@ -893,7 +893,7 @@ ipcMain.handle('notes:openFile', async (event) => {
     const result = await dialog.showOpenDialog({
       title: 'Open Markdown File',
       properties: ['openFile'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
     });
 
     if (result.canceled || result.filePaths.length === 0) {

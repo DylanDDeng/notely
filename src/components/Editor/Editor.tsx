@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import type { EditorNote, SaveNoteData } from '../../types';
-import { generateFilename, getFirstHeading, stripExtension } from '../../utils/noteUtils';
+import { generateFilename, getFirstHeading } from '../../utils/noteUtils';
 import './Editor.css';
 
-const filenameBase = (filename?: string): string => stripExtension(filename);
+const filenameBase = (filename?: string): string =>
+  (filename || '').replace(/\.(md|markdown)$/i, '');
 
-// Slug of a heading, extension stripped — only used for base-name comparison.
-const headingSlugBase = (heading: string): string => stripExtension(generateFilename(heading));
+const headingSlugBase = (heading: string): string =>
+  generateFilename(heading).replace(/\.(md|markdown)$/i, '');
 
 interface EditorProps {
   note: EditorNote | null;
@@ -29,7 +30,7 @@ const SAVE_DEBOUNCE_MS = 800;
 
 const fallbackTitleFromFilename = (filename?: string): string => {
   if (!filename) return 'Untitled';
-  return stripExtension(filename).trim() || 'Untitled';
+  return filename.replace(/\.md$/i, '').trim() || 'Untitled';
 };
 
 function Editor({
