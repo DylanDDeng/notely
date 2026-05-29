@@ -6,6 +6,8 @@ const { pathToFileURL } = require('url');
 
 const isDev = !app.isPackaged;
 let isAppQuitting = false;
+const DEV_SERVER_HOSTS = ['127.0.0.1', 'localhost'];
+const DEV_SERVER_PORTS = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
 
 let currentNotesDir = '';
 let settingsWindow = null;
@@ -28,9 +30,9 @@ async function ensureNotesDir() {
   }
 }
 
-function checkPort(port) {
+function checkUrl(url) {
   return new Promise((resolve) => {
-    const req = http.get(`http://localhost:${port}`, (res) => {
+    const req = http.get(url, (res) => {
       resolve(res.statusCode === 200 || res.statusCode === 204);
     });
     req.on('error', () => resolve(false));
@@ -39,6 +41,17 @@ function checkPort(port) {
       resolve(false);
     });
   });
+}
+
+async function findDevServerUrl() {
+  for (const port of DEV_SERVER_PORTS) {
+    for (const host of DEV_SERVER_HOSTS) {
+      const url = `http://${host}:${port}`;
+      const isAvailable = await checkUrl(url);
+      if (isAvailable) return url;
+    }
+  }
+  return '';
 }
 
 function escapeHtml(text) {
@@ -440,31 +453,22 @@ async function createWindow(options = {}) {
       }
     }
 
-    const ports = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
-    let loaded = false;
-
-    for (const port of ports) {
-      const isAvailable = await checkPort(port);
-      if (!isAvailable) continue;
-
-      const url = `http://localhost:${port}`;
+    const detectedUrl = await findDevServerUrl();
+    if (detectedUrl) {
       try {
-        await mainWindow.loadURL(buildWindowUrl(url, options));
-        loaded = true;
-        console.log(`Loaded dev server at ${url}`);
+        await mainWindow.loadURL(buildWindowUrl(detectedUrl, options));
+        console.log(`Loaded dev server at ${detectedUrl}`);
         mainWindow.webContents.openDevTools({ mode: 'detach' });
-        break;
+        return;
       } catch (err) {
-        console.log(`Failed to load ${url}:`, err?.message || String(err));
+        console.log(`Failed to load ${detectedUrl}:`, err?.message || String(err));
       }
     }
 
-    if (!loaded) {
-      console.error('Could not connect to any Vite dev server port');
-      await mainWindow.loadURL(
-        'data:text/html,<h1>Development server not found</h1><p>Please ensure vite is running on ports 5173-5180</p>'
-      );
-    }
+    console.error('Could not connect to any Vite dev server port');
+    await mainWindow.loadURL(
+      'data:text/html,<h1>Development server not found</h1><p>Please ensure vite is running on ports 5173-5180</p>'
+    );
     return;
   }
 
@@ -897,9 +901,9 @@ async function createSettingsWindow() {
   }
 
   settingsWindow = new BrowserWindow({
-    width: 480,
-    height: 600,
-    minWidth: 400,
+    width: 760,
+    height: 640,
+    minWidth: 680,
     minHeight: 500,
     show: false,
     title: 'Settings',
@@ -941,15 +945,13 @@ async function createSettingsWindow() {
       }
     }
 
-    const ports = [5173, 5174, 5175, 5176, 5177, 5178, 5179, 5180];
-    for (const port of ports) {
-      const isAvailable = await checkPort(port);
-      if (!isAvailable) continue;
+    const detectedUrl = await findDevServerUrl();
+    if (detectedUrl) {
       try {
-        await settingsWindow.loadURL(`http://localhost:${port}?settings=1`);
+        await settingsWindow.loadURL(`${detectedUrl}?settings=1`);
         return;
       } catch {
-        continue;
+        // Fall back to the production file load below.
       }
     }
   }

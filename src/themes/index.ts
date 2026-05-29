@@ -690,8 +690,23 @@ export function getThemeById(themeId: string): Theme | undefined {
   return getAllThemes().find((t) => t.id === themeId);
 }
 
+function syncThemeSelection(themeId: string): void {
+  if (themeId === 'system') {
+    applySystemTheme();
+    return;
+  }
+
+  const theme = getThemeById(themeId);
+  if (theme) {
+    applyTheme(theme);
+    return;
+  }
+
+  applyTheme(builtInThemes[0]);
+}
+
 // Apply theme to document
-export function applyTheme(theme: Theme): void {
+export function applyTheme(theme: Theme, selectedThemeId: string = theme.id): void {
   const root = document.documentElement;
   
   // Apply all color variables
@@ -707,11 +722,12 @@ export function applyTheme(theme: Theme): void {
   }
   
   // Set data attribute for dark mode detection
-  root.setAttribute('data-theme', theme.id);
+  root.setAttribute('data-theme', selectedThemeId);
+  root.setAttribute('data-theme-resolved', theme.id);
   root.setAttribute('data-theme-dark', String(theme.isDark));
   
   // Store active theme
-  setActiveThemeId(theme.id);
+  setActiveThemeId(selectedThemeId);
 }
 
 // Apply system theme preference
@@ -720,28 +736,31 @@ export function applySystemTheme(): void {
   const theme = prefersDark 
     ? builtInThemes.find((t) => t.id === 'dark')! 
     : builtInThemes.find((t) => t.id === 'light')!;
-  applyTheme(theme);
+  applyTheme(theme, 'system');
 }
 
 // Initialize theme on app start
 export function initializeTheme(): void {
-  const activeThemeId = getActiveThemeId();
-  
-  if (activeThemeId === 'system') {
-    applySystemTheme();
-    // Listen for system theme changes
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  syncThemeSelection(getActiveThemeId());
+
+  // Keep system theme selection reactive without overwriting explicit choices.
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getActiveThemeId() === 'system') {
       applySystemTheme();
-    });
-  } else {
-    const theme = getThemeById(activeThemeId);
-    if (theme) {
-      applyTheme(theme);
-    } else {
-      // Fallback to light theme
-      applyTheme(builtInThemes[0]);
     }
-  }
+  });
+
+  // Sync theme changes across the editor and settings windows.
+  window.addEventListener('storage', (event) => {
+    if (event.key === ACTIVE_THEME_KEY && event.newValue) {
+      syncThemeSelection(event.newValue);
+      return;
+    }
+
+    if (event.key === CUSTOM_THEMES_KEY) {
+      syncThemeSelection(getActiveThemeId());
+    }
+  });
 }
 
 // Export theme to JSON
