@@ -648,6 +648,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  font-family: var(--editor-prose-font);
   border: 1px solid var(--editor-outline-border, rgba(120, 102, 76, 0.12));
   border-radius: 18px;
   background: var(--editor-outline-bg, #f0eee6);
@@ -697,6 +698,7 @@
   background: transparent;
   color: var(--editor-outline-text, rgba(67, 73, 79, 0.86));
   text-align: left;
+  font-family: var(--editor-prose-font);
   font-size: 13px;
   line-height: 1.4;
   border-radius: 12px;
@@ -708,15 +710,15 @@
 }
 
 .editor-outline-item:hover {
-  background: var(--editor-outline-active-bg, rgba(255, 255, 255, 0.6));
-  border-color: var(--editor-outline-border, rgba(120, 102, 76, 0.1));
+  background: transparent;
+  border-color: transparent;
   color: var(--editor-outline-active-text, #1f2732);
 }
 
 .editor-outline-item.active {
-  background: var(--editor-outline-active-bg, rgba(255, 252, 247, 0.92));
-  border-color: var(--editor-outline-border, rgba(120, 102, 76, 0.16));
-  color: var(--editor-outline-active-text, #1f2732);
+  background: transparent;
+  border-color: transparent;
+  color: var(--editor-strong-color, rgb(193, 95, 60));
   font-weight: 600;
 }
 
