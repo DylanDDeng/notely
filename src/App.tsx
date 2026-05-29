@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from './components/Editor/Editor';
 import { generateFilename, generateNoteContent, parseNote } from './utils/noteUtils';
-import type { EditorNote, Note, SaveNoteData } from './types';
+import type { EditorNote, Note, OpenMarkdownFileResult, SaveNoteData } from './types';
 import './styles/App.css';
 
 const QuickOpen = lazy(() => import('./components/QuickOpen/QuickOpen'));
@@ -22,6 +22,12 @@ const getWindowDraftStorageKey = (): string => {
 };
 
 const isNewDocumentWindow = (): boolean => getWindowParams().get('newDocument') === '1';
+
+// Absolute path of a file this window was spawned to open, if any.
+const getWindowOpenFilePath = (): string => {
+  const raw = getWindowParams().get('openFile');
+  return raw ? decodeURIComponent(raw) : '';
+};
 
 const getSavedRecentNoteIds = (): string[] => {
   try {
@@ -146,6 +152,9 @@ function App() {
   const [quickOpenQuery, setQuickOpenQuery] = useState('');
   const [outlineToggleKey, setOutlineToggleKey] = useState(0);
   const [draftNote, setDraftNote] = useState<EditorNote | null>(() => {
+    // A window spawned to open a specific file loads it asynchronously below;
+    // start with no draft to avoid flashing an empty document.
+    if (getWindowOpenFilePath()) return null;
     if (isNewDocumentWindow()) return createDraftNote();
     return readUnsavedDraft(getWindowDraftStorageKey()) ?? createDraftNote();
   });
@@ -549,33 +558,51 @@ function App() {
     }
   }, []);
 
+  // Load a file's contents (read by the main process) into THIS window.
+  const loadOpenedNote = useCallback(
+    (result: OpenMarkdownFileResult | undefined): boolean => {
+      if (!result?.success || !result.note) {
+        if (result?.error) console.error('Failed to open markdown file:', result.error);
+        return false;
+      }
+      const nextRawNote = result.note;
+      const parsed = parseNote(nextRawNote.content, nextRawNote.filename);
+      const openedNote: Note = {
+        ...nextRawNote,
+        ...parsed,
+        modifiedAt: new Date(nextRawNote.modifiedAt),
+        createdAt: new Date(nextRawNote.createdAt),
+      };
+      if (result.directory) activeDirectoryRef.current = result.directory;
+      setDraftNote(null);
+      setNotes([openedNote]);
+      setSelectedNoteId(openedNote.id);
+      return true;
+    },
+    []
+  );
+
+  // The chosen file opens in a NEW window (handled by the main process), so this
+  // window is left untouched.
   const handleOpenMarkdownFile = useCallback(async () => {
-    const result = await window.electronAPI.openMarkdownFile?.();
-    if (!result || result.canceled) return;
-
-    if (!result.success || !result.note) {
-      console.error('Failed to open markdown file:', result.error);
-      return;
-    }
-
-    const nextRawNote = result.note;
-    const parsed = parseNote(nextRawNote.content, nextRawNote.filename);
-    const openedNote: Note = {
-      ...nextRawNote,
-      ...parsed,
-      modifiedAt: new Date(nextRawNote.modifiedAt),
-      createdAt: new Date(nextRawNote.createdAt),
-    };
-
-    if (result.directory) {
-      activeDirectoryRef.current = result.directory;
-    }
-
-    setDraftNote(null);
-    setNotes([openedNote]);
-    setSelectedNoteId(openedNote.id);
     setIsQuickOpenOpen(false);
+    await window.electronAPI.openMarkdownFile?.();
   }, []);
+
+  // If this window was spawned to open a specific file, load it once on mount.
+  useEffect(() => {
+    const openPath = getWindowOpenFilePath();
+    if (!openPath) return;
+    let cancelled = false;
+    void (async () => {
+      const result = await window.electronAPI.readFile?.(openPath);
+      if (cancelled) return;
+      loadOpenedNote(result);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadOpenedNote]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onMenuAction((action) => {

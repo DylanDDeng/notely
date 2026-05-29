@@ -24,6 +24,10 @@ export interface RawNote {
 export interface OpenMarkdownFileResult {
   success: boolean;
   canceled?: boolean;
+  // When the open action spawns a new window, these flag the outcome instead of
+  // returning a note to the calling window.
+  opened?: boolean;
+  focused?: boolean;
   note?: RawNote;
   directory?: string;
   error?: string;
@@ -125,6 +129,7 @@ export interface ElectronAPI {
   setStoragePath: (path: string) => Promise<{ success: boolean; path?: string; error?: string }>;
   getAllNotes: () => Promise<RawNote[]>;
   openMarkdownFile?: () => Promise<OpenMarkdownFileResult>;
+  readFile?: (filePath: string) => Promise<OpenMarkdownFileResult>;
   saveNote: (data: { filename: string; content: string; preserveModifiedAt?: boolean }) => Promise<{ success: boolean; error?: string }>;
   saveNoteAs?: (data: { suggestedFilename: string; content: string }) => Promise<{ success: boolean; canceled?: boolean; filepath?: string; filename?: string; directory?: string; error?: string }>;
   deleteNote: (filename: string) => Promise<{ success: boolean; error?: string }>;
