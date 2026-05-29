@@ -39,6 +39,16 @@ export function generateNoteContent(body: string): string {
   return normalizeSavedMarkdown(body);
 }
 
+// Returns the text of the first Markdown heading (any level), or '' when none.
+export function getFirstHeading(markdown: string): string {
+  const lines = String(markdown || '').split('\n');
+  for (const line of lines) {
+    const match = line.match(/^\s{0,3}#{1,6}\s+(.*\S)\s*$/);
+    if (match) return match[1].trim();
+  }
+  return '';
+}
+
 export function generateFilename(title: string): string {
   const fallbackTitle = 'Untitled Note';
   const trimmed = title.trim();

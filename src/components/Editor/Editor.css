@@ -90,15 +90,52 @@
   left: 50%;
   transform: translateX(-50%);
   max-width: min(58%, 520px);
+  display: flex;
+  justify-content: center;
+}
+
+.editor-title-button,
+.editor-title-input {
+  max-width: 100%;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--editor-text-muted);
   text-align: center;
+  font-family: inherit;
+}
+
+.editor-title-button {
+  max-width: 520px;
+  border: none;
+  background: transparent;
+  padding: 2px 8px;
+  border-radius: 7px;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.editor-title-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--editor-text-muted) 12%, transparent);
+  color: var(--editor-text);
+}
+
+.editor-title-button:disabled {
+  cursor: default;
+}
+
+.editor-title-input {
+  width: min(60vw, 520px);
+  border: none;
+  border-radius: 7px;
+  padding: 2px 8px;
+  background: color-mix(in srgb, var(--editor-text-muted) 10%, transparent);
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--editor-accent) 40%, transparent);
 }
 
 .editor-word-count {

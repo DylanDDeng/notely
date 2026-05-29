@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MarkdownLiveEditor from './MarkdownLiveEditor';
 import type { EditorNote, SaveNoteData } from '../../types';
+import { generateFilename, getFirstHeading } from '../../utils/noteUtils';
 import './Editor.css';
+
+const filenameBase = (filename?: string): string =>
+  (filename || '').replace(/\.(md|markdown)$/i, '');
+
+const headingSlugBase = (heading: string): string =>
+  generateFilename(heading).replace(/\.(md|markdown)$/i, '');
 
 interface EditorProps {
   note: EditorNote | null;
@@ -40,6 +47,8 @@ function Editor({
   const [activeOutlineItemId, setActiveOutlineItemId] = useState<string | null>(null);
   const [isOutlineHovered, setIsOutlineHovered] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const outlineHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,6 +58,11 @@ function Editor({
   const draftContentRef = useRef('');
   const documentTitleRef = useRef('');
   const onSaveRef = useRef(onSave);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  // Whether the filename should keep tracking the first heading. Locked once
+  // the user renames the file by hand; re-inferred whenever a note loads.
+  const nameFollowsHeadingRef = useRef(true);
+  const lastSyncedHeadingRef = useRef('');
 
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -113,10 +127,27 @@ function Editor({
     async (noteSnapshot: EditorNote | null | undefined, interactive = false) => {
       if (!noteSnapshot) return;
       clearPendingSave();
+
+      // While the filename still follows the heading, rename the file to match
+      // the first heading whenever it changes. Skipped for drafts (no file yet)
+      // and when the heading is empty (don't rename to "Untitled").
+      let forceFilename: string | undefined;
+      const heading = getFirstHeading(draftContentRef.current);
+      if (
+        nameFollowsHeadingRef.current &&
+        noteSnapshot.filename &&
+        heading &&
+        heading !== lastSyncedHeadingRef.current &&
+        headingSlugBase(heading) !== filenameBase(noteSnapshot.filename)
+      ) {
+        forceFilename = heading;
+      }
+
       await onSaveRef.current({
         id: noteSnapshot.id,
         filename: noteSnapshot.filename,
         filepath: noteSnapshot.filepath,
+        forceFilename,
         title: documentTitleRef.current,
         content: draftContentRef.current,
         tags: [],
@@ -124,6 +155,8 @@ function Editor({
         interactive,
         isDraft: noteSnapshot.isDraft,
       });
+
+      if (heading) lastSyncedHeadingRef.current = heading;
     },
     [clearPendingSave]
   );
@@ -132,6 +165,16 @@ function Editor({
     const activeNote = note;
     setContent(activeNote?.content || '');
     skipNextAutoSaveRef.current = true;
+    setIsEditingName(false);
+
+    // Re-infer whether the filename is still tracking the heading. A draft (no
+    // file yet) always follows; a saved file follows only when its name still
+    // matches the slug of its current first heading.
+    const heading = getFirstHeading(activeNote?.content || '');
+    lastSyncedHeadingRef.current = heading;
+    nameFollowsHeadingRef.current = !activeNote?.filename
+      ? true
+      : Boolean(heading) && headingSlugBase(heading) === filenameBase(activeNote.filename);
 
     return () => {
       clearPendingSave();
@@ -190,6 +233,59 @@ function Editor({
   const handleActiveOutlineItemChange = useCallback((itemId: string | null) => {
     setActiveOutlineItemId((prev) => (prev === itemId ? prev : itemId));
   }, []);
+
+  // The filename shown in the header rail. Saved notes show the real filename;
+  // an unsaved draft previews the name it will take (heading slug or Untitled).
+  const headingName = useMemo(() => getFirstHeading(content), [content]);
+  const displayName = note?.filename
+    ? filenameBase(note.filename)
+    : headingName || 'Untitled';
+  const canRename = Boolean(note?.filename);
+
+  // A stable key for the underlying document so that renaming the file (which
+  // changes note.id) does not remount the editor and lose the caret.
+  const documentKey = useMemo(() => {
+    if (!note) return '';
+    const created = note.createdAt instanceof Date ? note.createdAt.getTime() : NaN;
+    return Number.isNaN(created) ? note.id : `doc-${created}`;
+  }, [note?.id, note?.createdAt]);
+
+  const startNameEdit = useCallback(() => {
+    if (!note?.filename) return;
+    setNameDraft(filenameBase(note.filename));
+    setIsEditingName(true);
+  }, [note?.filename]);
+
+  const commitNameEdit = useCallback(() => {
+    setIsEditingName(false);
+    const activeNote = note;
+    if (!activeNote?.filename) return;
+    const value = nameDraft.trim();
+    if (!value || value === filenameBase(activeNote.filename)) return;
+
+    clearPendingSave();
+    nameFollowsHeadingRef.current = false;
+    void onSaveRef.current({
+      id: activeNote.id,
+      filename: activeNote.filename,
+      filepath: activeNote.filepath,
+      forceFilename: value,
+      title: value,
+      content: draftContentRef.current,
+      tags: [],
+      date: activeNote.date,
+      interactive: false,
+      isDraft: activeNote.isDraft,
+    });
+  }, [clearPendingSave, nameDraft, note]);
+
+  useEffect(() => {
+    if (!isEditingName) return;
+    const input = nameInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [isEditingName]);
 
   useEffect(() => {
     return () => {
@@ -261,7 +357,39 @@ function Editor({
       <header className="editor-header editor-header-minimal">
         <div className="editor-header-side editor-header-left" aria-hidden="true" />
 
-        <div className="editor-title-rail">{documentTitle}</div>
+        <div className="editor-title-rail">
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              type="text"
+              className="editor-title-input"
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitNameEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitNameEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setIsEditingName(false);
+                }
+              }}
+              spellCheck={false}
+              aria-label="File name"
+            />
+          ) : (
+            <button
+              type="button"
+              className="editor-title-button"
+              onClick={startNameEdit}
+              disabled={!canRename}
+              title={canRename ? 'Click to rename file' : undefined}
+            >
+              {displayName}
+            </button>
+          )}
+        </div>
 
         <div className="editor-header-side editor-header-right">
           <span className="editor-word-count">{wordCountLabel}</span>
@@ -331,7 +459,7 @@ function Editor({
                 onActiveOutlineItemChange={handleActiveOutlineItemChange}
                 onRegisterOutlineNavigator={handleRegisterOutlineNavigator}
                 onRegisterExportHtmlGetter={onRegisterExportHtmlGetter}
-                documentKey={note.id}
+                documentKey={documentKey}
               />
             </div>
           </div>
