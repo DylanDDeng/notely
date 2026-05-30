@@ -27,10 +27,24 @@ interface OutlineItem {
 }
 
 const SAVE_DEBOUNCE_MS = 800;
+const CJK_TEXT_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 
 const fallbackTitleFromFilename = (filename?: string): string => {
   if (!filename) return 'Untitled';
   return filename.replace(/\.md$/i, '').trim() || 'Untitled';
+};
+
+const getTextCountLabel = (text: string): string => {
+  const trimmed = text.trim();
+  if (!trimmed) return '0 Words';
+
+  if (CJK_TEXT_RE.test(trimmed)) {
+    const characterCount = Array.from(trimmed.replace(/\s+/g, '')).length;
+    return characterCount === 1 ? '1 Char' : `${characterCount} Chars`;
+  }
+
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  return wordCount === 1 ? '1 Word' : `${wordCount} Words`;
 };
 
 function Editor({
@@ -90,12 +104,7 @@ function Editor({
     documentTitleRef.current = documentTitle;
   }, [documentTitle]);
 
-  const wordCount = useMemo(() => {
-    const trimmed = content.trim();
-    if (!trimmed) return 0;
-    return trimmed.split(/\s+/).filter(Boolean).length;
-  }, [content]);
-  const wordCountLabel = wordCount === 1 ? '1 Word' : `${wordCount} Words`;
+  const textCountLabel = useMemo(() => getTextCountLabel(content), [content]);
 
   const outlineRailActiveIndex = useMemo(() => {
     const railLineCount = 4;
@@ -392,7 +401,7 @@ function Editor({
         </div>
 
         <div className="editor-header-side editor-header-right">
-          <span className="editor-word-count">{wordCountLabel}</span>
+          <span className="editor-word-count">{textCountLabel}</span>
         </div>
       </header>
 

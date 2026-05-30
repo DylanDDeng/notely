@@ -106,7 +106,7 @@ export const builtInThemes: Theme[] = [
     isBuiltIn: true,
     isDark: false,
     colors: {
-      '--surface-canvas': '#f6f2ea',
+      '--surface-canvas': '#F5F4ED',
       '--surface-paper': 'rgba(255, 252, 247, 0.94)',
       '--surface-paper-strong': '#fffdf9',
       '--surface-content': '#ffffff',
@@ -128,7 +128,7 @@ export const builtInThemes: Theme[] = [
       '--glass-bg-strong': '#ffffff',
       '--glass-bg-soft': '#ffffff',
       '--glass-shadow': '0 1px 2px rgba(15, 23, 42, 0.04)',
-      '--editor-bg': '#f5f4ef',
+      '--editor-bg': '#F5F4ED',
       '--editor-surface': '#fbf8f2',
       '--editor-surface-subtle': '#f1ece3',
       '--editor-text': '#141413',

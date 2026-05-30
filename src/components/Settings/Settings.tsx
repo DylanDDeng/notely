@@ -22,7 +22,7 @@ const SYSTEM_THEME_OPTION = {
   id: 'system',
   name: 'System',
   colors: {
-    '--editor-bg': 'linear-gradient(120deg, #f5f4ef 0 50%, #1c1c1e 50% 100%)',
+    '--editor-bg': 'linear-gradient(120deg, #F5F4ED 0 50%, #1c1c1e 50% 100%)',
     '--editor-accent': '#0a84ff',
   },
 };
