@@ -6,13 +6,21 @@ import SwiftData
 struct EditorView: View {
     let note: NoteModel
     @Environment(DataController.self) var dataController
-    @State private var displayedText: String = ""
-    @State private var liveWordCount: Int = 0
-    @State private var liveCharCount: Int = 0
+    @State private var displayedText: String
+    @State private var liveWordCount: Int
+    @State private var liveCharCount: Int
     @State private var saveTask: Task<Void, Never>? = nil
 
     private var fontSize: CGFloat { CGFloat(AppSettings.editorFontSize) }
     private var lineHeight: CGFloat { CGFloat(AppSettings.editorLineHeight) }
+
+    init(note: NoteModel) {
+        self.note = note
+        let initialText = note.content
+        _displayedText = State(initialValue: initialText)
+        _liveWordCount = State(initialValue: Self.wordCount(in: initialText))
+        _liveCharCount = State(initialValue: initialText.count)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,6 +64,7 @@ struct EditorView: View {
     }
 
     private func loadNote() {
+        saveTask?.cancel()
         displayedText = note.content
         updateCounts(from: note.content)
     }
@@ -68,9 +77,13 @@ struct EditorView: View {
     }
 
     private func updateCounts(from text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        liveWordCount = trimmed.isEmpty ? 0 : trimmed.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+        liveWordCount = Self.wordCount(in: text)
         liveCharCount = text.count
+    }
+
+    private static func wordCount(in text: String) -> Int {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? 0 : trimmed.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
     }
 
     private func scheduleSave(_ content: String) {
