@@ -52,7 +52,8 @@ final class WysiwygEngine {
         let baseColor = NSColor(named: "PrimaryText") ?? .textColor
         let secondaryColor = NSColor(named: "SecondaryText") ?? .secondaryLabelColor
         let accentColor = NSColor(named: "AccentColor") ?? .controlAccentColor
-        let codeBgColor = (NSColor(named: "PrimaryText") ?? .black).withAlphaComponent(0.06)
+        let codeBgColor = NSColor(named: "CodeBlockBackground") ?? NSColor.controlBackgroundColor
+        let blockquoteBg = (NSColor(named: "AccentColor") ?? NSColor.systemOrange).withAlphaComponent(0.04)
 
         let para = NSMutableParagraphStyle()
         para.lineSpacing = (fontSize * (lineHeight - 1.0))
@@ -64,12 +65,12 @@ final class WysiwygEngine {
         ]
 
         func headingAttrs(level: Int) -> [NSAttributedString.Key: Any] {
-            let sizes: [CGFloat] = [30, 26, 22, 19, 17, 16]
-            let weights: [NSFont.Weight] = [.bold, .bold, .semibold, .semibold, .semibold, .semibold]
+            let sizes: [CGFloat] = [28, 22, 20, 18, 17, 16]
+            let weights: [NSFont.Weight] = [.bold, .semibold, .semibold, .semibold, .semibold, .semibold]
             let idx = max(0, min(5, level - 1))
             let hp = NSMutableParagraphStyle()
-            hp.lineSpacing = 4
-            hp.paragraphSpacingBefore = 16
+            hp.lineSpacing = 3
+            hp.paragraphSpacingBefore = level == 1 ? 10 : 16
             hp.paragraphSpacing = 6
             return [
                 .font: NSFont.systemFont(ofSize: sizes[idx], weight: weights[idx]),
@@ -84,10 +85,11 @@ final class WysiwygEngine {
         bp.lineSpacing = 2
 
         let cbPara = NSMutableParagraphStyle()
-        cbPara.headIndent = 12
-        cbPara.firstLineHeadIndent = 12
-        cbPara.lineSpacing = 2
-        cbPara.paragraphSpacing = 4
+        cbPara.headIndent = 16
+        cbPara.firstLineHeadIndent = 16
+        cbPara.lineSpacing = 4
+        cbPara.paragraphSpacing = 6
+        cbPara.paragraphSpacingBefore = 6
 
         return MarkdownStyle(
             bold: [
@@ -96,17 +98,17 @@ final class WysiwygEngine {
             ],
             italic: [
                 .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: fontSize), toHaveTrait: .italicFontMask),
-                .foregroundColor: baseColor,
+                .foregroundColor: secondaryColor,
             ],
             strikethrough: [
                 .font: NSFont.systemFont(ofSize: fontSize),
-                .foregroundColor: secondaryColor,
+                .foregroundColor: NSColor(named: "TertiaryText") ?? .tertiaryLabelColor,
                 .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                .strikethroughColor: secondaryColor,
+                .strikethroughColor: NSColor(named: "TertiaryText") ?? .tertiaryLabelColor,
             ],
             inlineCode: [
                 .font: NSFont.monospacedSystemFont(ofSize: fontSize - 2, weight: .regular),
-                .foregroundColor: accentColor,
+                .foregroundColor: NSColor(named: "SecondaryText") ?? secondaryColor,
                 .backgroundColor: codeBgColor,
             ],
             link: [
@@ -121,13 +123,14 @@ final class WysiwygEngine {
             heading5: headingAttrs(level: 5),
             heading6: headingAttrs(level: 6),
             blockquote: [
-                .font: NSFont.systemFont(ofSize: fontSize),
+                .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: fontSize), toHaveTrait: .italicFontMask),
                 .foregroundColor: secondaryColor,
                 .paragraphStyle: bp,
+                .backgroundColor: blockquoteBg,
             ],
             codeBlock: [
-                .font: NSFont.monospacedSystemFont(ofSize: fontSize - 2, weight: .regular),
-                .foregroundColor: baseColor,
+                .font: NSFont.monospacedSystemFont(ofSize: fontSize - 3, weight: .regular),
+                .foregroundColor: NSColor(named: "SecondaryText") ?? secondaryColor,
                 .backgroundColor: codeBgColor,
                 .paragraphStyle: cbPara,
             ],
@@ -141,9 +144,9 @@ final class WysiwygEngine {
             ],
             hr: [
                 .font: NSFont.systemFont(ofSize: fontSize),
-                .foregroundColor: secondaryColor,
+                .foregroundColor: NSColor(named: "BorderColor") ?? .separatorColor,
                 .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                .strikethroughColor: secondaryColor,
+                .strikethroughColor: NSColor(named: "BorderColor") ?? .separatorColor,
             ],
             hashtag: [
                 .font: NSFont.systemFont(ofSize: fontSize - 1, weight: .medium),

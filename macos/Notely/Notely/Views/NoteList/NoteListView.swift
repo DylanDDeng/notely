@@ -15,6 +15,9 @@ struct NoteListView: View {
         switch appModel.sidebarSelection {
         case .allNotes:
             notes = activeNotes
+        case .today:
+            let cal = Calendar.current
+            notes = activeNotes.filter { cal.isDateInToday($0.updatedAt) }
         case .untagged:
             notes = activeNotes.filter { $0.tags.isEmpty }
         case .trash:
@@ -25,9 +28,8 @@ struct NoteListView: View {
             }
         }
 
-        // Apply search filter
-        let searchResults: [NoteModel]
         let search = appModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let searchResults: [NoteModel]
         if search.isEmpty {
             searchResults = notes
         } else {
@@ -37,7 +39,6 @@ struct NoteListView: View {
             }
         }
 
-        // Sort
         return sortNotes(searchResults)
     }
 
@@ -63,34 +64,22 @@ struct NoteListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Search bar
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondaryText)
-                TextField("Search notes…", text: Bindable(appModel).searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                if !appModel.searchText.isEmpty {
-                    Button {
-                        appModel.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondaryText)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(8)
-            .background(Color.sidebarBg.opacity(0.5))
-
-            // Sort menu
-            HStack {
-                Text("\(filteredNotes.count) \(filteredNotes.count == 1 ? "note" : "notes")")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondaryText)
+            HStack(spacing: 10) {
+                Text(appModel.sidebarSelection.title)
+                    .font(.notely(15, weight: .semibold))
+                    .foregroundColor(.primaryText)
                 Spacer()
+
+                Button {
+                    NotificationCenter.default.post(name: .focusNoteSearch, object: nil)
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.secondaryText)
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+
                 Menu {
                     ForEach(SortMode.allCases, id: \.self) { mode in
                         Button(mode.label) {
@@ -98,22 +87,46 @@ struct NoteListView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "arrow.up.arrow.down")
-                            .font(.system(size: 9))
-                        Text(appModel.sortMode.label)
-                            .font(.system(size: 11))
-                    }
-                    .foregroundColor(.secondaryText)
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.secondaryText)
+                        .frame(width: 22, height: 22)
                 }
                 .menuStyle(.borderlessButton)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundColor(.tertiaryText)
+                TextField("Search", text: Bindable(appModel).searchText)
+                    .textFieldStyle(.plain)
+                    .font(.notely(13))
+                    .foregroundColor(.primaryText)
+                if !appModel.searchText.isEmpty {
+                    Button {
+                        appModel.searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.tertiaryText)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 10)
             .padding(.vertical, 6)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.searchFieldBg)
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
 
-            Divider()
-
-            // Note list
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if filteredNotes.isEmpty {
@@ -142,8 +155,9 @@ struct NoteListView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
         }
-        .background(Color.appBg)
+        .background(Color.noteListBg)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 if appModel.sidebarSelection != .trash {
@@ -164,6 +178,7 @@ struct NoteListView: View {
         switch appModel.sidebarSelection {
         case .trash: return "Trash is empty"
         case .untagged: return "No untagged notes"
+        case .today: return "No notes today"
         case .tag(let tag): return "No notes tagged #\(tag)"
         default: return appModel.searchText.isEmpty ? "No notes yet" : "No results found"
         }
@@ -173,6 +188,7 @@ struct NoteListView: View {
         switch appModel.sidebarSelection {
         case .trash: return "Deleted notes will appear here."
         case .untagged: return "All your notes have tags."
+        case .today: return "Notes edited today will show here."
         case .tag: return "Try a different tag."
         default: return appModel.searchText.isEmpty ? "Create your first note to get started." : "Try a different search."
         }

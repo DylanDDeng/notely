@@ -15,6 +15,7 @@ struct EditorContainerView: View {
                 EmptyEditorView()
             }
         }
+        .background(Color.editorBg)
         .onAppear {
             Diag.log("EditorContainer onAppear: selectedNoteId=\(String(describing: appModel.selectedNoteId))")
         }
@@ -27,14 +28,24 @@ struct EditorContainerView: View {
 /// Shown when no note is selected.
 struct EmptyEditorView: View {
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "note.text.badge.plus")
-                .font(.system(size: 50, weight: .ultraLight))
-                .foregroundColor(.secondaryText.opacity(0.4))
+        VStack(spacing: 18) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.accent.opacity(0.08))
+                    .frame(width: 84, height: 84)
+                Image(systemName: "note.text.badge.plus")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundColor(.accent)
+            }
 
-            Text("Select a note or create a new one")
-                .font(.system(size: 14))
-                .foregroundColor(.secondaryText)
+            VStack(spacing: 6) {
+                Text("Select a note or create a new one")
+                    .font(.notely(17, weight: .semibold))
+                    .foregroundColor(.primaryText)
+                Text("Your calm writing space will appear here.")
+                    .font(.notely(13))
+                    .foregroundColor(.tertiaryText)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.editorBg)

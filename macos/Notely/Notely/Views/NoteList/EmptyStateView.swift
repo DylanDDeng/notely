@@ -1,25 +1,33 @@
 import SwiftUI
 
-/// Empty state placeholder for the note list.
 struct EmptyStateView: View {
     let icon: String
     let title: String
     let subtitle: String
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 40, weight: .light))
-                .foregroundColor(.secondaryText.opacity(0.5))
+        VStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.accent.opacity(0.08))
+                    .frame(width: 64, height: 64)
+                Image(systemName: icon)
+                    .font(.system(size: 26, weight: .light))
+                    .foregroundColor(.accent)
+            }
 
-            Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.primaryText)
-
-            Text(subtitle)
-                .font(.system(size: 12))
-                .foregroundColor(.secondaryText)
-                .multilineTextAlignment(.center)
+            VStack(spacing: 6) {
+                Text(title)
+                    .font(.notely(15, weight: .semibold))
+                    .foregroundColor(.primaryText)
+                Text(subtitle)
+                    .font(.notely(13))
+                    .foregroundColor(.tertiaryText)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .frame(maxWidth: 220)
+            }
         }
+        .padding(.vertical, 32)
     }
 }

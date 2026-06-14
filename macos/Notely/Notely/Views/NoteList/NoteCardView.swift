@@ -32,61 +32,64 @@ struct NoteCardView: View {
                 .fill(isSelected ? Color.accent : Color.clear)
                 .frame(width: 3)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    if note.pinned {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 9))
-                            .foregroundColor(.accent)
-                    }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 5) {
                     Text(highlighted(note.title.isEmpty ? "Untitled" : note.title))
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.notely(14, weight: .semibold))
                         .foregroundColor(.primaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
-                    Spacer()
+
+                    if note.pinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.accent)
+                    }
+                    Spacer(minLength: 0)
                 }
 
                 Text(highlighted(summary))
-                    .font(.system(size: 12))
+                    .font(.notely(13))
                     .foregroundColor(.secondaryText)
                     .lineLimit(2)
+                    .lineSpacing(2)
                     .truncationMode(.tail)
 
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
+                    Text(note.updatedAt.formatted(.relative(presentation: .named)))
+                        .font(.notely(11))
+                        .foregroundColor(.tertiaryText)
+
                     ForEach(note.tags.prefix(2), id: \.self) { tag in
                         Text("#\(tag)")
-                            .font(.system(size: 10))
-                            .foregroundColor(.accent)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
+                            .font(.notely(11, weight: .medium))
+                            .foregroundColor(isSelected ? .accent : .secondaryText)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
                             .background(
                                 Capsule()
-                                    .fill(Color.accent.opacity(0.08))
+                                    .fill(isSelected ? Color.accent.opacity(0.10) : Color.primaryText.opacity(0.04))
                             )
                     }
 
                     if note.tags.count > 2 {
                         Text("+\(note.tags.count - 2)")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondaryText)
+                            .font(.notely(11))
+                            .foregroundColor(.tertiaryText)
                     }
 
-                    Spacer()
-
-                    Text(note.updatedAt.formatted(.relative(presentation: .named)))
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondaryText)
+                    Spacer(minLength: 0)
                 }
-                .padding(.top, 2)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
+        .frame(height: 108)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 0)
-                .fill(isSelected ? Color.accent.opacity(0.06) : (isHovered ? Color.primaryText.opacity(0.03) : Color.clear))
+            isSelected
+                ? Color.accentSelected
+                : (isHovered ? Color.cardHover : Color.clear)
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -121,7 +124,6 @@ struct NoteCardView: View {
         }
     }
 
-    /// Returns an AttributedString with search keyword highlighted.
     private func highlighted(_ text: String) -> AttributedString {
         let search = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !search.isEmpty else {

@@ -20,6 +20,7 @@ struct NotelyApp: App {
                 .environment(dataController)
                 .modelContainer(dataController.container)
         }
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("New Note") {
@@ -63,4 +64,5 @@ extension Notification.Name {
     static let formatItalic = Notification.Name("notely.formatItalic")
     static let formatLink = Notification.Name("notely.formatLink")
     static let toggleTodo = Notification.Name("notely.toggleTodo")
+    static let focusNoteSearch = Notification.Name("notely.focusNoteSearch")
 }

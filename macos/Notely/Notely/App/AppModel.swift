@@ -5,9 +5,20 @@ import SwiftData
 /// Represents the current selection in the sidebar.
 enum SidebarSelection: Hashable {
     case allNotes
+    case today
     case untagged
     case trash
     case tag(String)
+
+    var title: String {
+        switch self {
+        case .allNotes: return "All Notes"
+        case .today: return "Today"
+        case .untagged: return "Untagged"
+        case .trash: return "Trash"
+        case .tag(let name): return "#\(name)"
+        }
+    }
 }
 
 /// Global observable state for the app.

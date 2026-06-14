@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Left column: navigation items (All Notes, Untagged, Trash) and tag tree.
+/// Left column: Library header, navigation items, tag tree, and settings.
 struct SidebarView: View {
     @Environment(AppModel.self) var appModel
     @Environment(DataController.self) var dataController
@@ -13,6 +13,11 @@ struct SidebarView: View {
         return TagTreeBuilder.build(from: allTags)
     }
 
+    private var todayCount: Int {
+        let cal = Calendar.current
+        return activeNotes.filter { cal.isDateInToday($0.updatedAt) }.count
+    }
+
     private var untaggedCount: Int {
         activeNotes.filter { $0.tags.isEmpty }.count
     }
@@ -22,56 +27,105 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
-                // Navigation items
-                SidebarNavItem(
-                    icon: "tray.full",
-                    title: "All Notes",
-                    count: activeNotes.count,
-                    isSelected: appModel.sidebarSelection == .allNotes
-                ) {
-                    appModel.sidebarSelection = .allNotes
-                }
-
-                SidebarNavItem(
-                    icon: "number",
-                    title: "Untagged",
-                    count: untaggedCount,
-                    isSelected: appModel.sidebarSelection == .untagged
-                ) {
-                    appModel.sidebarSelection = .untagged
-                }
-
-                SidebarNavItem(
-                    icon: "trash",
-                    title: "Trash",
-                    count: trashCount,
-                    isSelected: appModel.sidebarSelection == .trash
-                ) {
-                    appModel.sidebarSelection = .trash
-                }
-
-                Divider()
-                    .padding(.vertical, 8)
-
-                // Tag tree
-                if !tagTree.isEmpty {
-                    Text("Tags")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.secondaryText)
-                        .textCase(.uppercase)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 4)
-
-                    ForEach(tagTree) { node in
-                        TagTreeRow(node: node)
-                            .transition(.opacity.combined(with: .move(edge: .leading)))
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("Library")
+                            .font(.notely(13, weight: .semibold))
+                            .foregroundColor(.tertiaryText)
+                        Spacer()
+                        Button {
+                            let note = dataController.createNote()
+                            appModel.selectedNoteId = note.id
+                            appModel.sidebarSelection = .allNotes
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.secondaryText)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help("New Note")
                     }
-                }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
 
-                Spacer(minLength: 16)
+                    VStack(spacing: 1) {
+                        SidebarNavItem(icon: "tray.full", title: "All Notes", count: activeNotes.count, isSelected: appModel.sidebarSelection == .allNotes) {
+                            appModel.sidebarSelection = .allNotes
+                        }
+                        SidebarNavItem(icon: "clock", title: "Today", count: todayCount, isSelected: appModel.sidebarSelection == .today) {
+                            appModel.sidebarSelection = .today
+                        }
+                        SidebarNavItem(icon: "number", title: "Untagged", count: untaggedCount, isSelected: appModel.sidebarSelection == .untagged) {
+                            appModel.sidebarSelection = .untagged
+                        }
+                        SidebarNavItem(icon: "trash", title: "Trash", count: trashCount, isSelected: appModel.sidebarSelection == .trash) {
+                            appModel.sidebarSelection = .trash
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 10)
+
+                    HStack(spacing: 8) {
+                        Image(systemName: "tag")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.tertiaryText)
+                        Text("Tags")
+                            .font(.notely(13, weight: .semibold))
+                            .foregroundColor(.tertiaryText)
+                        Spacer()
+                    }
+                    .frame(height: 40)
+                    .padding(.horizontal, 18)
+
+                    VStack(spacing: 1) {
+                        if tagTree.isEmpty {
+                            Text("No tags yet")
+                                .font(.notely(13))
+                                .foregroundColor(.tertiaryText)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 8)
+                        } else {
+                            ForEach(tagTree) { node in
+                                TagTreeRow(node: node)
+                                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 8)
+
+                    Spacer(minLength: 16)
+                }
             }
+            .scrollContentBackground(.hidden)
+
+            Rectangle()
+                .fill(Color.borderColor)
+                .frame(height: 1)
+
+            Button {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.secondaryText)
+                        .frame(width: 18)
+                    Text("Settings")
+                        .font(.notely(14))
+                        .foregroundColor(.primaryText)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
             .padding(.vertical, 8)
         }
         .background(Color.sidebarBg)
@@ -79,10 +133,8 @@ struct SidebarView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     let note = dataController.createNote()
-                    Diag.log("Sidebar + button: created note id=\(note.id)")
                     appModel.selectedNoteId = note.id
                     appModel.sidebarSelection = .allNotes
-                    Diag.log("Sidebar + button: set selectedNoteId=\(String(describing: appModel.selectedNoteId))")
                 } label: {
                     Image(systemName: "square.and.pencil")
                         .font(.system(size: 14))
@@ -94,7 +146,7 @@ struct SidebarView: View {
     }
 }
 
-/// A single navigation item in the sidebar (All Notes, Untagged, Trash).
+/// A single navigation item in the sidebar.
 struct SidebarNavItem: View {
     let icon: String
     let title: String
@@ -104,34 +156,33 @@ struct SidebarNavItem: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.system(size: 13))
+                    .font(.system(size: 13, weight: .medium))
                     .frame(width: 18)
                     .foregroundColor(isSelected ? .accent : .secondaryText)
 
                 Text(title)
-                    .font(.system(size: 13))
+                    .font(.notely(14, weight: isSelected ? .medium : .regular))
                     .foregroundColor(isSelected ? .accent : .primaryText)
 
                 Spacer()
 
                 if count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondaryText)
+                        .font(.notely(12))
+                        .foregroundColor(isSelected ? .accent : .tertiaryText)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.accent.opacity(0.12) : Color.clear)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isSelected ? Color.accentHover : Color.clear)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
     }
 }
 
@@ -153,7 +204,7 @@ struct TagTreeRow: View {
             Button {
                 appModel.sidebarSelection = .tag(node.id)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: 7) {
                     if !node.children.isEmpty {
                         Button {
                             withAnimation(.easeInOut(duration: 0.15)) {
@@ -162,44 +213,43 @@ struct TagTreeRow: View {
                         } label: {
                             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                                 .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.secondaryText)
+                                .foregroundColor(.tertiaryText)
                                 .frame(width: 12)
                         }
                         .buttonStyle(.plain)
                     } else {
-                        Image(systemName: "number")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondaryText)
+                        Text("#")
+                            .font(.notely(14, weight: .medium))
+                            .foregroundColor(isSelected ? .accent : .tertiaryText)
                             .frame(width: 12)
                     }
 
                     Text(node.name)
-                        .font(.system(size: 13))
+                        .font(.notely(14, weight: isSelected ? .medium : .regular))
                         .foregroundColor(isSelected ? .accent : .primaryText)
 
                     Spacer()
 
                     Text("\(node.totalCount)")
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondaryText)
+                        .font(.notely(12))
+                        .foregroundColor(isSelected ? .accent : .tertiaryText)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
                 .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isSelected ? Color.accent.opacity(0.12) : Color.clear)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isSelected ? Color.accentHover : Color.clear)
                 )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .padding(.leading, CGFloat(node.level) * 16)
 
             if isExpanded && !node.children.isEmpty {
                 ForEach(node.children) { child in
                     TagTreeRow(node: child)
+                        .padding(.leading, 14)
                 }
             }
         }
-        .padding(.horizontal, 8)
     }
 }
