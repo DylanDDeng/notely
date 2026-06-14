@@ -1,11 +1,8 @@
 import SwiftUI
-import SwiftData
 
-/// The editor column: Markdown body + status bar.
-/// Uses the WYSIWYG text view with marker hiding.
 struct EditorView: View {
-    let note: NoteModel
-    @Environment(DataController.self) var dataController
+    let note: FileNote
+    @Environment(FileNoteStore.self) var store
     @State private var displayedText: String
     @State private var liveWordCount: Int
     @State private var liveCharCount: Int
@@ -15,7 +12,20 @@ struct EditorView: View {
     private var fontSize: CGFloat { CGFloat(AppSettings.editorFontSize) }
     private var lineHeight: CGFloat { CGFloat(AppSettings.editorLineHeight) }
 
-    init(note: NoteModel) {
+    /// Outline derived from the live text. Uses the exact same heading detection
+    /// as `WysiwygTextView.headingLineRanges`, so a row's `index` always maps to
+    /// the correct heading when the rail posts `.scrollToHeading`.
+    private var outlineHeadings: [OutlineHeading] {
+        let ns = displayedText as NSString
+        return WysiwygTextView.headingLineRanges(in: ns).enumerated().map { i, range in
+            let line = ns.substring(with: range).trimmingCharacters(in: .whitespaces)
+            let level = line.prefix(while: { $0 == "#" }).count
+            let text = line.dropFirst(level).trimmingCharacters(in: .whitespaces)
+            return OutlineHeading(index: i, level: level, text: String(text))
+        }
+    }
+
+    init(note: FileNote) {
         self.note = note
         let initialText = note.content
         _displayedText = State(initialValue: initialText)
@@ -25,29 +35,25 @@ struct EditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            EditorToolbar(note: note, showsInspector: $showsInspector)
+            EditorToolbar(note: note, wordCount: liveWordCount, charCount: liveCharCount, showsInspector: $showsInspector)
 
-            HStack(spacing: 0) {
+            ZStack(alignment: .trailing) {
                 WysiwygEditor(
                     initialText: displayedText,
                     fontSize: fontSize,
                     lineHeight: lineHeight,
                     onTextChange: handleTextChange
                 )
-                .id(note.id)
-                .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 90)
                 .padding(.top, 40)
                 .padding(.bottom, 24)
                 .background(Color.editorBg)
 
-                if showsInspector {
-                    InspectorPanel(note: note, wordCount: liveWordCount, charCount: liveCharCount)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
+                // Navigation lives at the right edge: a thin tick rail that
+                // expands to a clickable outline on hover. It never covers the
+                // centered text and is independent of the info popover.
+                OutlineRail(headings: outlineHeadings)
             }
-            .animation(.easeInOut(duration: 0.18), value: showsInspector)
 
             Rectangle()
                 .fill(Color.borderColor)
@@ -78,13 +84,13 @@ struct EditorView: View {
 
     private func loadNote() {
         saveTask?.cancel()
+        ImageLoader.shared.setBaseURL(note.url.deletingLastPathComponent())
         displayedText = note.content
         updateCounts(from: note.content)
     }
 
-    /// Called by the text view on every keystroke.
-    /// Updates counts locally and schedules a debounced save.
     private func handleTextChange(_ newText: String) {
+        displayedText = newText
         updateCounts(from: newText)
         scheduleSave(newText)
     }
@@ -104,7 +110,7 @@ struct EditorView: View {
         saveTask = Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            dataController.updateNote(note, content: content)
+            store.saveContent(content, to: note.id)
         }
     }
 
@@ -115,7 +121,7 @@ struct EditorView: View {
 
 /// Bottom status bar: word count, character count, last updated time, tags.
 struct StatusBarView: View {
-    let note: NoteModel
+    let note: FileNote
     let wordCount: Int
     let charCount: Int
 
@@ -152,25 +158,26 @@ struct StatusBarView: View {
 
 /// Top toolbar for the editor: sidebar toggle on left, actions on right.
 struct EditorToolbar: View {
-    let note: NoteModel
+    let note: FileNote
+    let wordCount: Int
+    let charCount: Int
     @Binding var showsInspector: Bool
-    @Environment(DataController.self) var dataController
+    @Environment(FileNoteStore.self) var store
 
     var body: some View {
         HStack {
-            ToolbarIconButton(systemName: "sidebar.left") {
-                NSApp.sendAction(Selector(("toggleSidebar:")), to: nil, from: nil)
-            }
-
             Spacer()
 
             HStack(spacing: 2) {
                 ToolbarIconButton(systemName: "info.circle", isSelected: showsInspector) {
                     showsInspector.toggle()
                 }
+                .popover(isPresented: $showsInspector, arrowEdge: .bottom) {
+                    DocumentInfoPopover(note: note, wordCount: wordCount, charCount: charCount)
+                }
 
                 ToolbarIconButton(systemName: "square.and.arrow.down") {
-                    MarkdownExporter.export(note: note)
+                    MarkdownExporter.export(note: note, store: store)
                 }
 
                 ToolbarIconButton(systemName: "ellipsis") {
@@ -179,7 +186,7 @@ struct EditorToolbar: View {
             }
         }
         .padding(.horizontal, 20)
-        .frame(height: 48)
+        .frame(height: 40)
         .background(Color.editorBg)
     }
 }
@@ -204,92 +211,226 @@ struct ToolbarIconButton: View {
     }
 }
 
-struct InspectorPanel: View {
-    let note: NoteModel
+/// A heading in the document outline. `index` is the heading's ordinal in
+/// document order, which is the payload used to scroll the editor.
+struct OutlineHeading: Identifiable {
+    let index: Int
+    let level: Int
+    let text: String
+    var id: Int { index }
+}
+
+/// Lightweight, glanceable document info shown in a popover anchored to the
+/// toolbar info button — stats and tags only (navigation lives in the rail).
+struct DocumentInfoPopover: View {
+    let note: FileNote
     let wordCount: Int
     let charCount: Int
 
+    private var readingTime: String {
+        let minutes = max(1, wordCount / 200)
+        return "\(minutes) min"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Inspector")
-                .font(.notely(15, weight: .semibold))
-                .foregroundColor(.primaryText)
-
-            InspectorSection(title: "Document") {
-                InspectorRow(label: "Words", value: "\(wordCount)")
-                InspectorRow(label: "Characters", value: "\(charCount)")
-                InspectorRow(label: "Updated", value: note.updatedAt.formatted(date: .abbreviated, time: .shortened))
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 8) {
+                InspectorStatRow(label: "Words", value: "\(wordCount)")
+                InspectorStatRow(label: "Characters", value: "\(charCount)")
+                InspectorStatRow(label: "Reading time", value: readingTime)
+                InspectorStatRow(label: "Created", value: note.createdAt.formatted(.dateTime.month().day().year()))
+                InspectorStatRow(label: "Updated", value: note.updatedAt.formatted(.relative(presentation: .named)))
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 14)
 
-            InspectorSection(title: "Tags") {
-                if note.tags.isEmpty {
-                    Text("No tags")
-                        .font(.notely(12))
+            if !note.tags.isEmpty {
+                InspectorDivider().padding(.horizontal, 0)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tags")
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.tertiaryText)
-                } else {
-                    FlowTags(tags: note.tags)
+                        .tracking(0.4)
+                        .textCase(.uppercase)
+                    FlowLayout(spacing: 6) {
+                        ForEach(note.tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.accent)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(Color.accent.opacity(0.08)))
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+        .frame(width: 240)
+    }
+}
+
+/// Right-edge navigation: a thin column of tick marks (one per heading) that
+/// expands on hover into a clickable outline. Clicking a row scrolls the editor
+/// to that heading via the `.scrollToHeading` notification.
+struct OutlineRail: View {
+    let headings: [OutlineHeading]
+    @State private var hovering = false
+
+    var body: some View {
+        if headings.isEmpty {
+            Color.clear.frame(width: 0)
+        } else {
+            content
+                .onHover { hovering = $0 }
+                .animation(.easeInOut(duration: 0.15), value: hovering)
+                .padding(.trailing, 18)
+                .padding(.vertical, 16)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if hovering {
+            expandedList
+        } else {
+            ticks
+        }
+    }
+
+    private var ticks: some View {
+        VStack(alignment: .trailing, spacing: 7) {
+            ForEach(headings) { h in
+                Capsule()
+                    .fill(Color.tertiaryText.opacity(0.45))
+                    .frame(width: tickWidth(h.level), height: 2)
+            }
+        }
+        .padding(.horizontal, 6)
+        .contentShape(Rectangle())
+    }
+
+    private func tickWidth(_ level: Int) -> CGFloat {
+        switch level {
+        case 1: return 18
+        case 2: return 13
+        default: return 9
+        }
+    }
+
+    private var expandedList: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Outline")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.tertiaryText)
+                    .tracking(0.4)
+                    .textCase(.uppercase)
+                    .padding(.bottom, 4)
+
+                ForEach(headings) { h in
+                    Button {
+                        NotificationCenter.default.post(
+                            name: .scrollToHeading, object: nil, userInfo: ["index": h.index]
+                        )
+                    } label: {
+                        Text(h.text)
+                            .font(.system(size: 12.5, weight: h.level == 1 ? .medium : .regular))
+                            .foregroundColor(h.level == 1 ? .primaryText : .secondaryText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 3)
+                            .padding(.leading, CGFloat(max(0, h.level - 1)) * 12)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-
-            Spacer()
+            .padding(14)
         }
-        .padding(20)
-        .frame(width: 260)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color.noteListBg)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Color.borderColor)
-                .frame(width: 1)
-        }
+        .frame(width: 230)
+        .frame(maxHeight: 420)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.borderColor, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.10), radius: 12, x: -3, y: 2)
     }
 }
 
-struct InspectorSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.notely(12, weight: .semibold))
-                .foregroundColor(.tertiaryText)
-            content
-        }
-    }
-}
-
-struct InspectorRow: View {
+struct InspectorStatRow: View {
     let label: String
     let value: String
 
     var body: some View {
         HStack {
             Text(label)
-                .font(.notely(12))
+                .font(.system(size: 13))
                 .foregroundColor(.secondaryText)
             Spacer()
             Text(value)
-                .font(.notely(12, weight: .medium))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.primaryText)
                 .lineLimit(1)
         }
     }
 }
 
-struct FlowTags: View {
-    let tags: [String]
-
+struct InspectorDivider: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(tags, id: \.self) { tag in
-                Text("#\(tag)")
-                    .font(.notely(11, weight: .medium))
-                    .foregroundColor(.accent)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.accent.opacity(0.08)))
+        Rectangle()
+            .fill(Color.primaryText.opacity(0.06))
+            .frame(height: 1)
+            .padding(.horizontal, 20)
+    }
+}
+
+/// Simple flow layout for wrapping tag pills.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var totalHeight: CGFloat = 0
+        var totalWidth: CGFloat = 0
+        var lineWidth: CGFloat = 0
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if lineWidth + size.width > maxWidth && lineWidth > 0 {
+                totalWidth = max(totalWidth, lineWidth)
+                totalHeight += lineHeight + spacing
+                lineWidth = size.width + spacing
+                lineHeight = size.height
+            } else {
+                lineWidth += size.width + spacing
+                lineHeight = max(lineHeight, size.height)
             }
+        }
+        totalWidth = max(totalWidth, lineWidth)
+        totalHeight += lineHeight
+        return CGSize(width: totalWidth, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x: CGFloat = bounds.minX
+        var y: CGFloat = bounds.minY
+        var lineHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX && x > bounds.minX {
+                x = bounds.minX
+                y += lineHeight + spacing
+                lineHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: .init(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
         }
     }
 }

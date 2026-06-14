@@ -33,6 +33,9 @@ enum Diag {
 extension Notification.Name {
     static let imageDidLoad = Notification.Name("notely.imageDidLoad")
     static let animatedImageFrameDidChange = Notification.Name("notely.animatedImageFrameDidChange")
+    /// Posted by the outline rail; userInfo["index"] = ordinal of the heading to
+    /// scroll to (0-based, in document order).
+    static let scrollToHeading = Notification.Name("notely.scrollToHeading")
 }
 
 /// Custom scroll view that ensures mouse clicks properly activate the text
@@ -123,10 +126,18 @@ struct WysiwygEditor: NSViewRepresentable {
             Diag.log("updateNSView: text synced for note switch, len=\(initialText.count)")
         }
 
-        let contentWidth = max(nsView.contentSize.width, 1)
-        if abs(textView.frame.width - contentWidth) > 0.5 {
-            textView.setFrameSize(NSSize(width: contentWidth, height: max(textView.frame.height, nsView.contentSize.height)))
-            textView.textContainer?.containerSize = NSSize(width: contentWidth, height: CGFloat.greatestFiniteMagnitude)
+        // The scroll view fills the full width of the pane, so its vertical
+        // scroller sits flush against the right edge. The readable text column is
+        // centered and capped via textContainerInset rather than by shrinking the
+        // scroll view (which is what pushed the scroller inward before).
+        let available = max(nsView.contentSize.width, 1)
+        let sideInset = WysiwygTextView.sideInset(forAvailableWidth: available)
+        let widthChanged = abs(textView.frame.width - available) > 0.5
+        let insetChanged = abs(textView.textContainerInset.width - sideInset) > 0.5
+        if widthChanged || insetChanged {
+            textView.setFrameSize(NSSize(width: available, height: max(textView.frame.height, nsView.contentSize.height)))
+            textView.textContainerInset = NSSize(width: sideInset, height: textView.textContainerInset.height)
+            textView.textContainer?.containerSize = NSSize(width: max(1, available - sideInset * 2), height: CGFloat.greatestFiniteMagnitude)
         }
 
         textView.fontSize = fontSize
@@ -171,6 +182,21 @@ final class WysiwygTextView: NSTextView {
     /// Test instrumentation: number of full restyles and engine rebuilds.
     private(set) var restyleCount = 0
     private(set) var engineBuildCount = 0
+
+    // MARK: - Layout
+
+    /// Maximum readable text column width in points.
+    static let maxColumnWidth: CGFloat = 720
+    /// Minimum horizontal inset on each side of the text column.
+    static let minSideInset: CGFloat = 90
+
+    /// Horizontal text inset that centers a `maxColumnWidth`-capped column in a
+    /// text view of the given available width. The scroll view itself spans the
+    /// full width (so its scroller hugs the right edge); this inset reproduces
+    /// the centered column purely inside the text view.
+    static func sideInset(forAvailableWidth width: CGFloat) -> CGFloat {
+        max(minSideInset, (width - maxColumnWidth) / 2)
+    }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
@@ -218,6 +244,58 @@ final class WysiwygTextView: NSTextView {
             name: .animatedImageFrameDidChange,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScrollToHeading(_:)),
+            name: .scrollToHeading,
+            object: nil
+        )
+    }
+
+    // MARK: - Heading navigation
+
+    /// Character ranges of every Markdown heading line (`#`…`######`), in
+    /// document order, skipping fenced code blocks. The N-th element is the
+    /// scroll target for outline row N. Static + pure so it can be unit-tested.
+    static func headingLineRanges(in string: NSString) -> [NSRange] {
+        var ranges: [NSRange] = []
+        var inCodeBlock = false
+        string.enumerateSubstrings(in: NSRange(location: 0, length: string.length), options: [.byLines]) { sub, range, _, _ in
+            let trimmed = (sub ?? "").trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                inCodeBlock.toggle()
+                return
+            }
+            if inCodeBlock { return }
+            if trimmed.range(of: #"^#{1,6}\s+\S"#, options: .regularExpression) != nil {
+                ranges.append(range)
+            }
+        }
+        return ranges
+    }
+
+    @objc private func handleScrollToHeading(_ notification: Notification) {
+        guard let index = notification.userInfo?["index"] as? Int,
+              let storage = textStorage,
+              let layoutManager = layoutManager,
+              let textContainer = textContainer else { return }
+
+        let ranges = Self.headingLineRanges(in: storage.string as NSString)
+        guard index >= 0, index < ranges.count else { return }
+        let target = ranges[index]
+
+        // Position the heading near the top of the viewport (a "jump to" feel),
+        // not merely "just barely visible".
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: target, actualCharacterRange: nil)
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        if let clipView = enclosingScrollView?.contentView {
+            let maxY = max(0, frame.height - clipView.bounds.height)
+            let y = min(max(0, rect.minY + textContainerInset.height - 12), maxY)
+            clipView.scroll(to: NSPoint(x: 0, y: y))
+            enclosingScrollView?.reflectScrolledClipView(clipView)
+        } else {
+            scrollRangeToVisible(target)
+        }
     }
 
     // MARK: - First responder
