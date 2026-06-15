@@ -135,6 +135,29 @@ struct SettingsTabItem: View {
     let tab: SettingsTab
     let isSelected: Bool
     let action: () -> Void
+    @State private var isHovering = false
+
+    /// Visual state of a tab row. Selection wins over hover. Pure + testable.
+    enum Highlight {
+        case selected, hover, none
+        static func resolve(isSelected: Bool, isHovering: Bool) -> Highlight {
+            if isSelected { return .selected }
+            if isHovering { return .hover }
+            return .none
+        }
+    }
+
+    private var highlight: Highlight {
+        Highlight.resolve(isSelected: isSelected, isHovering: isHovering)
+    }
+
+    private var backgroundColor: Color {
+        switch highlight {
+        case .selected: return Color.accent.opacity(0.10)
+        case .hover: return Color.primaryText.opacity(0.06)
+        case .none: return .clear
+        }
+    }
 
     var body: some View {
         Button(action: action) {
@@ -146,18 +169,26 @@ struct SettingsTabItem: View {
                 Text(tab.title)
                     .font(.system(size: 14, weight: isSelected ? .medium : .regular))
                     .foregroundColor(isSelected ? .accent : .primaryText)
-                Spacer()
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
+            // Fill the column width and make the WHOLE row (incl. the trailing
+            // empty space) hittable, not just the icon + label.
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.accent.opacity(0.10) : Color.clear)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(backgroundColor)
             )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .animation(.easeInOut(duration: 0.12), value: highlight)
     }
 }
+
+extension SettingsTabItem.Highlight: Equatable {}
 
 // MARK: - Reusable row components
 
