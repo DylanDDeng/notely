@@ -86,7 +86,7 @@ final class FileNoteStore {
             url: url,
             title: TitleExtractor.extract(from: initialContent),
             content: initialContent,
-            tags: TagExtractor.extract(from: initialContent),
+            tags: TagExtractor.frontmatterTags(from: initialContent),
             createdAt: attrs[.creationDate] as? Date ?? Date(),
             updatedAt: attrs[.modificationDate] as? Date ?? Date(),
             pinned: false,
@@ -104,7 +104,7 @@ final class FileNoteStore {
         if let idx = notes.firstIndex(where: { $0.id == noteId }) {
             notes[idx].content = content
             notes[idx].title = TitleExtractor.extract(from: content)
-            notes[idx].tags = TagExtractor.extract(from: content)
+            notes[idx].tags = TagExtractor.frontmatterTags(from: content)
             notes[idx].updatedAt = Date()
         }
     }
@@ -235,7 +235,7 @@ final class FileNoteStore {
                 url: fileURL,
                 title: TitleExtractor.extract(from: content),
                 content: content,
-                tags: TagExtractor.extract(from: content),
+                tags: TagExtractor.frontmatterTags(from: content),
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 pinned: pinnedFiles.contains(fileURL.path),

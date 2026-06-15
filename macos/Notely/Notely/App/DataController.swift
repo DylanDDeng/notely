@@ -84,7 +84,7 @@ final class DataController {
     func updateNote(_ note: NoteModel, content: String) {
         note.content = content
         note.title = TitleExtractor.extract(from: content)
-        note.tags = TagExtractor.extract(from: content)
+        note.tags = TagExtractor.frontmatterTags(from: content)
         note.updatedAt = Date()
         save()
     }
