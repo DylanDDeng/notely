@@ -143,6 +143,7 @@ struct WysiwygEditor: NSViewRepresentable {
         textView.fontSize = fontSize
         textView.lineHeight = lineHeight
         textView.rebuildEngineAndRestyleIfNeeded()
+        textView.fitFrameToContent()
     }
 
     func makeCoordinator() -> Coordinator {
@@ -254,6 +255,22 @@ final class WysiwygTextView: NSTextView {
 
     // MARK: - Heading navigation
 
+    /// Ensures the text view's frame is tall enough to contain all laid-out
+    /// content. Without this, `NSClipView.scroll(to:)` is clamped to the
+    /// document view's bounds — if the frame only matches the visible height,
+    /// no scrolling is possible and every heading jump lands at the top.
+    func fitFrameToContent() {
+        guard let layoutManager, let textContainer else { return }
+        layoutManager.ensureLayout(for: textContainer)
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let requiredHeight = usedRect.height + textContainerInset.height * 2
+        let minHeight = enclosingScrollView?.contentSize.height ?? bounds.height
+        let targetHeight = max(requiredHeight, minHeight)
+        if abs(frame.height - targetHeight) > 0.5 {
+            setFrameSize(NSSize(width: frame.width, height: targetHeight))
+        }
+    }
+
     /// Character ranges of every Markdown heading line (`#`…`######`), in
     /// document order, skipping fenced code blocks. The N-th element is the
     /// scroll target for outline row N. Static + pure so it can be unit-tested.
@@ -284,18 +301,28 @@ final class WysiwygTextView: NSTextView {
         guard index >= 0, index < ranges.count else { return }
         let target = ranges[index]
 
-        // Position the heading near the top of the viewport (a "jump to" feel),
-        // not merely "just barely visible".
+        // Grow the text view to fit all content, then force layout so the
+        // heading's rect is valid before we measure it.
+        fitFrameToContent()
+        layoutManager.ensureLayout(for: textContainer)
+
+        // Heading rect in the text view's coordinate space.
         let glyphRange = layoutManager.glyphRange(forCharacterRange: target, actualCharacterRange: nil)
-        let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-        if let clipView = enclosingScrollView?.contentView {
-            let maxY = max(0, frame.height - clipView.bounds.height)
-            let y = min(max(0, rect.minY + textContainerInset.height - 12), maxY)
-            clipView.scroll(to: NSPoint(x: 0, y: y))
-            enclosingScrollView?.reflectScrolledClipView(clipView)
-        } else {
-            scrollRangeToVisible(target)
-        }
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        rect.origin.x += textContainerOrigin.x
+        rect.origin.y += textContainerOrigin.y
+
+        // Bias the heading toward the TOP of the viewport: reveal a viewport-tall
+        // region starting just above it. scrollToVisible top-aligns an oversized
+        // rect and clamps at the document edges on its own, so this works
+        // regardless of clip-view flippedness (the manual clip math did not).
+        let viewportHeight = enclosingScrollView?.contentView.bounds.height ?? rect.height
+        let topMargin: CGFloat = 12
+        let revealRect = NSRect(x: rect.minX,
+                                y: max(0, rect.minY - topMargin),
+                                width: max(1, rect.width),
+                                height: max(rect.height, viewportHeight))
+        scrollToVisible(revealRect)
     }
 
     // MARK: - First responder
@@ -376,12 +403,20 @@ final class WysiwygTextView: NSTextView {
         let selected = selectedRange()
         let rawMarkdown = markdownString()
         if rawMarkdown != storage.string {
+            // Replace storage with raw markdown. Do NOT restore the cursor
+            // here — the character offsets have changed (image attachments ↔
+            // markdown syntax), so selected.location is in the wrong
+            // coordinate system. We restore it AFTER applyStyle, when the
+            // storage is back to the same state (text + attachments).
             storage.setAttributedString(NSAttributedString(string: rawMarkdown))
-            setSelectedRange(NSRange(location: min(selected.location, (rawMarkdown as NSString).length), length: 0))
         }
 
-        let cursor = selectedRange().location
-        engine?.applyStyle(to: storage, cursorLocation: cursor)
+        engine?.applyStyle(to: storage, cursorLocation: selected.location)
+
+        // Restore the cursor. After applyStyle the storage has the same
+        // character count as before (images are back as 1-char attachments),
+        // so the original offset is valid again.
+        setSelectedRange(NSRange(location: min(selected.location, storage.length), length: 0))
     }
 
     @objc private func handleImageDidLoad() {
@@ -438,7 +473,10 @@ final class WysiwygTextView: NSTextView {
         }
         super.mouseDown(with: event)
         Diag.log("after super.mouseDown selectedRange=\(selectedRange())")
-        restyle()
+        // Do NOT call restyle() here — it replaces the entire text storage
+        // (converting image attachments ↔ markdown), which changes character
+        // counts and corrupts the cursor position that super.mouseDown just
+        // set. Marker visibility updates on the next keystroke instead.
     }
 
     // MARK: - Formatting commands

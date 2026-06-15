@@ -1,14 +1,11 @@
 import SwiftUI
-import SwiftData
 
-/// A single note card in the note list.
 struct NoteCardView: View {
-    let note: NoteModel
+    let note: FileNote
     let isSelected: Bool
-    let isTrashView: Bool
     var searchText: String = ""
     let onSelect: () -> Void
-    @Environment(DataController.self) var dataController
+    @Environment(FileNoteStore.self) var store
     @State private var isHovered = false
 
     private var summary: String {
@@ -32,10 +29,10 @@ struct NoteCardView: View {
                 .fill(isSelected ? Color.accent : Color.clear)
                 .frame(width: 3)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
-                    Text(highlighted(note.title.isEmpty ? "Untitled" : note.title))
-                        .font(.notely(14, weight: .semibold))
+                    Text(highlighted(note.title.isEmpty ? note.filename : note.title))
+                        .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                         .foregroundColor(.primaryText)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -47,25 +44,27 @@ struct NoteCardView: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .padding(.bottom, 1)
 
                 Text(highlighted(summary))
-                    .font(.notely(13))
-                    .foregroundColor(.secondaryText)
+                    .font(.system(size: 13))
+                    .foregroundColor(isSelected ? .secondaryText : .tertiaryText)
                     .lineLimit(2)
                     .lineSpacing(2)
                     .truncationMode(.tail)
+                    .padding(.bottom, 2)
 
-                HStack(spacing: 7) {
+                HStack(spacing: 6) {
                     Text(note.updatedAt.formatted(.relative(presentation: .named)))
-                        .font(.notely(11))
+                        .font(.system(size: 11))
                         .foregroundColor(.tertiaryText)
 
                     ForEach(note.tags.prefix(2), id: \.self) { tag in
                         Text("#\(tag)")
-                            .font(.notely(11, weight: .medium))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundColor(isSelected ? .accent : .secondaryText)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 1)
                             .background(
                                 Capsule()
                                     .fill(isSelected ? Color.accent.opacity(0.10) : Color.primaryText.opacity(0.04))
@@ -74,7 +73,7 @@ struct NoteCardView: View {
 
                     if note.tags.count > 2 {
                         Text("+\(note.tags.count - 2)")
-                            .font(.notely(11))
+                            .font(.system(size: 11))
                             .foregroundColor(.tertiaryText)
                     }
 
@@ -84,7 +83,6 @@ struct NoteCardView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .frame(height: 108)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             isSelected
@@ -93,33 +91,18 @@ struct NoteCardView: View {
         )
         .contentShape(Rectangle())
         .onTapGesture {
-            if !isTrashView {
-                onSelect()
-            }
+            onSelect()
         }
         .onHover { hovering in
             isHovered = hovering
         }
         .contextMenu {
-            if isTrashView {
-                Button("Restore") {
-                    dataController.restoreNote(note)
-                }
-                Divider()
-                Button("Delete Permanently", role: .destructive) {
-                    dataController.permanentlyDelete(note)
-                }
-            } else {
-                Button(note.pinned ? "Unpin" : "Pin") {
-                    dataController.togglePin(note)
-                }
-                Button("Export as Markdown…") {
-                    MarkdownExporter.export(note: note)
-                }
-                Divider()
-                Button("Move to Trash", role: .destructive) {
-                    dataController.trashNote(note)
-                }
+            Button(note.pinned ? "Unpin" : "Pin") {
+                store.togglePin(note.id)
+            }
+            Divider()
+            Button("Delete", role: .destructive) {
+                store.deleteNote(note.id)
             }
         }
     }

@@ -1,20 +1,34 @@
 import SwiftUI
 
-/// Root three-column layout: Sidebar | Note List | Editor.
 struct AppShellView: View {
+    @Environment(AppModel.self) var appModel
+    @Environment(FileNoteStore.self) var store
+    @State private var settingsTabState = SettingsTabState()
+
     var body: some View {
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
-        } content: {
-            NoteListView()
-                .navigationSplitViewColumnWidth(min: 320, ideal: 320, max: 320)
-        } detail: {
-            EditorContainerView()
-                .navigationSplitViewColumnWidth(min: 720, ideal: 900)
+        if !store.isOpen {
+            FolderOpenView()
+        } else {
+            NavigationSplitView {
+                SidebarView()
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
+            } content: {
+                if appModel.showSettings {
+                    SettingsTabBar()
+                } else {
+                    NoteListView()
+                }
+            } detail: {
+                if appModel.showSettings {
+                    SettingsContent()
+                } else {
+                    EditorContainerView()
+                }
+            }
+            .navigationSplitViewStyle(.balanced)
+            .frame(minWidth: 1040, minHeight: 700)
+            .background(Color.appBg)
+            .environment(settingsTabState)
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 1040, minHeight: 700)
-        .background(Color.appBg)
     }
 }

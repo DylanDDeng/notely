@@ -1,27 +1,20 @@
 import SwiftUI
-import SwiftData
 
 /// Right column: wraps the editor or shows empty state.
 struct EditorContainerView: View {
     @Environment(AppModel.self) var appModel
-    @Environment(DataController.self) var dataController
+    @Environment(FileNoteStore.self) var store
 
     var body: some View {
         Group {
             if let noteId = appModel.selectedNoteId,
-               let note = dataController.fetchNote(byId: noteId) {
+               let note = store.notes.first(where: { $0.id == noteId }) {
                 EditorView(note: note)
             } else {
                 EmptyEditorView()
             }
         }
         .background(Color.editorBg)
-        .onAppear {
-            Diag.log("EditorContainer onAppear: selectedNoteId=\(String(describing: appModel.selectedNoteId))")
-        }
-        .onChange(of: appModel.selectedNoteId) { _, newId in
-            Diag.log("EditorContainer onChange selectedNoteId=\(String(describing: newId))")
-        }
     }
 }
 

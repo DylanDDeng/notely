@@ -8,8 +8,26 @@ import Foundation
 /// 3. If content is empty, return "Untitled"
 /// 4. Truncate to 80 characters
 enum TitleExtractor {
+    private static let sanitizeRules: [(NSRegularExpression, String)] = [
+        (#"^#+\s*"#, ""),
+        (#"^\*\s+"#, ""),
+        (#"^-\s+"#, ""),
+        (#"^\d+\.\s+"#, ""),
+        (#"^>\s*"#, ""),
+        (#"^[-*_]{3,}$"#, ""),
+        (#"\*\*(.+?)\*\*"#, "$1"),
+        (#"\*(.+?)\*"#, "$1"),
+        (#"~~(.+?)~~"#, "$1"),
+        (#"`([^`]+)`"#, "$1"),
+        (#"\[([^\]]+)\]\([^)]+\)"#, "$1"),
+        (#"#\S+"#, ""),
+    ].compactMap { pattern, replacement in
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        return (regex, replacement)
+    }
+
     static func extract(from content: String) -> String {
-        for line in content.components(separatedBy: "\n") {
+        for line in content.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
 
@@ -32,28 +50,9 @@ enum TitleExtractor {
     private static func sanitize(_ text: String) -> String {
         var result = text
 
-        // Remove common Markdown markers for a clean title
-        let patterns: [(String, String)] = [
-            (#"^#+\s*"#, ""),              // Headings
-            (#"^\*\s+"#, ""),               // Unordered list
-            (#"^-\s+"#, ""),                // Unordered list
-            (#"^\d+\.\s+"#, ""),            // Ordered list
-            (#"^>\s*"#, ""),                // Blockquote
-            (#"^[-*_]{3,}$"#, ""),          // HR
-            (#"\*\*(.+?)\*\*"#, "$1"),      // Bold
-            (#"\*(.+?)\*"#, "$1"),          // Italic
-            (#"~~(.+?)~~"#, "$1"),          // Strikethrough
-            (#"`([^`]+)`"#, "$1"),          // Inline code
-            (#"\[([^\]]+)\]\([^)]+\)"#, "$1"), // Links
-            (#"#\S+"#, ""),                 // Hashtags
-        ]
-
-        for (pattern, replacement) in patterns {
-            result = result.replacingOccurrences(
-                of: pattern,
-                with: replacement,
-                options: .regularExpression
-            )
+        for (regex, replacement) in sanitizeRules {
+            let range = NSRange(location: 0, length: (result as NSString).length)
+            result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
         }
 
         result = result.trimmingCharacters(in: .whitespaces)

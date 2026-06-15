@@ -3,32 +3,28 @@ import SwiftUI
 @main
 struct NotelyApp: App {
     @State private var appModel = AppModel()
-    @State private var dataController: DataController
-
-    init() {
-        do {
-            _dataController = State(initialValue: try DataController())
-        } catch {
-            fatalError("Failed to initialize data controller: \(error)")
-        }
-    }
+    @State private var store = FileNoteStore()
 
     var body: some Scene {
         WindowGroup {
             AppShellView()
                 .environment(appModel)
-                .environment(dataController)
-                .modelContainer(dataController.container)
+                .environment(store)
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(after: .newItem) {
                 Button("New Note") {
-                    let note = dataController.createNote()
-                    appModel.selectedNoteId = note.id
+                    let note = store.createNote()
+                    appModel.selectedNoteId = note?.id
                     appModel.sidebarSelection = .allNotes
                 }
                 .keyboardShortcut("n", modifiers: .command)
+
+                Button("Open Folder…") {
+                    openFolderPanel()
+                }
+                .keyboardShortcut("o", modifiers: .command)
             }
 
             CommandMenu("Format") {
@@ -54,9 +50,22 @@ struct NotelyApp: App {
             }
         }
     }
-}
 
-// MARK: - Notification names
+    private func openFolderPanel() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Notes Folder"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Open"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        store.openWorkspace(at: url)
+        appModel.selectedNoteId = nil
+        appModel.sidebarSelection = .allNotes
+    }
+}
 
 extension Notification.Name {
     static let newNote = Notification.Name("notely.newNote")

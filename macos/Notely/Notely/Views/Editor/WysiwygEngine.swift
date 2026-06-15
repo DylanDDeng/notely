@@ -88,8 +88,8 @@ final class WysiwygEngine {
         cbPara.headIndent = 16
         cbPara.firstLineHeadIndent = 16
         cbPara.lineSpacing = 4
-        cbPara.paragraphSpacing = 6
-        cbPara.paragraphSpacingBefore = 6
+        cbPara.paragraphSpacing = 0
+        cbPara.paragraphSpacingBefore = 0
 
         return MarkdownStyle(
             bold: [
@@ -294,6 +294,7 @@ final class WysiwygEngine {
         storage.removeAttribute(.underlineStyle, range: fullRange)
         storage.removeAttribute(.strikethroughStyle, range: fullRange)
         storage.removeAttribute(.paragraphStyle, range: fullRange)
+        storage.removeAttribute(.attachment, range: fullRange)
 
         // Apply base paragraph style to everything
         storage.addAttributes(style.baseParagraph, range: fullRange)
@@ -321,6 +322,30 @@ final class WysiwygEngine {
                     let blockRange = NSRange(location: codeBlockStart, length: (lineRange.location + lineRange.length) - codeBlockStart)
                     codeBlockRanges.append(blockRange)
                     storage.addAttributes(style.codeBlock, range: blockRange)
+                    // Add spacing before the first line of the code block
+                    if codeBlockStart > 0 {
+                        let prevLineEnd = codeBlockStart - 1
+                        if prevLineEnd >= 0 && prevLineEnd < storage.length {
+                            var prevAttrs = storage.attributes(at: prevLineEnd, effectiveRange: nil)
+                            if let prevPara = prevAttrs[.paragraphStyle] as? NSParagraphStyle {
+                                let modified = prevPara.mutableCopy() as! NSMutableParagraphStyle
+                                modified.paragraphSpacing = 12
+                                prevAttrs[.paragraphStyle] = modified
+                                storage.addAttribute(.paragraphStyle, value: modified, range: NSRange(location: prevLineEnd, length: 1))
+                            }
+                        }
+                    }
+                    // Add spacing after the last line of the code block
+                    let blockEnd = blockRange.location + blockRange.length
+                    if blockEnd < storage.length {
+                        var endAttrs = storage.attributes(at: blockEnd, effectiveRange: nil)
+                        if let endPara = endAttrs[.paragraphStyle] as? NSParagraphStyle {
+                            let modified = endPara.mutableCopy() as! NSMutableParagraphStyle
+                            modified.paragraphSpacingBefore = 12
+                            endAttrs[.paragraphStyle] = modified
+                            storage.addAttribute(.paragraphStyle, value: modified, range: NSRange(location: blockEnd, length: 1))
+                        }
+                    }
                     // Apply faded color to fence delimiters
                     applyMarkerStyle(storage, range: lineRange)
                 }
@@ -372,17 +397,80 @@ final class WysiwygEngine {
             }
         }
 
-        // Apply inline rules (only outside code blocks)
-        for rule in inlineRules {
-            rule.pattern.enumerateMatches(in: storage.string, range: fullRange) { match, _, _ in
+        // Render loadable images as real NSTextAttachment replacement characters.
+        if let imageRule = inlineRules.first {
+            var renderableImages: [(range: NSRange, markdown: String, content: LoadedMarkdownImage)] = []
+
+            imageRule.pattern.enumerateMatches(in: storage.string, range: fullRange) { match, _, _ in
+                guard let match = match else { return }
+                if codeBlockRanges.contains(where: { NSLocationInRange(match.range.location, $0) }) { return }
+
+                let urlString = nsString.substring(with: match.range(at: 2))
+                let markdown = nsString.substring(with: match.range)
+
+                if let content = ImageLoader.shared.loadSync(urlString: urlString) {
+                    renderableImages.append((match.range, markdown, content))
+                } else if isRemoteImageURL(urlString) {
+                    ImageLoader.shared.loadAsync(urlString: urlString) { image in
+                        if image != nil {
+                            NotificationCenter.default.post(name: .imageDidLoad, object: nil)
+                        }
+                    }
+                }
+            }
+
+            for item in renderableImages.reversed() {
+                let attachment = ImageTextAttachment(content: item.content, markdownSource: item.markdown, maxWidth: 500)
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.lineSpacing = 4
+                paragraph.paragraphSpacing = 8
+                paragraph.paragraphSpacingBefore = 8
+                paragraph.alignment = .left
+
+                let replacement = NSMutableAttributedString(attachment: attachment)
+                replacement.addAttributes(style.baseParagraph, range: NSRange(location: 0, length: replacement.length))
+                replacement.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: replacement.length))
+                storage.replaceCharacters(in: item.range, with: replacement)
+            }
+        }
+
+        let styledFullRange = NSRange(location: 0, length: storage.length)
+        let styledString = storage.string as NSString
+        let styledCodeBlockRanges = findCodeBlockRanges(in: styledString)
+
+        // Collect unresolved image ranges so normal link styling does not split ![alt](url).
+        var imageRanges: [NSRange] = []
+        if let imageRule = inlineRules.first {
+            imageRule.pattern.enumerateMatches(in: storage.string, range: styledFullRange) { match, _, _ in
+                guard let match = match else { return }
+                imageRanges.append(match.range)
+                let (markers, contentRanges) = imageRule.analyze(match, styledString)
+                for contentRange in contentRanges {
+                    storage.addAttributes(imageRule.contentAttributes, range: contentRange)
+                }
+                for markerRange in markers {
+                    storage.addAttribute(.foregroundColor, value: getMarkerColor(), range: markerRange)
+                }
+            }
+        }
+
+        for (ruleIndex, rule) in inlineRules.enumerated() {
+            if ruleIndex == 0 { continue }
+
+            rule.pattern.enumerateMatches(in: storage.string, range: styledFullRange) { match, _, _ in
                 guard let match = match else { return }
 
                 // Skip if inside code block
-                for blockRange in codeBlockRanges {
+                for blockRange in styledCodeBlockRanges {
                     if NSLocationInRange(match.range.location, blockRange) { return }
                 }
 
-                let (markers, contentRanges) = rule.analyze(match, nsString)
+                // Skip if inside an image range (to avoid double-processing)
+                for imgRange in imageRanges {
+                    if NSLocationInRange(match.range.location, imgRange) { return }
+                }
+
+                let (markers, contentRanges) = rule.analyze(match, styledString)
                 for contentRange in contentRanges {
                     storage.addAttributes(rule.contentAttributes, range: contentRange)
                 }
@@ -458,6 +546,35 @@ final class WysiwygEngine {
         return NSRange(location: lineRange.location + match.range.location, length: match.range.length)
     }
 
+    private func isRemoteImageURL(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") ||
+               trimmed.hasPrefix("<http://") || trimmed.hasPrefix("<https://")
+    }
+
+    private func findCodeBlockRanges(in string: NSString) -> [NSRange] {
+        let fullRange = NSRange(location: 0, length: string.length)
+        var ranges: [NSRange] = []
+        var inCodeBlock = false
+        var codeBlockStart = 0
+
+        string.enumerateSubstrings(in: fullRange, options: [.byLines]) { substring, range, _, _ in
+            let line = substring ?? ""
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") else { return }
+
+            if !inCodeBlock {
+                inCodeBlock = true
+                codeBlockStart = range.location
+            } else {
+                inCodeBlock = false
+                ranges.append(NSRange(location: codeBlockStart, length: (range.location + range.length) - codeBlockStart))
+            }
+        }
+
+        return ranges
+    }
+
     // MARK: - Marker hiding
 
     private func applyMarkerHiding(storage: NSTextStorage, markerRange: NSRange, lineRange: NSRange, cursorLocation: Int) {
@@ -467,7 +584,10 @@ final class WysiwygEngine {
         if isActive {
             storage.addAttribute(.foregroundColor, value: getMarkerColor(), range: absoluteMarkerRange)
         } else {
-            hideRange(storage, range: absoluteMarkerRange)
+            // For headings, use faded color instead of transparent so the
+            // text doesn't shift position. Transparent text still occupies
+            // horizontal space, causing apparent indentation misalignment.
+            storage.addAttribute(.foregroundColor, value: getMarkerColor().withAlphaComponent(0.35), range: absoluteMarkerRange)
         }
     }
 

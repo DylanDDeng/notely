@@ -320,44 +320,73 @@ struct OutlineRail: View {
     }
 
     private var expandedList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 2) {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Outline")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.notely(11, weight: .semibold))
                     .foregroundColor(.tertiaryText)
-                    .tracking(0.4)
+                    .tracking(0.5)
                     .textCase(.uppercase)
-                    .padding(.bottom, 4)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
 
                 ForEach(headings) { h in
-                    Button {
-                        NotificationCenter.default.post(
-                            name: .scrollToHeading, object: nil, userInfo: ["index": h.index]
-                        )
-                    } label: {
-                        Text(h.text)
-                            .font(.system(size: 12.5, weight: h.level == 1 ? .medium : .regular))
-                            .foregroundColor(h.level == 1 ? .primaryText : .secondaryText)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 3)
-                            .padding(.leading, CGFloat(max(0, h.level - 1)) * 12)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    OutlineRow(heading: h)
                 }
             }
-            .padding(14)
+            .padding(10)
         }
-        .frame(width: 230)
-        .frame(maxHeight: 420)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(width: 240)
+        .frame(maxHeight: 440)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.noteListBg)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color.borderColor, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.10), radius: 12, x: -3, y: 2)
+        .shadow(color: .black.opacity(0.12), radius: 14, x: -3, y: 3)
+    }
+}
+
+/// A single outline row with hover feedback. Clicking scrolls the editor to the
+/// heading via `.scrollToHeading`.
+private struct OutlineRow: View {
+    let heading: OutlineHeading
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            NotificationCenter.default.post(
+                name: .scrollToHeading, object: nil, userInfo: ["index": heading.index]
+            )
+        } label: {
+            HStack(spacing: 6) {
+                // A small level dot keeps the hierarchy legible without the
+                // foreign "H1/H2" chips of the old inspector.
+                Circle()
+                    .fill(Color.accent.opacity(heading.level == 1 ? 0.55 : 0.28))
+                    .frame(width: 4, height: 4)
+                Text(heading.text)
+                    .font(.notely(13, weight: heading.level == 1 ? .semibold : .regular))
+                    .foregroundColor(hovering ? .accent : (heading.level == 1 ? .primaryText : .secondaryText))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 5)
+            .padding(.horizontal, 8)
+            .padding(.leading, CGFloat(max(0, heading.level - 1)) * 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(hovering ? Color.accentHover : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 

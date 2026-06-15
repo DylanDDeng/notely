@@ -9,6 +9,12 @@ enum AppSettings {
     static let sortModeKey = "notely.sortMode"
     static let sidebarWidthKey = "notely.sidebarWidth"
     static let noteListWidthKey = "notely.noteListWidth"
+    static let launchAtLoginKey = "notely.launchAtLogin"
+    static let autoUpdatesKey = "notely.autoUpdates"
+    static let defaultTagKey = "notely.defaultTag"
+    static let noteLocationKey = "notely.noteLocation"
+    static let accentColorKey = "notely.accentColor"
+    static let workspacePathKey = "notely.workspacePath"
 
     static var theme: String {
         get { UserDefaults.standard.string(forKey: themeKey) ?? "system" }
@@ -38,6 +44,36 @@ enum AppSettings {
     static var noteListWidth: Double {
         get { UserDefaults.standard.object(forKey: noteListWidthKey) as? Double ?? 300 }
         set { UserDefaults.standard.set(newValue, forKey: noteListWidthKey) }
+    }
+
+    static var launchAtLogin: Bool {
+        get { UserDefaults.standard.bool(forKey: launchAtLoginKey) }
+        set { UserDefaults.standard.set(newValue, forKey: launchAtLoginKey) }
+    }
+
+    static var autoUpdates: Bool {
+        get { UserDefaults.standard.object(forKey: autoUpdatesKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: autoUpdatesKey) }
+    }
+
+    static var defaultTag: String {
+        get { UserDefaults.standard.string(forKey: defaultTagKey) ?? "inbox" }
+        set { UserDefaults.standard.set(newValue, forKey: defaultTagKey) }
+    }
+
+    static var noteLocation: String {
+        get { UserDefaults.standard.string(forKey: noteLocationKey) ?? "~/Documents/Notes" }
+        set { UserDefaults.standard.set(newValue, forKey: noteLocationKey) }
+    }
+
+    static var accentColorHex: String {
+        get { UserDefaults.standard.string(forKey: accentColorKey) ?? "#D97706" }
+        set { UserDefaults.standard.set(newValue, forKey: accentColorKey) }
+    }
+
+    static var workspacePath: String {
+        get { UserDefaults.standard.string(forKey: workspacePathKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: workspacePathKey) }
     }
 }
 
