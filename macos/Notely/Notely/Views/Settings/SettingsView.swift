@@ -37,7 +37,7 @@ struct SettingsTabBar: View {
             Spacer()
         }
         .background(Color.noteListBg)
-        .navigationSplitViewColumnWidth(min: 320, ideal: 320, max: 320)
+        .navigationSplitViewColumnWidth(min: 240, ideal: 240, max: 240)
     }
 }
 
@@ -48,41 +48,25 @@ struct SettingsContent: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
-                Text(state.selectedTab.title)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.primaryText)
-
-                Text(state.selectedTab.subtitle)
-                    .font(.system(size: 14))
-                    .foregroundColor(.tertiaryText)
-                    .padding(.top, -24)
-
+            Group {
                 switch state.selectedTab {
-                case .general:
-                    GeneralSettings()
-                case .appearance:
-                    AppearanceSettings()
-                case .editor:
-                    EditorSettings()
-                case .shortcuts:
-                    ShortcutsSettings()
-                case .cloud:
-                    CloudSettings()
-                case .exportTab:
-                    ExportSettings()
-                case .about:
-                    AboutSettings()
+                case .general:    GeneralSettings()
+                case .appearance: AppearanceSettings()
+                case .editor:     EditorSettings()
+                case .shortcuts:  ShortcutsSettings()
+                case .cloud:      CloudSettings()
+                case .exportTab:  ExportSettings()
+                case .about:      AboutSettings()
                 }
             }
             .padding(.horizontal, 48)
             .padding(.top, 40)
             .padding(.bottom, 60)
-            .frame(maxWidth: 520, alignment: .leading)
+            .frame(maxWidth: 560, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
         .background(Color.editorBg)
-        .navigationSplitViewColumnWidth(min: 720, ideal: 900)
+        .navigationSplitViewColumnWidth(min: 560, ideal: 760)
     }
 }
 
@@ -105,21 +89,9 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
-    var subtitle: String {
-        switch self {
-        case .general: return "Configure how the app behaves."
-        case .appearance: return "Customize the look and feel."
-        case .editor: return "Adjust the writing experience."
-        case .shortcuts: return "View and customize keyboard shortcuts."
-        case .cloud: return "Sync your notes across devices."
-        case .exportTab: return "Export your notes in various formats."
-        case .about: return "Information about the app."
-        }
-    }
-
     var icon: String {
         switch self {
-        case .general: return "shippingbox"
+        case .general: return "square.3.layers.3d"
         case .appearance: return "sun.max"
         case .editor: return "pencil"
         case .shortcuts: return "keyboard"
@@ -173,7 +145,7 @@ struct SettingsTabItem: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 7)
             // Fill the column width and make the WHOLE row (incl. the trailing
             // empty space) hittable, not just the icon + label.
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -191,7 +163,27 @@ struct SettingsTabItem: View {
 
 extension SettingsTabItem.Highlight: Equatable {}
 
-// MARK: - Reusable row components
+// MARK: - Reusable building blocks
+
+/// Panel heading: large title + muted subtitle, with bottom spacing baked in.
+struct SettingsHeader: View {
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 22, weight: .semibold))
+                .tracking(-0.2)
+                .foregroundColor(.primaryText)
+            Text(subtitle)
+                .font(.system(size: 14))
+                .foregroundColor(.tertiaryText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.bottom, 20)
+    }
+}
 
 struct SettingsDivider: View {
     var body: some View {
@@ -215,8 +207,9 @@ struct SettingsRow<Control: View>: View {
                 Text(subtitle)
                     .font(.system(size: 13))
                     .foregroundColor(.tertiaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 16)
             control()
         }
     }
@@ -283,6 +276,173 @@ struct SettingsStepper: View {
     }
 }
 
+/// iOS/macOS-style segmented control with a white selected pill.
+struct SettingsSegmented: View {
+    let options: [(label: String, value: String)]
+    let selection: String
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options, id: \.value) { opt in
+                Text(opt.label)
+                    .font(.system(size: 13, weight: selection == opt.value ? .medium : .regular))
+                    .foregroundColor(selection == opt.value ? .primaryText : .secondaryText)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(selection == opt.value ? Color.white : Color.clear)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { onSelect(opt.value) }
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.primaryText.opacity(0.05))
+        )
+    }
+}
+
+/// A small white "chip" button used for dropdown-like and path controls.
+struct ChipButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+
+    var body: some View {
+        Button(action: action) {
+            label()
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
+                )
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Theme preview card (Appearance)
+
+struct ThemeCard: View {
+    let name: String
+    let surface: Color
+    let accent: Color
+    let titleColor: Color
+    let lineColor: Color
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Mini document preview
+            VStack(alignment: .leading, spacing: 7) {
+                RoundedRectangle(cornerRadius: 2).fill(titleColor).frame(width: 54, height: 8)
+                RoundedRectangle(cornerRadius: 3).fill(accent).frame(width: 26, height: 7)
+                RoundedRectangle(cornerRadius: 2).fill(lineColor).frame(height: 5)
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 2).fill(lineColor).frame(height: 5)
+                    Color.clear.frame(width: 30, height: 5)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(13)
+            .frame(height: 86, alignment: .top)
+            .background(surface)
+
+            Rectangle().fill(Color.primaryText.opacity(0.06)).frame(height: 1)
+
+            HStack(spacing: 0) {
+                Text(name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.primaryText)
+                Spacer(minLength: 0)
+                ZStack {
+                    if isSelected {
+                        Circle().fill(Color.accent)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .frame(width: 16, height: 16)
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isSelected ? Color.accent : Color.primaryText.opacity(0.08), lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+}
+
+// MARK: - Keyboard shortcut chips (Shortcuts)
+
+struct Keycap: View {
+    let key: String
+
+    var body: some View {
+        Text(key)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(.secondaryText)
+            .padding(.horizontal, 5)
+            .frame(minWidth: 22, minHeight: 22)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primaryText.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.primaryText.opacity(0.07), lineWidth: 1))
+    }
+}
+
+struct ShortcutGroup: View {
+    let title: String
+    let items: [(name: String, keys: [String])]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .foregroundColor(.tertiaryText)
+
+            VStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                    HStack {
+                        Text(item.name)
+                            .font(.system(size: 14))
+                            .foregroundColor(.primaryText)
+                        Spacer(minLength: 12)
+                        HStack(spacing: 5) {
+                            ForEach(Array(item.keys.enumerated()), id: \.offset) { _, k in
+                                Keycap(key: k)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+
+                    if idx < items.count - 1 {
+                        Rectangle().fill(Color.primaryText.opacity(0.06)).frame(height: 1)
+                    }
+                }
+            }
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
+        }
+    }
+}
+
 // MARK: - General tab
 
 struct GeneralSettings: View {
@@ -297,9 +457,11 @@ struct GeneralSettings: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader(title: "General", subtitle: "Configure how the app behaves.")
+
             SettingsRow(title: "Notes Folder", subtitle: "The folder you opened. New notes are saved here.") {
-                Button {
+                ChipButton {
                     if let url = store.workspaceURL {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
@@ -314,17 +476,7 @@ struct GeneralSettings: View {
                             .font(.system(size: 10))
                             .foregroundColor(.tertiaryText)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
-                    )
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .disabled(store.workspaceURL == nil)
                 .help("Reveal in Finder")
             }
             .padding(.vertical, 12)
@@ -355,8 +507,11 @@ struct GeneralSettings: View {
 // MARK: - Appearance tab
 
 struct AppearanceSettings: View {
-    @State private var theme: String = AppSettings.theme
+    @State private var appTheme: String = AppSettings.appTheme
     @State private var selectedAccent: String = AppSettings.accentColorHex
+    @State private var editorFont: String = AppSettings.editorFont
+    @State private var editorWidth: String = AppSettings.editorWidth
+    @State private var lineSpacing: String = LineSpacingPreset.from(multiplier: AppSettings.editorLineHeight).rawValue
 
     private let accentColors: [(name: String, hex: String)] = [
         ("Amber", "#D97706"),
@@ -366,33 +521,47 @@ struct AppearanceSettings: View {
         ("Coral", "#FF385C"),
     ]
 
+    private let fonts = ["Inter", "System", "New York", "SF Mono"]
+
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsRow(title: "Theme", subtitle: "Choose the app appearance.") {
-                HStack(spacing: 2) {
-                    ForEach([("Light", "light"), ("Dark", "dark"), ("Auto", "system")], id: \.1) { item in
-                        Button(item.0) {
-                            theme = item.1
-                            AppSettings.theme = item.1
-                            applyTheme(item.1)
-                        }
-                        .font(.system(size: 13, weight: theme == item.1 ? .medium : .regular))
-                        .foregroundColor(theme == item.1 ? .primaryText : .secondaryText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(theme == item.1 ? Color.white : Color.clear)
-                        )
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader(title: "Appearance", subtitle: "Personalize how your notes look.")
+
+            // Theme picker
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Theme")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.primaryText)
+                    Text("Choose a preset look for the editor.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.tertiaryText)
                 }
-                .padding(2)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.primaryText.opacity(0.05))
-                )
+
+                HStack(spacing: 12) {
+                    ThemeCard(name: "Paper",
+                              surface: Color.fromHex("#FBF8F3"), accent: Color.fromHex("#D97706"),
+                              titleColor: Color.fromHex("#2B2B2B"), lineColor: Color.black.opacity(0.10),
+                              isSelected: appTheme == "paper") { selectTheme("paper") }
+                        .frame(maxWidth: .infinity)
+                    ThemeCard(name: "Mineral",
+                              surface: Color.fromHex("#FFFFFF"), accent: Color.fromHex("#2D7D7D"),
+                              titleColor: Color.fromHex("#1A1A1A"), lineColor: Color.black.opacity(0.08),
+                              isSelected: appTheme == "mineral") { selectTheme("mineral") }
+                        .frame(maxWidth: .infinity)
+                    ThemeCard(name: "Bookish",
+                              surface: Color.fromHex("#1C1B19"), accent: Color.fromHex("#F59E0B"),
+                              titleColor: Color.fromHex("#F5EFE6"), lineColor: Color.white.opacity(0.13),
+                              isSelected: appTheme == "bookish") { selectTheme("bookish") }
+                        .frame(maxWidth: .infinity)
+                    ThemeCard(name: "Inky",
+                              surface: Color.fromHex("#000000"), accent: Color.fromHex("#98FB98"),
+                              titleColor: Color.fromHex("#F2F2F2"), lineColor: Color.white.opacity(0.12),
+                              isSelected: appTheme == "inky") { selectTheme("inky") }
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .padding(.vertical, 12)
+            .padding(.bottom, 12)
 
             SettingsDivider()
 
@@ -403,16 +572,18 @@ struct AppearanceSettings: View {
                             .fill(Color.fromHex(color.hex))
                             .frame(width: 24, height: 24)
                             .overlay(
-                                Circle()
-                                    .strokeBorder(Color.white, lineWidth: selectedAccent == color.hex ? 2 : 0)
+                                Circle().strokeBorder(Color.white, lineWidth: selectedAccent == color.hex ? 2 : 0)
                             )
                             .overlay(
-                                selectedAccent == color.hex ?
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(.white)
+                                Circle().strokeBorder(Color.accent, lineWidth: selectedAccent == color.hex ? 2 : 0)
+                                    .padding(-2)
+                            )
+                            .overlay(
+                                selectedAccent == color.hex
+                                ? Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
                                 : nil
                             )
+                            .contentShape(Circle())
                             .onTapGesture {
                                 selectedAccent = color.hex
                                 AppSettings.accentColorHex = color.hex
@@ -421,83 +592,140 @@ struct AppearanceSettings: View {
                 }
             }
             .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Editor Font", subtitle: "Typeface used for note body text.") {
+                Menu {
+                    ForEach(fonts, id: \.self) { f in
+                        Button(f) { editorFont = f; AppSettings.editorFont = f }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(editorFont)
+                            .font(.system(size: 14))
+                            .foregroundColor(.primaryText)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.tertiaryText)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
+                    )
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
+                }
+                .buttonStyle(.plain)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Editor Width", subtitle: "Maximum line length while writing.") {
+                SettingsSegmented(
+                    options: [("Narrow", "narrow"), ("Medium", "medium"), ("Wide", "wide")],
+                    selection: editorWidth
+                ) { editorWidth = $0; AppSettings.editorWidth = $0 }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Line Spacing", subtitle: "Vertical rhythm between lines of text.") {
+                SettingsSegmented(
+                    options: LineSpacingPreset.allCases.map { ($0.label, $0.rawValue) },
+                    selection: lineSpacing
+                ) { value in
+                    lineSpacing = value
+                    if let preset = LineSpacingPreset(rawValue: value) {
+                        AppSettings.editorLineHeight = preset.multiplier
+                    }
+                }
+            }
+            .padding(.vertical, 12)
         }
     }
 
-    private func applyTheme(_ value: String) {
-        switch value {
-        case "light":
-            NSApp.appearance = NSAppearance(named: .aqua)
-        case "dark":
-            NSApp.appearance = NSAppearance(named: .darkAqua)
-        default:
-            NSApp.appearance = nil
-        }
+    private func selectTheme(_ value: String) {
+        appTheme = value
+        AppSettings.appTheme = value
+        let isDark = (value == "bookish" || value == "inky")
+        AppSettings.theme = isDark ? "dark" : "light"
+        NSApp.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
     }
 }
 
 // MARK: - Editor tab
 
 struct EditorSettings: View {
-    @State private var fontSize: Int = Int(AppSettings.editorFontSize)
-    @State private var lineHeight: Double = AppSettings.editorLineHeight
-    @State private var sortMode: String = AppSettings.sortMode
+    @State private var spellCheck = AppSettings.spellCheck
+    @State private var autoPair = AppSettings.autoPair
+    @State private var smartPunctuation = AppSettings.smartPunctuation
+    @State private var markdownSyntax = AppSettings.markdownSyntax
+    @State private var tabSize = AppSettings.tabSize
+    @State private var wordWrap = AppSettings.wordWrap
+    @State private var typewriter = AppSettings.typewriter
 
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsRow(title: "Editor Font Size", subtitle: "Base font size for the editor body.") {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader(title: "Editor", subtitle: "Control writing and Markdown behavior.")
+
+            SettingsRow(title: "Spell Check", subtitle: "Underline misspelled words as you type.") {
+                SettingsToggle(isOn: spellCheck) { spellCheck.toggle(); AppSettings.spellCheck = spellCheck }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Auto-pair Brackets & Quotes", subtitle: "Automatically close (), [], and quotes.") {
+                SettingsToggle(isOn: autoPair) { autoPair.toggle(); AppSettings.autoPair = autoPair }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Smart Punctuation", subtitle: "Convert straight quotes and dashes as you write.") {
+                SettingsToggle(isOn: smartPunctuation) { smartPunctuation.toggle(); AppSettings.smartPunctuation = smartPunctuation }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Markdown Syntax", subtitle: "When to reveal raw Markdown markers.") {
+                SettingsSegmented(
+                    options: [("Always", "always"), ("On Focus", "focus"), ("Hidden", "hidden")],
+                    selection: markdownSyntax
+                ) { markdownSyntax = $0; AppSettings.markdownSyntax = $0 }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Tab Size", subtitle: "Spaces inserted per indent level.") {
                 SettingsStepper(
-                    value: fontSize,
-                    onDecrement: {
-                        if fontSize > 12 { fontSize -= 1; AppSettings.editorFontSize = Double(fontSize) }
-                    },
-                    onIncrement: {
-                        if fontSize < 28 { fontSize += 1; AppSettings.editorFontSize = Double(fontSize) }
-                    }
+                    value: tabSize,
+                    onDecrement: { if tabSize > 2 { tabSize -= 1; AppSettings.tabSize = tabSize } },
+                    onIncrement: { if tabSize < 8 { tabSize += 1; AppSettings.tabSize = tabSize } }
                 )
             }
             .padding(.vertical, 12)
 
             SettingsDivider()
 
-            SettingsRow(title: "Line Height", subtitle: "Line spacing multiplier for the editor.") {
-                HStack(spacing: 6) {
-                    ForEach([1.3, 1.5, 1.7, 2.0], id: \.self) { val in
-                        Button(String(format: "%.1f", val)) {
-                            lineHeight = val
-                            AppSettings.editorLineHeight = val
-                        }
-                        .font(.system(size: 13, weight: lineHeight == val ? .medium : .regular))
-                        .foregroundColor(lineHeight == val ? .primaryText : .secondaryText)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(lineHeight == val ? Color.white : Color.clear)
-                        )
-                    }
-                }
-                .padding(2)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.primaryText.opacity(0.05))
-                )
+            SettingsRow(title: "Word Wrap", subtitle: "Wrap long lines to the editor width.") {
+                SettingsToggle(isOn: wordWrap) { wordWrap.toggle(); AppSettings.wordWrap = wordWrap }
             }
             .padding(.vertical, 12)
 
             SettingsDivider()
 
-            SettingsRow(title: "Default Sort", subtitle: "How notes are ordered in the list.") {
-                Picker("", selection: Binding(
-                    get: { SortMode(rawValue: sortMode) ?? .updatedDesc },
-                    set: { sortMode = $0.rawValue; AppSettings.sortMode = $0.rawValue }
-                )) {
-                    ForEach(SortMode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
+            SettingsRow(title: "Typewriter Scrolling", subtitle: "Keep the current line vertically centered.") {
+                SettingsToggle(isOn: typewriter) { typewriter.toggle(); AppSettings.typewriter = typewriter }
             }
             .padding(.vertical, 12)
         }
@@ -507,67 +735,163 @@ struct EditorSettings: View {
 // MARK: - Shortcuts tab
 
 struct ShortcutsSettings: View {
-    private let shortcuts: [(String, String)] = [
-        ("New Note", "⌘ N"),
-        ("Bold", "⌘ B"),
-        ("Italic", "⌘ I"),
-        ("Insert Link", "⌘ K"),
-        ("Toggle Todo", "⌘⇧ T"),
-    ]
-
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(shortcuts.enumerated()), id: \.offset) { _, shortcut in
-                HStack {
-                    Text(shortcut.0)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(.primaryText)
-                    Spacer()
-                    Text(shortcut.1)
-                        .font(.system(size: 13))
-                        .foregroundColor(.tertiaryText)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.primaryText.opacity(0.04))
-                        )
-                }
-                .padding(.vertical, 12)
-                if shortcut.0 != shortcuts.last!.0 {
-                    SettingsDivider()
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader(title: "Shortcuts", subtitle: "Customize keyboard shortcuts. Double-click a shortcut to rebind.")
+
+            VStack(alignment: .leading, spacing: 28) {
+                ShortcutGroup(title: "General", items: [
+                    ("New Note", ["⌘", "N"]),
+                    ("Quick Open", ["⌘", "O"]),
+                    ("Save Note", ["⌘", "S"]),
+                    ("Toggle Sidebar", ["⌘", "⌥", "S"]),
+                ])
+                ShortcutGroup(title: "Formatting", items: [
+                    ("Bold", ["⌘", "B"]),
+                    ("Italic", ["⌘", "I"]),
+                    ("Insert Link", ["⌘", "K"]),
+                    ("Inline Code", ["⌘", "E"]),
+                ])
+                ShortcutGroup(title: "Navigation", items: [
+                    ("Search All Notes", ["⌘", "⇧", "F"]),
+                    ("Command Palette", ["⌘", "⇧", "P"]),
+                    ("Toggle Preview", ["⌘", "⇧", "L"]),
+                ])
             }
         }
     }
 }
 
-// MARK: - Cloud tab
+// MARK: - iCloud Sync tab
 
 struct CloudSettings: View {
-    @State private var iCloudEnabled = false
+    @State private var syncNotes = true
+    @State private var syncTags = true
+    @State private var syncSettings = false
+    @State private var autoDownload = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsRow(title: "iCloud Sync", subtitle: "Sync notes across your Apple devices.") {
-                SettingsToggle(isOn: iCloudEnabled) {
-                    iCloudEnabled.toggle()
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader(title: "iCloud Sync", subtitle: "Keep your notes safe and in sync across devices.")
+
+            // Account status card
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10).fill(Color.fromHex("#EAF1F8"))
+                    Image(systemName: "icloud")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundColor(Color.fromHex("#3B82C4"))
                 }
+                .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("iCloud Drive")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.primaryText)
+                    Text("dylan@icloud.com")
+                        .font(.system(size: 13))
+                        .foregroundColor(.tertiaryText)
+                }
+
+                Spacer(minLength: 12)
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Circle().fill(Color.fromHex("#2E9E5B")).frame(width: 7, height: 7)
+                        Text("Synced")
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundColor(Color.fromHex("#2E7D4F"))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.fromHex("#E7F4EC")))
+                    Text("Updated just now")
+                        .font(.system(size: 12))
+                        .foregroundColor(.tertiaryText)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
+            .padding(.bottom, 28)
+
+            SettingsRow(title: "Sync Notes", subtitle: "Upload all notes to iCloud Drive.") {
+                SettingsToggle(isOn: syncNotes) { syncNotes.toggle() }
             }
             .padding(.vertical, 12)
 
             SettingsDivider()
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Last Synced")
-                    .font(.system(size: 13))
-                    .foregroundColor(.tertiaryText)
-                Text(iCloudEnabled ? "Just now" : "Not synced yet")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.primaryText)
+            SettingsRow(title: "Sync Tags & Folders", subtitle: "Keep your organization consistent everywhere.") {
+                SettingsToggle(isOn: syncTags) { syncTags.toggle() }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Sync Settings & Shortcuts", subtitle: "Mirror app preferences across devices.") {
+                SettingsToggle(isOn: syncSettings) { syncSettings.toggle() }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Auto-download New Notes", subtitle: "Download notes added on other devices automatically.") {
+                SettingsToggle(isOn: autoDownload) { autoDownload.toggle() }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            // Storage usage
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("iCloud Storage")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.primaryText)
+                        Text("Space used by notes, attachments & backups.")
+                            .font(.system(size: 13))
+                            .foregroundColor(.tertiaryText)
+                    }
+                    Spacer(minLength: 12)
+                    ChipButton {} label: {
+                        Text("Manage…")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.primaryText)
+                    }
+                }
+
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        Rectangle().fill(Color.fromHex("#D97706")).frame(width: geo.size.width * 0.38)
+                        Rectangle().fill(Color.fromHex("#2D7D7D")).frame(width: geo.size.width * 0.10)
+                    }
+                }
+                .frame(height: 9)
+                .background(Capsule().fill(Color.primaryText.opacity(0.06)))
+                .clipShape(Capsule())
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 16) {
+                        legendItem(color: Color.fromHex("#D97706"), text: "Notes — 1.9 GB")
+                        legendItem(color: Color.fromHex("#2D7D7D"), text: "Attachments — 0.5 GB")
+                    }
+                    Text("2.4 GB of 5 GB used")
+                        .font(.system(size: 13))
+                        .foregroundColor(.tertiaryText)
+                }
+            }
+            .padding(.top, 12)
+        }
+    }
+
+    private func legendItem(color: Color, text: String) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text).font(.system(size: 13)).foregroundColor(.secondaryText)
         }
     }
 }
@@ -575,35 +899,121 @@ struct CloudSettings: View {
 // MARK: - Export tab
 
 struct ExportSettings: View {
+    @Environment(FileNoteStore.self) private var store
+    @State private var format = AppSettings.exportFormat
+    @State private var includeFrontmatter = AppSettings.includeFrontmatter
+    @State private var preserveTags = AppSettings.preserveTags
+    @State private var imageHandling = AppSettings.imageHandling
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SettingsRow(title: "Export All as Markdown", subtitle: "Download all notes as .md files.") {
-                Button("Export") {}
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primaryText)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
-                    )
+            SettingsHeader(title: "Export", subtitle: "Choose how notes leave the app.")
+
+            SettingsRow(title: "Default Format", subtitle: "File type used for quick exports.") {
+                SettingsSegmented(
+                    options: [("Markdown", "markdown"), ("PDF", "pdf"), ("HTML", "html")],
+                    selection: format
+                ) { format = $0; AppSettings.exportFormat = $0 }
             }
             .padding(.vertical, 12)
 
             SettingsDivider()
 
-            SettingsRow(title: "Export as HTML", subtitle: "Convert notes to web pages.") {
-                Button("Export") {}
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primaryText)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
-                    )
+            SettingsRow(title: "Include YAML Frontmatter", subtitle: "Write title, date, and tags as a metadata block.") {
+                SettingsToggle(isOn: includeFrontmatter) { includeFrontmatter.toggle(); AppSettings.includeFrontmatter = includeFrontmatter }
             }
             .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Preserve Tags", subtitle: "Keep #hashtags inline in exported text.") {
+                SettingsToggle(isOn: preserveTags) { preserveTags.toggle(); AppSettings.preserveTags = preserveTags }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Image Handling", subtitle: "How embedded images are exported.") {
+                SettingsSegmented(
+                    options: [("Copy to Folder", "copy"), ("Link", "link")],
+                    selection: imageHandling
+                ) { imageHandling = $0; AppSettings.imageHandling = $0 }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            SettingsRow(title: "Export Location", subtitle: "Where exported files are saved.") {
+                ChipButton {} label: {
+                    HStack(spacing: 8) {
+                        Text("~/Documents/Exports")
+                            .font(.system(size: 14))
+                            .foregroundColor(.primaryText)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.tertiaryText)
+                    }
+                }
+            }
+            .padding(.vertical, 12)
+
+            SettingsDivider()
+
+            HStack(spacing: 10) {
+                Button(action: exportAll) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("Export All Notes")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.accent))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button(action: {}) {
+                    Text("Export Current Note")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.primaryText)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Text("\(store.notes.count) note\(store.notes.count == 1 ? "" : "s")")
+                    .font(.system(size: 13))
+                    .foregroundColor(.tertiaryText)
+            }
+            .padding(.top, 12)
+        }
+    }
+
+    /// Export every note as a Markdown file into a user-chosen directory.
+    private func exportAll() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Export Folder"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Export"
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+
+        for note in store.notes {
+            let title = note.title.isEmpty ? note.filename : note.title
+            let safe = title
+                .components(separatedBy: CharacterSet(charactersIn: "/\\:*?\"<>|"))
+                .joined(separator: "-")
+                .trimmingCharacters(in: .whitespaces)
+            let name = (safe.isEmpty ? "Untitled" : safe) + ".md"
+            let url = dir.appendingPathComponent(name)
+            try? note.content.write(to: url, atomically: true, encoding: .utf8)
         }
     }
 }
@@ -611,33 +1021,130 @@ struct ExportSettings: View {
 // MARK: - About tab
 
 struct AboutSettings: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 16) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 64, height: 64)
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+    private var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
+    private var copyright: String {
+        Bundle.main.infoDictionary?["NSHumanReadableCopyright"] as? String ?? "Copyright © 2025 Dylan Deng"
+    }
 
-                VStack(alignment: .leading, spacing: 4) {
+    var body: some View {
+        VStack(spacing: 28) {
+            // Hero
+            VStack(spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(LinearGradient(
+                            colors: [Color.fromHex("#F2A93C"), Color.fromHex("#D97706")],
+                            startPoint: .topLeading, endPoint: .bottomTrailing))
+                    Image(systemName: "square.3.layers.3d")
+                        .font(.system(size: 34, weight: .regular))
+                        .foregroundColor(.white)
+                }
+                .frame(width: 74, height: 74)
+                .shadow(color: Color.fromHex("#D97706").opacity(0.28), radius: 9, x: 0, y: 6)
+
+                VStack(spacing: 5) {
                     Text("Notely")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 25, weight: .bold))
+                        .tracking(-0.4)
                         .foregroundColor(.primaryText)
-                    Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
-                        .font(.system(size: 13))
+                    Text("A calm, local-first Markdown editor.")
+                        .font(.system(size: 14))
                         .foregroundColor(.tertiaryText)
+                }
+
+                Text("Version \(version) (\(build))")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundColor(.secondaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(Color.primaryText.opacity(0.05)))
+            }
+            .frame(maxWidth: .infinity)
+
+            // Links card
+            VStack(spacing: 0) {
+                aboutLink(icon: "sparkles", title: "What's New", trailing: "chevron.right")
+                aboutDivider
+                aboutLink(icon: "globe", title: "Notely Website", trailing: "arrow.up.right")
+                aboutDivider
+                aboutLink(icon: "heart", title: "Acknowledgements", trailing: "chevron.right")
+                aboutDivider
+                aboutLink(icon: "lock.shield", title: "Privacy Policy", trailing: "arrow.up.right")
+            }
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
+
+            // Update status
+            HStack {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle().fill(Color.fromHex("#E7F4EC"))
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Color.fromHex("#2E9E5B"))
+                    }
+                    .frame(width: 22, height: 22)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("You're up to date")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.primaryText)
+                        Text("Last checked today at 09:14")
+                            .font(.system(size: 12.5))
+                            .foregroundColor(.tertiaryText)
+                    }
+                }
+                Spacer(minLength: 12)
+                ChipButton {} label: {
+                    Text("Check for Updates")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.primaryText)
                 }
             }
 
-            SettingsDivider()
-
-            Text("A calm, local-first Markdown editor for macOS.")
-                .font(.system(size: 14))
-                .foregroundColor(.secondaryText)
-
-            Text("Copyright \u{00A9} 2025 Dylan Deng")
-                .font(.system(size: 13))
-                .foregroundColor(.tertiaryText)
+            // Footer
+            VStack(spacing: 3) {
+                Text(copyright)
+                    .font(.system(size: 12.5))
+                    .foregroundColor(.tertiaryText)
+                Text("Crafted with care in San Francisco.")
+                    .font(.system(size: 12.5))
+                    .foregroundColor(.tertiaryText.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
         }
+    }
+
+    private var aboutDivider: some View {
+        Rectangle().fill(Color.primaryText.opacity(0.06)).frame(height: 1)
+    }
+
+    private func aboutLink(icon: String, title: String, trailing: String) -> some View {
+        Button(action: {}) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondaryText)
+                    .frame(width: 18)
+                Text(title)
+                    .font(.system(size: 14))
+                    .foregroundColor(.primaryText)
+                Spacer(minLength: 0)
+                Image(systemName: trailing)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.tertiaryText.opacity(0.7))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
