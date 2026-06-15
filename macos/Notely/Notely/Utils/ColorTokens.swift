@@ -63,12 +63,13 @@ enum AppTheme: String, CaseIterable, Identifiable {
                 border: Color.white.opacity(0.10), codeBlockBg: hex("#272320"),
                 surface: hex("#2A2622"))
         case .inky:
+            // Exact palette from the "Theme B — Inky (Pure Black + Phosphor)" comp.
             return Palette(
-                appBg: hex("#000000"), sidebarBg: hex("#0B0B0B"),
-                noteListBg: hex("#060606"), editorBg: hex("#000000"),
-                primaryText: hex("#F2F2F2"), secondaryText: hex("#B0B0B0"),
+                appBg: hex("#000000"), sidebarBg: hex("#0A0A0A"),
+                noteListBg: hex("#050505"), editorBg: hex("#000000"),
+                primaryText: hex("#FFFFFF"), secondaryText: hex("#CCCCCC"),
                 tertiaryText: hex("#777777"),
-                border: Color.white.opacity(0.10), codeBlockBg: hex("#0E0E0E"),
+                border: Color.white.opacity(0.08), codeBlockBg: hex("#080808"),
                 surface: hex("#141414"))
         }
     }
