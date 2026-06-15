@@ -17,7 +17,7 @@ struct LoadedMarkdownImage {
 }
 
 /// A text attachment that displays an image inline in the text view.
-final class ImageTextAttachment: NSTextAttachment {
+final class ImageTextAttachment: NSTextAttachment, MarkdownBackedAttachment {
     let markdownSource: String
     private let frames: [AnimatedImageFrame]
     private var currentFrameIndex = 0

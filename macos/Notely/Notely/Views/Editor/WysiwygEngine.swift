@@ -40,6 +40,11 @@ struct MarkdownStyle {
 final class WysiwygEngine {
     private let style: MarkdownStyle
     private let inlineRules: [WysiwygInlineRule]
+    /// Rendered table grids cached by "width|source" so re-collapsing tables on
+    /// every keystroke does not re-render their images.
+    private var tableCache: [String: TableAttachment] = [:]
+    /// Rendered math cached by "display|width|source" for the same reason.
+    private var mathCache: [String: MathAttachment] = [:]
 
     init(style: MarkdownStyle) {
         self.style = style
@@ -281,7 +286,9 @@ final class WysiwygEngine {
     /// - Parameters:
     ///   - storage: The text storage to style.
     ///   - cursorLocation: The current cursor position (for marker hiding).
-    func applyStyle(to storage: NSTextStorage, cursorLocation: Int) {
+    func applyStyle(to storage: NSTextStorage, cursorLocation: Int,
+                    activeTableIndex: Int = -1, maxTableWidth: CGFloat = 640,
+                    activeMathIndex: Int = -1, maxMathWidth: CGFloat = 640) {
         let fullRange = NSRange(location: 0, length: storage.length)
         let nsString = storage.string as NSString
 
@@ -495,7 +502,94 @@ final class WysiwygEngine {
             }
         }
 
+        // Math first, then tables: collapse every span except the one being
+        // edited into a rendered attachment. Done after inline styling, in
+        // reverse order so earlier ranges stay valid as we mutate the storage.
+        applyMath(to: storage, activeIndex: activeMathIndex, maxWidth: maxMathWidth)
+        applyTables(to: storage, activeIndex: activeTableIndex, maxWidth: maxTableWidth)
+
         storage.endEditing()
+    }
+
+    // MARK: - Math
+
+    private func applyMath(to storage: NSTextStorage, activeIndex: Int, maxWidth: CGFloat) {
+        let nsString = storage.string as NSString
+        let tableRanges = MarkdownTableParser.tables(in: nsString).map { $0.range }
+        let spans = LatexMath.mathSpans(in: nsString, excludingTableRanges: tableRanges)
+        guard !spans.isEmpty else { return }
+
+        let bodyFont = (style.baseParagraph[.font] as? NSFont) ?? NSFont.systemFont(ofSize: 17)
+        let color = (style.baseParagraph[.foregroundColor] as? NSColor) ?? NSColor(named: "PrimaryText") ?? .textColor
+        let mono = NSFont.monospacedSystemFont(ofSize: max(11, bodyFont.pointSize - 1), weight: .regular)
+
+        for (index, span) in spans.enumerated().reversed() {
+            guard NSMaxRange(span.range) <= storage.length else { continue }
+            if index == activeIndex {
+                storage.addAttribute(.font, value: mono, range: span.range)
+                continue
+            }
+            let source = nsString.substring(with: span.range)
+            let attachment = mathAttachment(latex: span.latex, display: span.display, source: source,
+                                            font: bodyFont, color: color, maxWidth: maxWidth)
+            let replacement = NSMutableAttributedString(attachment: attachment)
+            if span.display {
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.alignment = .center
+                paragraph.paragraphSpacingBefore = 6
+                paragraph.paragraphSpacing = 6
+                replacement.addAttribute(.paragraphStyle, value: paragraph,
+                                         range: NSRange(location: 0, length: replacement.length))
+            }
+            storage.replaceCharacters(in: span.range, with: replacement)
+        }
+    }
+
+    private func mathAttachment(latex: String, display: Bool, source: String, font: NSFont, color: NSColor, maxWidth: CGFloat) -> MathAttachment {
+        let key = "\(display ? "D" : "I")|\(Int(maxWidth))|\(source)"
+        if let cached = mathCache[key] { return cached }
+        let attachment = MathAttachment(latex: latex, display: display, markdownSource: source,
+                                        font: font, color: color, maxWidth: maxWidth)
+        mathCache[key] = attachment
+        return attachment
+    }
+
+    // MARK: - Tables
+
+    private func applyTables(to storage: NSTextStorage, activeIndex: Int, maxWidth: CGFloat) {
+        let nsString = storage.string as NSString
+        let tables = MarkdownTableParser.tables(in: nsString)
+        guard !tables.isEmpty else { return }
+
+        let bodyFont = (style.baseParagraph[.font] as? NSFont) ?? NSFont.systemFont(ofSize: 17)
+        let mono = NSFont.monospacedSystemFont(ofSize: max(11, bodyFont.pointSize - 1), weight: .regular)
+
+        for (index, item) in tables.enumerated().reversed() {
+            guard NSMaxRange(item.range) <= storage.length else { continue }
+            if index == activeIndex {
+                // Being edited: show the raw source, monospaced so the pipes line
+                // up while typing.
+                storage.addAttribute(.font, value: mono, range: item.range)
+                continue
+            }
+            let source = nsString.substring(with: item.range)
+            let attachment = tableAttachment(for: item.table, source: source, font: bodyFont, maxWidth: maxWidth)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.paragraphSpacingBefore = 8
+            paragraph.paragraphSpacing = 10
+            let replacement = NSMutableAttributedString(attachment: attachment)
+            replacement.addAttribute(.paragraphStyle, value: paragraph,
+                                     range: NSRange(location: 0, length: replacement.length))
+            storage.replaceCharacters(in: item.range, with: replacement)
+        }
+    }
+
+    private func tableAttachment(for table: MarkdownTable, source: String, font: NSFont, maxWidth: CGFloat) -> TableAttachment {
+        let key = "\(Int(maxWidth))|\(source)"
+        if let cached = tableCache[key] { return cached }
+        let attachment = TableAttachment(table: table, markdownSource: source, font: font, maxWidth: maxWidth)
+        tableCache[key] = attachment
+        return attachment
     }
 
     // MARK: - Helper types

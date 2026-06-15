@@ -400,23 +400,43 @@ final class WysiwygTextView: NSTextView {
         restyleCount += 1
         defer { isRestyling = false }
 
-        let selected = selectedRange()
+        // Map the caret into raw-markdown coordinates BEFORE collapsing/expanding
+        // attachments, so it survives the coordinate change (image syntax ↔
+        // attachment, table source ↔ grid).
+        let rawCursor = rawLocation(forDisplayLocation: selectedRange().location)
         let rawMarkdown = markdownString()
         if rawMarkdown != storage.string {
-            // Replace storage with raw markdown. Do NOT restore the cursor
-            // here — the character offsets have changed (image attachments ↔
-            // markdown syntax), so selected.location is in the wrong
-            // coordinate system. We restore it AFTER applyStyle, when the
-            // storage is back to the same state (text + attachments).
             storage.setAttributedString(NSAttributedString(string: rawMarkdown))
         }
+        let rawNS = rawMarkdown as NSString
+        let clampedRaw = min(rawCursor, rawNS.length)
 
-        engine?.applyStyle(to: storage, cursorLocation: selected.location)
+        // The table / math span the caret is inside (by ordinal index in
+        // document order) stays editable source; all others render. Ordinal
+        // indexing is stable because image collapsing never adds or removes
+        // tables or math spans.
+        let tables = MarkdownTableParser.tables(in: rawNS)
+        var activeTableIndex = -1
+        for (i, t) in tables.enumerated() where NSLocationInRange(clampedRaw, t.range) || clampedRaw == NSMaxRange(t.range) {
+            activeTableIndex = i
+            break
+        }
 
-        // Restore the cursor. After applyStyle the storage has the same
-        // character count as before (images are back as 1-char attachments),
-        // so the original offset is valid again.
-        setSelectedRange(NSRange(location: min(selected.location, storage.length), length: 0))
+        let mathSpans = LatexMath.mathSpans(in: rawNS, excludingTableRanges: tables.map { $0.range })
+        var activeMathIndex = -1
+        for (i, s) in mathSpans.enumerated() where NSLocationInRange(clampedRaw, s.range) || clampedRaw == NSMaxRange(s.range) {
+            activeMathIndex = i
+            break
+        }
+
+        let contentWidth = max(120, (textContainer?.size.width ?? bounds.width))
+        engine?.applyStyle(to: storage, cursorLocation: clampedRaw,
+                           activeTableIndex: activeTableIndex, maxTableWidth: contentWidth,
+                           activeMathIndex: activeMathIndex, maxMathWidth: contentWidth)
+
+        // Map the caret back into the (re-collapsed) display coordinates.
+        let displayCursor = displayLocation(forRawLocation: clampedRaw)
+        setSelectedRange(NSRange(location: min(displayCursor, storage.length), length: 0))
     }
 
     @objc private func handleImageDidLoad() {
@@ -452,7 +472,7 @@ final class WysiwygTextView: NSTextView {
         var replacements: [(range: NSRange, markdown: String)] = []
 
         storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
-            guard let attachment = value as? ImageTextAttachment else { return }
+            guard let attachment = value as? MarkdownBackedAttachment else { return }
             replacements.append((range, attachment.markdownSource))
         }
 
@@ -463,20 +483,72 @@ final class WysiwygTextView: NSTextView {
         return result as String
     }
 
+    // MARK: - Raw ↔ display coordinate mapping
+    //
+    // The storage holds collapsed attachments (images / table grids), each one
+    // character standing in for a multi-character markdown source. These helpers
+    // convert between the displayed storage offsets and the raw-markdown offsets
+    // so the caret survives the collapse/expand that happens on every restyle.
+
+    /// Raw-markdown offset corresponding to a location in the current storage.
+    func rawLocation(forDisplayLocation displayLocation: Int) -> Int {
+        guard let storage = textStorage else { return displayLocation }
+        let clamped = min(max(0, displayLocation), storage.length)
+        guard clamped > 0 else { return 0 }
+        var raw = 0
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: clamped), options: []) { value, range, _ in
+            if let attachment = value as? MarkdownBackedAttachment {
+                raw += (attachment.markdownSource as NSString).length
+            } else {
+                raw += range.length
+            }
+        }
+        return raw
+    }
+
+    /// Display offset (in the collapsed storage) corresponding to a raw-markdown
+    /// offset. If the raw location falls inside a collapsed attachment, the caret
+    /// is placed just before that attachment.
+    func displayLocation(forRawLocation rawLocation: Int) -> Int {
+        guard let storage = textStorage else { return rawLocation }
+        var raw = 0
+        var result = storage.length
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length), options: []) { value, range, stop in
+            if let attachment = value as? MarkdownBackedAttachment {
+                let sourceLength = (attachment.markdownSource as NSString).length
+                if rawLocation <= raw + sourceLength {
+                    result = range.location
+                    stop.pointee = true
+                    return
+                }
+                raw += sourceLength
+            } else {
+                if rawLocation <= raw + range.length {
+                    result = range.location + (rawLocation - raw)
+                    stop.pointee = true
+                    return
+                }
+                raw += range.length
+            }
+        }
+        return result
+    }
+
     // MARK: - Mouse / cursor tracking
 
     override func mouseDown(with event: NSEvent) {
-        Diag.log("mouseDown isEditable=\(isEditable) frame=\(frame) bounds=\(bounds)")
         if let window = window, window.firstResponder != self {
-            let made = window.makeFirstResponder(self)
-            Diag.log("makeFirstResponder result: \(made)")
+            window.makeFirstResponder(self)
         }
         super.mouseDown(with: event)
-        Diag.log("after super.mouseDown selectedRange=\(selectedRange())")
-        // Do NOT call restyle() here — it replaces the entire text storage
-        // (converting image attachments ↔ markdown), which changes character
-        // counts and corrupts the cursor position that super.mouseDown just
-        // set. Marker visibility updates on the next keystroke instead.
+        // A simple click (no drag-selection): re-render so the table the caret
+        // landed in opens as editable source, and the one it left re-renders as a
+        // grid. Skipped when a range is selected so a drag-selection isn't
+        // clobbered. The caret survives the storage rebuild via the raw↔display
+        // remap in restyle().
+        if selectedRange().length == 0 {
+            restyle()
+        }
     }
 
     // MARK: - Formatting commands
