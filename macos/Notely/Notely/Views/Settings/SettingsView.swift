@@ -270,7 +270,7 @@ struct SettingsStepper: View {
         )
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(Color.white.opacity(0.6))
+                .fill(Color.surface)
         )
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
@@ -294,7 +294,7 @@ struct SettingsSegmented: View {
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 4)
-                            .fill(selection == opt.value ? Color.white : Color.clear)
+                            .fill(selection == opt.value ? Color.surface : Color.clear)
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { onSelect(opt.value) }
@@ -322,7 +322,7 @@ struct ChipButton<Label: View>: View {
                     RoundedRectangle(cornerRadius: 6)
                         .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
                 )
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.surface))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -377,7 +377,7 @@ struct ThemeCard: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 9)
         }
-        .background(Color.white)
+        .background(Color.surface)
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
@@ -436,7 +436,7 @@ struct ShortcutGroup: View {
                     }
                 }
             }
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
         }
@@ -507,8 +507,7 @@ struct GeneralSettings: View {
 // MARK: - Appearance tab
 
 struct AppearanceSettings: View {
-    @State private var appTheme: String = AppSettings.appTheme
-    @State private var selectedAccent: String = AppSettings.accentColorHex
+    @Environment(ThemeManager.self) private var themeManager
     @State private var editorFont: String = AppSettings.editorFont
     @State private var editorWidth: String = AppSettings.editorWidth
     @State private var lineSpacing: String = LineSpacingPreset.from(multiplier: AppSettings.editorLineHeight).rawValue
@@ -542,22 +541,22 @@ struct AppearanceSettings: View {
                     ThemeCard(name: "Paper",
                               surface: Color.fromHex("#FBF8F3"), accent: Color.fromHex("#D97706"),
                               titleColor: Color.fromHex("#2B2B2B"), lineColor: Color.black.opacity(0.10),
-                              isSelected: appTheme == "paper") { selectTheme("paper") }
+                              isSelected: themeManager.theme == .paper) { themeManager.select(.paper) }
                         .frame(maxWidth: .infinity)
                     ThemeCard(name: "Mineral",
                               surface: Color.fromHex("#FFFFFF"), accent: Color.fromHex("#2D7D7D"),
                               titleColor: Color.fromHex("#1A1A1A"), lineColor: Color.black.opacity(0.08),
-                              isSelected: appTheme == "mineral") { selectTheme("mineral") }
+                              isSelected: themeManager.theme == .mineral) { themeManager.select(.mineral) }
                         .frame(maxWidth: .infinity)
                     ThemeCard(name: "Bookish",
                               surface: Color.fromHex("#1C1B19"), accent: Color.fromHex("#F59E0B"),
                               titleColor: Color.fromHex("#F5EFE6"), lineColor: Color.white.opacity(0.13),
-                              isSelected: appTheme == "bookish") { selectTheme("bookish") }
+                              isSelected: themeManager.theme == .bookish) { themeManager.select(.bookish) }
                         .frame(maxWidth: .infinity)
                     ThemeCard(name: "Inky",
                               surface: Color.fromHex("#000000"), accent: Color.fromHex("#98FB98"),
                               titleColor: Color.fromHex("#F2F2F2"), lineColor: Color.white.opacity(0.12),
-                              isSelected: appTheme == "inky") { selectTheme("inky") }
+                              isSelected: themeManager.theme == .inky) { themeManager.select(.inky) }
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -572,21 +571,20 @@ struct AppearanceSettings: View {
                             .fill(Color.fromHex(color.hex))
                             .frame(width: 24, height: 24)
                             .overlay(
-                                Circle().strokeBorder(Color.white, lineWidth: selectedAccent == color.hex ? 2 : 0)
+                                Circle().strokeBorder(Color.surface, lineWidth: themeManager.accentHex == color.hex ? 2 : 0)
                             )
                             .overlay(
-                                Circle().strokeBorder(Color.accent, lineWidth: selectedAccent == color.hex ? 2 : 0)
+                                Circle().strokeBorder(Color.fromHex(color.hex), lineWidth: themeManager.accentHex == color.hex ? 2 : 0)
                                     .padding(-2)
                             )
                             .overlay(
-                                selectedAccent == color.hex
+                                themeManager.accentHex == color.hex
                                 ? Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundColor(.white)
                                 : nil
                             )
                             .contentShape(Circle())
                             .onTapGesture {
-                                selectedAccent = color.hex
-                                AppSettings.accentColorHex = color.hex
+                                themeManager.setAccent(color.hex)
                             }
                     }
                 }
@@ -615,7 +613,7 @@ struct AppearanceSettings: View {
                         RoundedRectangle(cornerRadius: 6)
                             .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
                     )
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.surface))
                 }
                 .buttonStyle(.plain)
                 .menuStyle(.borderlessButton)
@@ -649,14 +647,6 @@ struct AppearanceSettings: View {
             }
             .padding(.vertical, 12)
         }
-    }
-
-    private func selectTheme(_ value: String) {
-        appTheme = value
-        AppSettings.appTheme = value
-        let isDark = (value == "bookish" || value == "inky")
-        AppSettings.theme = isDark ? "dark" : "light"
-        NSApp.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
     }
 }
 
@@ -812,7 +802,7 @@ struct CloudSettings: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
             .padding(.bottom, 28)
@@ -1076,7 +1066,7 @@ struct AboutSettings: View {
                 aboutDivider
                 aboutLink(icon: "lock.shield", title: "Privacy Policy", trailing: "arrow.up.right")
             }
-            .background(Color.white)
+            .background(Color.surface)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1))
 

@@ -4,12 +4,20 @@ import SwiftUI
 struct NotelyApp: App {
     @State private var appModel = AppModel()
     @State private var store = FileNoteStore()
+    @State private var themeManager = ThemeManager.shared
+    @State private var settingsTabState = SettingsTabState()
 
     var body: some Scene {
         WindowGroup {
             AppShellView()
                 .environment(appModel)
                 .environment(store)
+                .environment(settingsTabState)
+                .environment(themeManager)
+                // Rebuild the tree when the active theme/accent changes so the
+                // theme-driven Color tokens are re-read everywhere.
+                .id(themeManager.renderKey)
+                .task { themeManager.applyAppearance() }
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
