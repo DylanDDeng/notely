@@ -25,16 +25,7 @@ struct SidebarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // ── Library section ──
-                    HStack(spacing: 6) {
-                        SidebarChevron(isExpanded: libraryExpanded) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                libraryExpanded.toggle()
-                            }
-                        }
-                        Text("Library")
-                            .font(.notely(13, weight: .semibold))
-                            .foregroundColor(.tertiaryText)
-                        Spacer()
+                    SidebarSectionHeader(title: "Library", isExpanded: $libraryExpanded) {
                         Button {
                             let note = store.createNote()
                             appModel.selectedNoteId = note?.id
@@ -48,7 +39,7 @@ struct SidebarView: View {
                         .buttonStyle(.plain)
                         .help("New Note")
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 8)
                     .padding(.top, 14)
                     .padding(.bottom, libraryExpanded ? 6 : 10)
 
@@ -72,22 +63,11 @@ struct SidebarView: View {
                     }
 
                     // ── Tags section ──
-                    HStack(spacing: 6) {
-                        SidebarChevron(isExpanded: tagsExpanded) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                tagsExpanded.toggle()
-                            }
-                        }
-                        Image(systemName: "tag")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.tertiaryText)
-                        Text("Tags")
-                            .font(.notely(13, weight: .semibold))
-                            .foregroundColor(.tertiaryText)
-                        Spacer()
+                    SidebarSectionHeader(title: "Tags", systemImage: "tag", isExpanded: $tagsExpanded) {
+                        EmptyView()
                     }
-                    .padding(.horizontal, 12)
-                    .frame(height: 32)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, tagsExpanded ? 0 : 10)
 
                     if tagsExpanded {
                         VStack(spacing: 1) {
@@ -159,20 +139,53 @@ struct SidebarView: View {
     }
 }
 
-/// Expand/collapse chevron used in sidebar section headers.
-struct SidebarChevron: View {
-    let isExpanded: Bool
-    let action: () -> Void
+/// Clickable section header with chevron, hover highlight, and optional
+/// trailing view (e.g. the "+" button in Library). The entire row toggles
+/// expansion — not just the chevron.
+struct SidebarSectionHeader<Trailing: View>: View {
+    let title: String
+    var systemImage: String? = nil
+    @Binding var isExpanded: Bool
+    @ViewBuilder var trailing: () -> Trailing
+    @State private var isHovering = false
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.tertiaryText)
-                .frame(width: 14, height: 14)
-                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.tertiaryText)
+                    .frame(width: 14, height: 14)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.tertiaryText)
+                }
+
+                Text(title)
+                    .font(.notely(13, weight: .semibold))
+                    .foregroundColor(.tertiaryText)
+
+                Spacer()
+
+                trailing()
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovering ? Color.cardHover : Color.clear)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -183,6 +196,7 @@ struct SidebarNavItem: View {
     let count: Int
     let isSelected: Bool
     let action: () -> Void
+    @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
@@ -208,11 +222,12 @@ struct SidebarNavItem: View {
             .frame(height: 30)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isSelected ? Color.accentHover : Color.clear)
+                    .fill(isSelected ? Color.accentHover : (isHovering ? Color.cardHover : Color.clear))
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -221,12 +236,19 @@ struct TagTreeRow: View {
     let node: TagNode
     @Environment(AppModel.self) var appModel
     @State private var isExpanded = true
+    @State private var isHovering = false
 
     private var isSelected: Bool {
         if case .tag(let path) = appModel.sidebarSelection {
             return path == node.id
         }
         return false
+    }
+
+    private var rowBg: Color {
+        if isSelected && !appModel.showSettings { return .accentHover }
+        if isHovering { return .cardHover }
+        return .clear
     }
 
     var body: some View {
@@ -269,11 +291,12 @@ struct TagTreeRow: View {
                 .frame(height: 28)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isSelected && !appModel.showSettings ? Color.accentHover : Color.clear)
+                        .fill(rowBg)
                 )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .onHover { isHovering = $0 }
 
             if isExpanded && !node.children.isEmpty {
                 ForEach(node.children) { child in

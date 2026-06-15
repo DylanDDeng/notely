@@ -479,11 +479,17 @@ final class WysiwygEngine {
                 let isActive = NSLocationInRange(cursorLocation, match.range)
                 for markerRange in markers {
                     if isActive {
-                        // Show faded markers when cursor is near
+                        // Show markers at normal size when cursor is inside
                         storage.addAttribute(.foregroundColor, value: getMarkerColor(), range: markerRange)
                     } else {
-                        // Hide markers completely
-                        hideRange(storage, range: markerRange)
+                        // Collapse markers to near-zero width: transparent color
+                        // + tiny font size so they occupy almost no horizontal
+                        // space. This eliminates the visible gap / "indentation"
+                        // around bold, italic, code, etc.
+                        storage.addAttributes([
+                            .foregroundColor: NSColor.clear,
+                            .font: NSFont.systemFont(ofSize: 0.1),
+                        ], range: markerRange)
                     }
                 }
             }
