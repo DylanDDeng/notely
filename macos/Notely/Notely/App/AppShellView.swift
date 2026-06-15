@@ -3,7 +3,6 @@ import SwiftUI
 struct AppShellView: View {
     @Environment(AppModel.self) var appModel
     @Environment(FileNoteStore.self) var store
-    @State private var settingsTabState = SettingsTabState()
 
     var body: some View {
         if !store.isOpen {
@@ -28,7 +27,6 @@ struct AppShellView: View {
             .navigationSplitViewStyle(.balanced)
             .frame(minWidth: 1040, minHeight: 700)
             .background(Color.appBg)
-            .environment(settingsTabState)
         }
     }
 }

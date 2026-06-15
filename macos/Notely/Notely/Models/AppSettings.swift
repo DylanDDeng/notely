@@ -13,6 +13,20 @@ enum AppSettings {
     static let autoUpdatesKey = "notely.autoUpdates"
     static let accentColorKey = "notely.accentColor"
     static let workspacePathKey = "notely.workspacePath"
+    static let appThemeKey = "notely.appTheme"
+    static let editorFontKey = "notely.editorFont"
+    static let editorWidthKey = "notely.editorWidth"
+    static let spellCheckKey = "notely.spellCheck"
+    static let autoPairKey = "notely.autoPair"
+    static let smartPunctuationKey = "notely.smartPunctuation"
+    static let markdownSyntaxKey = "notely.markdownSyntax"
+    static let tabSizeKey = "notely.tabSize"
+    static let wordWrapKey = "notely.wordWrap"
+    static let typewriterKey = "notely.typewriter"
+    static let exportFormatKey = "notely.exportFormat"
+    static let includeFrontmatterKey = "notely.includeFrontmatter"
+    static let preserveTagsKey = "notely.preserveTags"
+    static let imageHandlingKey = "notely.imageHandling"
 
     static var theme: String {
         get { UserDefaults.standard.string(forKey: themeKey) ?? "system" }
@@ -63,6 +77,107 @@ enum AppSettings {
     static var workspacePath: String {
         get { UserDefaults.standard.string(forKey: workspacePathKey) ?? "" }
         set { UserDefaults.standard.set(newValue, forKey: workspacePathKey) }
+    }
+
+    // MARK: - Appearance
+
+    /// Named visual theme preset: "paper", "mineral", "bookish", "inky".
+    static var appTheme: String {
+        get { UserDefaults.standard.string(forKey: appThemeKey) ?? "paper" }
+        set { UserDefaults.standard.set(newValue, forKey: appThemeKey) }
+    }
+
+    static var editorFont: String {
+        get { UserDefaults.standard.string(forKey: editorFontKey) ?? "Inter" }
+        set { UserDefaults.standard.set(newValue, forKey: editorFontKey) }
+    }
+
+    /// Editor measure: "narrow", "medium", "wide".
+    static var editorWidth: String {
+        get { UserDefaults.standard.string(forKey: editorWidthKey) ?? "medium" }
+        set { UserDefaults.standard.set(newValue, forKey: editorWidthKey) }
+    }
+
+    // MARK: - Editor behavior
+
+    static var spellCheck: Bool {
+        get { UserDefaults.standard.object(forKey: spellCheckKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: spellCheckKey) }
+    }
+
+    static var autoPair: Bool {
+        get { UserDefaults.standard.object(forKey: autoPairKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: autoPairKey) }
+    }
+
+    static var smartPunctuation: Bool {
+        get { UserDefaults.standard.object(forKey: smartPunctuationKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: smartPunctuationKey) }
+    }
+
+    /// When to reveal raw Markdown markers: "always", "focus", "hidden".
+    static var markdownSyntax: String {
+        get { UserDefaults.standard.string(forKey: markdownSyntaxKey) ?? "focus" }
+        set { UserDefaults.standard.set(newValue, forKey: markdownSyntaxKey) }
+    }
+
+    static var tabSize: Int {
+        get { UserDefaults.standard.object(forKey: tabSizeKey) as? Int ?? 4 }
+        set { UserDefaults.standard.set(newValue, forKey: tabSizeKey) }
+    }
+
+    static var wordWrap: Bool {
+        get { UserDefaults.standard.object(forKey: wordWrapKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: wordWrapKey) }
+    }
+
+    static var typewriter: Bool {
+        get { UserDefaults.standard.object(forKey: typewriterKey) as? Bool ?? false }
+        set { UserDefaults.standard.set(newValue, forKey: typewriterKey) }
+    }
+
+    // MARK: - Export
+
+    /// Default export format: "markdown", "pdf", "html".
+    static var exportFormat: String {
+        get { UserDefaults.standard.string(forKey: exportFormatKey) ?? "markdown" }
+        set { UserDefaults.standard.set(newValue, forKey: exportFormatKey) }
+    }
+
+    static var includeFrontmatter: Bool {
+        get { UserDefaults.standard.object(forKey: includeFrontmatterKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: includeFrontmatterKey) }
+    }
+
+    static var preserveTags: Bool {
+        get { UserDefaults.standard.object(forKey: preserveTagsKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: preserveTagsKey) }
+    }
+
+    /// How images are exported: "copy", "link".
+    static var imageHandling: String {
+        get { UserDefaults.standard.string(forKey: imageHandlingKey) ?? "copy" }
+        set { UserDefaults.standard.set(newValue, forKey: imageHandlingKey) }
+    }
+}
+
+/// Line-spacing presets mapped to the editor line-height multiplier.
+enum LineSpacingPreset: String, CaseIterable {
+    case compact, cozy, relaxed
+
+    var multiplier: Double {
+        switch self {
+        case .compact: return 1.4
+        case .cozy: return 1.7
+        case .relaxed: return 2.0
+        }
+    }
+
+    var label: String { rawValue.capitalized }
+
+    /// Resolve the preset closest to a stored multiplier.
+    static func from(multiplier: Double) -> LineSpacingPreset {
+        allCases.min(by: { abs($0.multiplier - multiplier) < abs($1.multiplier - multiplier) }) ?? .cozy
     }
 }
 
