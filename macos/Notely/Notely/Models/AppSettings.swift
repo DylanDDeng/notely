@@ -11,8 +11,6 @@ enum AppSettings {
     static let noteListWidthKey = "notely.noteListWidth"
     static let launchAtLoginKey = "notely.launchAtLogin"
     static let autoUpdatesKey = "notely.autoUpdates"
-    static let defaultTagKey = "notely.defaultTag"
-    static let noteLocationKey = "notely.noteLocation"
     static let accentColorKey = "notely.accentColor"
     static let workspacePathKey = "notely.workspacePath"
 
@@ -56,15 +54,6 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: autoUpdatesKey) }
     }
 
-    static var defaultTag: String {
-        get { UserDefaults.standard.string(forKey: defaultTagKey) ?? "inbox" }
-        set { UserDefaults.standard.set(newValue, forKey: defaultTagKey) }
-    }
-
-    static var noteLocation: String {
-        get { UserDefaults.standard.string(forKey: noteLocationKey) ?? "~/Documents/Notes" }
-        set { UserDefaults.standard.set(newValue, forKey: noteLocationKey) }
-    }
 
     static var accentColorHex: String {
         get { UserDefaults.standard.string(forKey: accentColorKey) ?? "#D97706" }

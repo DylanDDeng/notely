@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Shared settings tab state
 
@@ -285,43 +286,46 @@ struct SettingsStepper: View {
 // MARK: - General tab
 
 struct GeneralSettings: View {
-    @State private var noteLocation: String = AppSettings.noteLocation
-    @State private var defaultTag: String = AppSettings.defaultTag
+    @Environment(FileNoteStore.self) private var store
     @State private var launchAtLogin: Bool = AppSettings.launchAtLogin
     @State private var autoUpdates: Bool = AppSettings.autoUpdates
 
+    /// The currently opened workspace folder, shown with `~` for the home dir.
+    private var folderPath: String {
+        guard let url = store.workspaceURL else { return "No folder open" }
+        return (url.path as NSString).abbreviatingWithTildeInPath
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            SettingsRow(title: "Default Note Location", subtitle: "Where new notes are saved.") {
-                HStack(spacing: 6) {
-                    Text(noteLocation)
-                        .font(.system(size: 14))
-                        .foregroundColor(.primaryText)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10))
-                        .foregroundColor(.tertiaryText)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
-                )
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
-            }
-            .padding(.vertical, 12)
-
-            SettingsDivider()
-
-            SettingsRow(title: "Default Tag", subtitle: "Automatically tag new notes.") {
-                Text("#\(defaultTag)")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+            SettingsRow(title: "Notes Folder", subtitle: "The folder you opened. New notes are saved here.") {
+                Button {
+                    if let url = store.workspaceURL {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(folderPath)
+                            .font(.system(size: 14))
+                            .foregroundColor(.primaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Image(systemName: "arrow.up.forward.app")
+                            .font(.system(size: 10))
+                            .foregroundColor(.tertiaryText)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
                     .background(
-                        Capsule().fill(Color.accent.opacity(0.08))
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
                     )
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.6)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(store.workspaceURL == nil)
+                .help("Reveal in Finder")
             }
             .padding(.vertical, 12)
 
