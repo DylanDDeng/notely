@@ -55,14 +55,21 @@ struct NoteCardView: View {
                     .padding(.bottom, 2)
 
                 HStack(spacing: 6) {
+                    // The date yields space first (truncates) so tag pills keep
+                    // their full width on one line in a narrow column.
                     Text(note.updatedAt.formatted(.relative(presentation: .named)))
                         .font(.system(size: 11))
                         .foregroundColor(.tertiaryText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(-1)
 
                     ForEach(note.tags.prefix(2), id: \.self) { tag in
                         Text("#\(tag)")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(isSelected ? .accent : .secondaryText)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 1)
                             .background(
@@ -75,10 +82,13 @@ struct NoteCardView: View {
                         Text("+\(note.tags.count - 2)")
                             .font(.system(size: 11))
                             .foregroundColor(.tertiaryText)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
 
                     Spacer(minLength: 0)
                 }
+                .clipped()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
