@@ -11,7 +11,6 @@
 		07C3BF96370CFBC42EBF64C0 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCCE5225248828BF56B24F27 /* SidebarView.swift */; };
 		1C4F41388134B567C66CDEC2 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA5E10CD49C23658EEA57244 /* AppSettings.swift */; };
 		2577B1CBF8791056FAE47ECF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B580DFD3B4507EAAC4C0DB97 /* SettingsView.swift */; };
-		3265DDB04A850703902AF905 /* MarkdownExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B115D98DBB7A0F0464776FC /* MarkdownExporter.swift */; };
 		33D9DA3D8962040517AE5746 /* FolderOpenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC832FB4A06344B92E957336 /* FolderOpenView.swift */; };
 		402621765996F526DB134691 /* WysiwygEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12750DB5F5885CC0AF7C06A2 /* WysiwygEngine.swift */; };
 		73E9A7FD99DEA3EC14C4B6A8 /* TagExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68CA4E783C0848DB5608663A /* TagExtractor.swift */; };
@@ -24,6 +23,7 @@
 		B6E59F1EB3D9260C1375C59C /* NoteModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051335655F5AEF97F593867C /* NoteModel.swift */; };
 		BDA671EA0B3446241CA15312 /* FileNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9390B0509CE4E1E21BA020B4 /* FileNoteStore.swift */; };
 		C034C801EBAB47DF6156C0A0 /* ImageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A3B1ABF107ECCBBF6D9172 /* ImageAttachment.swift */; };
+		7A1B2C3D4E5F60718293A4D6 /* CursorMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4D5 /* CursorMapping.swift */; };
 		7A1B2C3D4E5F60718293A4B6 /* MarkdownTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4B5 /* MarkdownTable.swift */; };
 		7A1B2C3D4E5F60718293A4C6 /* LatexMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4C5 /* LatexMath.swift */; };
 		C49FAA123F69F37D5D946DD6 /* ColorTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A4085CE734D06BACDB912F /* ColorTokens.swift */; };
@@ -44,9 +44,9 @@
 		42B5746C3AF4A0D882715D97 /* EditorContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorContainerView.swift; sourceTree = "<group>"; };
 		47AB666D4EA829964BC9AEDD /* NoteCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteCardView.swift; sourceTree = "<group>"; };
 		4A7B5B3D54248B16FAE60081 /* TitleExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitleExtractor.swift; sourceTree = "<group>"; };
-		5B115D98DBB7A0F0464776FC /* MarkdownExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownExporter.swift; sourceTree = "<group>"; };
 		62A4085CE734D06BACDB912F /* ColorTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorTokens.swift; sourceTree = "<group>"; };
 		65A3B1ABF107ECCBBF6D9172 /* ImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachment.swift; sourceTree = "<group>"; };
+		7A1B2C3D4E5F60718293A4D5 /* CursorMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorMapping.swift; sourceTree = "<group>"; };
 		7A1B2C3D4E5F60718293A4B5 /* MarkdownTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTable.swift; sourceTree = "<group>"; };
 		7A1B2C3D4E5F60718293A4C5 /* LatexMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatexMath.swift; sourceTree = "<group>"; };
 		68CA4E783C0848DB5608663A /* TagExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagExtractor.swift; sourceTree = "<group>"; };
@@ -96,6 +96,7 @@
 				42B5746C3AF4A0D882715D97 /* EditorContainerView.swift */,
 				862F15E8D1FA0A7E757E7F92 /* EditorView.swift */,
 				65A3B1ABF107ECCBBF6D9172 /* ImageAttachment.swift */,
+				7A1B2C3D4E5F60718293A4D5 /* CursorMapping.swift */,
 				7A1B2C3D4E5F60718293A4B5 /* MarkdownTable.swift */,
 				7A1B2C3D4E5F60718293A4C5 /* LatexMath.swift */,
 				12750DB5F5885CC0AF7C06A2 /* WysiwygEngine.swift */,
@@ -156,7 +157,6 @@
 			isa = PBXGroup;
 			children = (
 				9390B0509CE4E1E21BA020B4 /* FileNoteStore.swift */,
-				5B115D98DBB7A0F0464776FC /* MarkdownExporter.swift */,
 				68CA4E783C0848DB5608663A /* TagExtractor.swift */,
 				4A7B5B3D54248B16FAE60081 /* TitleExtractor.swift */,
 			);
@@ -274,9 +274,9 @@
 				BDA671EA0B3446241CA15312 /* FileNoteStore.swift in Sources */,
 				33D9DA3D8962040517AE5746 /* FolderOpenView.swift in Sources */,
 				C034C801EBAB47DF6156C0A0 /* ImageAttachment.swift in Sources */,
+				7A1B2C3D4E5F60718293A4D6 /* CursorMapping.swift in Sources */,
 				7A1B2C3D4E5F60718293A4B6 /* MarkdownTable.swift in Sources */,
 				7A1B2C3D4E5F60718293A4C6 /* LatexMath.swift in Sources */,
-				3265DDB04A850703902AF905 /* MarkdownExporter.swift in Sources */,
 				A11EC83643B6760EF2A5FEC0 /* NoteCardView.swift in Sources */,
 				87E6A02F8DD5E62C1A119B90 /* NoteListView.swift in Sources */,
 				B6E59F1EB3D9260C1375C59C /* NoteModel.swift in Sources */,

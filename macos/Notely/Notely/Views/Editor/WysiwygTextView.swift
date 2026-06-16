@@ -494,41 +494,30 @@ final class WysiwygTextView: NSTextView {
     func rawLocation(forDisplayLocation displayLocation: Int) -> Int {
         guard let storage = textStorage else { return displayLocation }
         let clamped = min(max(0, displayLocation), storage.length)
-        guard clamped > 0 else { return 0 }
-        var raw = 0
-        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: clamped), options: []) { value, range, _ in
-            if let attachment = value as? MarkdownBackedAttachment {
-                raw += (attachment.markdownSource as NSString).length
-            } else {
-                raw += range.length
-            }
-        }
-        return raw
+        return CursorMapping.rawLocation(forDisplayLocation: clamped, segments: segments(from: storage))
     }
 
     /// Display offset (in the collapsed storage) corresponding to a raw-markdown
-    /// offset. If the raw location falls inside a collapsed attachment, the caret
-    /// is placed just before that attachment.
+    /// offset. A raw location inside a collapsed attachment snaps to just before
+    /// it; one at the attachment's trailing boundary maps to just after it.
     func displayLocation(forRawLocation rawLocation: Int) -> Int {
         guard let storage = textStorage else { return rawLocation }
-        var raw = 0
-        var result = storage.length
-        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length), options: []) { value, range, stop in
+        return CursorMapping.displayLocation(forRawLocation: rawLocation,
+                                             segments: segments(from: storage),
+                                             displayTotal: storage.length)
+    }
+
+    /// Break the live storage into the run model `CursorMapping` operates on:
+    /// each collapsed attachment becomes one `.attachment` segment (display
+    /// length 1, raw length = its markdown source), and every other run becomes a
+    /// `.text` segment.
+    private func segments(from storage: NSTextStorage) -> [CursorMapping.Segment] {
+        var result: [CursorMapping.Segment] = []
+        storage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: storage.length), options: []) { value, range, _ in
             if let attachment = value as? MarkdownBackedAttachment {
-                let sourceLength = (attachment.markdownSource as NSString).length
-                if rawLocation <= raw + sourceLength {
-                    result = range.location
-                    stop.pointee = true
-                    return
-                }
-                raw += sourceLength
+                result.append(.attachment(rawLength: (attachment.markdownSource as NSString).length))
             } else {
-                if rawLocation <= raw + range.length {
-                    result = range.location + (rawLocation - raw)
-                    stop.pointee = true
-                    return
-                }
-                raw += range.length
+                result.append(.text(range.length))
             }
         }
         return result
