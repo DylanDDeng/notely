@@ -162,27 +162,16 @@ struct EditorToolbar: View {
     let wordCount: Int
     let charCount: Int
     @Binding var showsInspector: Bool
-    @Environment(FileNoteStore.self) var store
 
     var body: some View {
         HStack {
             Spacer()
 
-            HStack(spacing: 2) {
-                ToolbarIconButton(systemName: "info.circle", isSelected: showsInspector) {
-                    showsInspector.toggle()
-                }
-                .popover(isPresented: $showsInspector, arrowEdge: .bottom) {
-                    DocumentInfoPopover(note: note, wordCount: wordCount, charCount: charCount)
-                }
-
-                ToolbarIconButton(systemName: "square.and.arrow.down") {
-                    MarkdownExporter.export(note: note, store: store)
-                }
-
-                ToolbarIconButton(systemName: "ellipsis") {
-                    // More options
-                }
+            ToolbarIconButton(systemName: "info.circle", isSelected: showsInspector) {
+                showsInspector.toggle()
+            }
+            .popover(isPresented: $showsInspector, arrowEdge: .bottom) {
+                DocumentInfoPopover(note: note, wordCount: wordCount, charCount: charCount)
             }
         }
         .padding(.horizontal, 20)
