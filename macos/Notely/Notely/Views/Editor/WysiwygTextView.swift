@@ -78,7 +78,7 @@ struct WysiwygEditor: NSViewRepresentable {
         scrollView.borderType = .noBorder
 
         let textStorage = NSTextStorage()
-        let layoutManager = NSLayoutManager()
+        let layoutManager = CodeBlockLayoutManager()
         let textContainer = NSTextContainer(containerSize: NSSize(width: 1, height: CGFloat.greatestFiniteMagnitude))
         textContainer.widthTracksTextView = true
         textContainer.lineFragmentPadding = 0

@@ -92,6 +92,9 @@ final class WysiwygEngine {
         let cbPara = NSMutableParagraphStyle()
         cbPara.headIndent = 16
         cbPara.firstLineHeadIndent = 16
+        // Negative tail indent insets the text from the trailing edge so code
+        // lines wrap inside the box drawn by CodeBlockLayoutManager.
+        cbPara.tailIndent = -16
         cbPara.lineSpacing = 4
         cbPara.paragraphSpacing = 0
         cbPara.paragraphSpacingBefore = 0
@@ -136,7 +139,10 @@ final class WysiwygEngine {
             codeBlock: [
                 .font: NSFont.monospacedSystemFont(ofSize: fontSize - 3, weight: .regular),
                 .foregroundColor: NSColor(named: "SecondaryText") ?? secondaryColor,
-                .backgroundColor: codeBgColor,
+                // The block background is drawn as one rounded box by
+                // CodeBlockLayoutManager (see the .codeBlockBackground marker
+                // applied in applyStyle), not via .backgroundColor which paints
+                // a ragged per-line fill.
                 .paragraphStyle: cbPara,
             ],
             listItem: [
@@ -302,6 +308,7 @@ final class WysiwygEngine {
         storage.removeAttribute(.strikethroughStyle, range: fullRange)
         storage.removeAttribute(.paragraphStyle, range: fullRange)
         storage.removeAttribute(.attachment, range: fullRange)
+        storage.removeAttribute(.codeBlockBackground, range: fullRange)
 
         // Apply base paragraph style to everything
         storage.addAttributes(style.baseParagraph, range: fullRange)
@@ -329,6 +336,8 @@ final class WysiwygEngine {
                     let blockRange = NSRange(location: codeBlockStart, length: (lineRange.location + lineRange.length) - codeBlockStart)
                     codeBlockRanges.append(blockRange)
                     storage.addAttributes(style.codeBlock, range: blockRange)
+                    // Marker for CodeBlockLayoutManager to draw the unified box.
+                    storage.addAttribute(.codeBlockBackground, value: true, range: blockRange)
                     // Add spacing before the first line of the code block
                     if codeBlockStart > 0 {
                         let prevLineEnd = codeBlockStart - 1
