@@ -9,18 +9,7 @@ struct NoteCardView: View {
     @State private var isHovered = false
 
     private var summary: String {
-        let lines = note.content.components(separatedBy: "\n")
-        var foundTitle = false
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { continue }
-            if !foundTitle {
-                foundTitle = true
-                continue
-            }
-            return trimmed
-        }
-        return "No additional text"
+        NoteCardSummary.firstContentLine(of: note.content) ?? "No additional text"
     }
 
     var body: some View {
@@ -31,7 +20,7 @@ struct NoteCardView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
-                    Text(highlighted(note.title.isEmpty ? note.filename : note.title))
+                    Text(highlighted(note.filename))
                         .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
                         .foregroundColor(.primaryText)
                         .lineLimit(1)
