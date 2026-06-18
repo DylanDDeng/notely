@@ -31,9 +31,18 @@ final class CodeBlockLayoutManager: NSLayoutManager {
     private func drawCodeBlockBoxes(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         guard let storage = textStorage, let container = textContainers.first else { return }
         let color = boxColor ?? NSColor(named: "CodeBlockBackground") ?? .controlBackgroundColor
-        let charRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
 
-        storage.enumerateAttribute(.codeBlockBackground, in: charRange, options: []) { value, range, _ in
+        // The region currently being (re)drawn. A partial redraw — e.g. AppKit
+        // repainting just the caret's line while typing in a block — must still
+        // paint each block's box at its FULL size, or the slice would be a
+        // smaller, mis-aligned box. So enumerate the whole storage and compute
+        // geometry from each complete block range, then skip boxes that don't
+        // intersect the dirty region.
+        let dirtyRect = boundingRect(forGlyphRange: glyphsToShow, in: container)
+            .offsetBy(dx: origin.x, dy: origin.y)
+        let fullRange = NSRange(location: 0, length: storage.length)
+
+        storage.enumerateAttribute(.codeBlockBackground, in: fullRange, options: []) { value, range, _ in
             guard (value as? Bool) == true else { return }
 
             let blockGlyphRange = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
@@ -47,6 +56,8 @@ final class CodeBlockLayoutManager: NSLayoutManager {
             // Container coordinates → view coordinates.
             rect.origin.x += origin.x
             rect.origin.y += origin.y
+
+            guard rect.intersects(dirtyRect) else { return }
 
             color.setFill()
             NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
