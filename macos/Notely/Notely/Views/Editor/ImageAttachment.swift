@@ -100,8 +100,13 @@ final class ImageLoader {
     private var baseURL: URL?
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 20
-        config.timeoutIntervalForResource = 30
+        // timeoutIntervalForRequest is the max gap between bytes; resource is the
+        // ceiling for the whole transfer. The old 30s resource cap was below the
+        // download time of multi-MB images (e.g. a 3.5 MB GIF over a ~150 KB/s
+        // link takes ~25s), so they timed out and fell back to showing the raw
+        // link. Give large/slow images room to finish.
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 120
         // The previous `.ephemeral` config had diskCapacity == 0, so every app
         // relaunch (and any in-memory eviction) re-downloaded every image over
         // the network. A persistent on-disk URLCache serves repeat views in
@@ -194,7 +199,10 @@ final class ImageLoader {
             if let error {
                 DispatchQueue.main.async {
                     self.loading.remove(key)
-                    self.markFailed(key)
+                    // A timeout / dropped connection is transient — retry soon
+                    // instead of hiding the image (showing the raw link) for the
+                    // full 5-minute cooldown that hard failures get.
+                    self.markFailed(key, retryAfter: Self.isTransient(error) ? 15 : 300)
                     self.log("remote image request failed: \(key), error=\(error.localizedDescription)")
                     completion(nil)
                 }
@@ -204,7 +212,9 @@ final class ImageLoader {
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 DispatchQueue.main.async {
                     self.loading.remove(key)
-                    self.markFailed(key)
+                    // 408/429/5xx are server-side transient; 403/404 are not.
+                    let transient = http.statusCode == 408 || http.statusCode == 429 || (500...599).contains(http.statusCode)
+                    self.markFailed(key, retryAfter: transient ? 30 : 300)
                     self.log("remote image HTTP \(http.statusCode): \(key)")
                     completion(nil)
                 }
@@ -362,8 +372,22 @@ final class ImageLoader {
         failedUntil.removeAll()
     }
 
-    private func markFailed(_ key: String) {
-        failedUntil[key] = Date().addingTimeInterval(300)
+    private func markFailed(_ key: String, retryAfter seconds: TimeInterval = 300) {
+        failedUntil[key] = Date().addingTimeInterval(seconds)
+    }
+
+    /// Whether a URL load error is transient (worth retrying soon) rather than a
+    /// hard failure like a bad URL or a 404.
+    private static func isTransient(_ error: Error) -> Bool {
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .cannotConnectToHost,
+             .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet,
+             .resourceUnavailable, .requestBodyStreamExhausted:
+            return true
+        default:
+            return false
+        }
     }
 
     private func log(_ message: String) {
