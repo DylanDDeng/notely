@@ -5,10 +5,20 @@ struct SidebarView: View {
     @Environment(FileNoteStore.self) var store
     @State private var libraryExpanded = true
     @State private var tagsExpanded = true
+    @State private var tagSearch = ""
 
     private var tagTree: [TagNode] {
         let allTags = store.notes.flatMap { $0.tags }
         return TagTreeBuilder.build(from: allTags)
+    }
+
+    /// Tags whose full path matches the search query, as a flat sorted list.
+    private var filteredTags: [TagNode] {
+        TagSearch.matches(in: tagTree, query: tagSearch)
+    }
+
+    private var isSearchingTags: Bool {
+        !tagSearch.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private var todayCount: Int {
@@ -70,6 +80,12 @@ struct SidebarView: View {
                     .padding(.bottom, tagsExpanded ? 0 : 10)
 
                     if tagsExpanded {
+                        if !tagTree.isEmpty {
+                            TagSearchField(text: $tagSearch)
+                                .padding(.horizontal, 14)
+                                .padding(.bottom, 6)
+                        }
+
                         VStack(spacing: 1) {
                             if tagTree.isEmpty {
                                 Text("No tags yet")
@@ -77,6 +93,18 @@ struct SidebarView: View {
                                     .foregroundColor(.tertiaryText)
                                     .padding(.horizontal, 18)
                                     .padding(.vertical, 8)
+                            } else if isSearchingTags {
+                                if filteredTags.isEmpty {
+                                    Text("No matching tags")
+                                        .font(.notely(13))
+                                        .foregroundColor(.tertiaryText)
+                                        .padding(.horizontal, 18)
+                                        .padding(.vertical, 8)
+                                } else {
+                                    ForEach(filteredTags) { node in
+                                        TagFlatRow(node: node)
+                                    }
+                                }
                             } else {
                                 ForEach(tagTree) { node in
                                     TagTreeRow(node: node)
@@ -223,6 +251,95 @@ struct SidebarNavItem: View {
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(isSelected ? Color.accentHover : (isHovering ? Color.cardHover : Color.clear))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+    }
+}
+
+/// Compact search field for filtering the tag list.
+struct TagSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
+                .foregroundColor(.tertiaryText)
+            TextField("Search tags", text: $text)
+                .textFieldStyle(.plain)
+                .font(.notely(13))
+                .foregroundColor(.primaryText)
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.tertiaryText)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primaryText.opacity(0.03))
+        )
+    }
+}
+
+/// A flat tag row used for search results: shows the full tag path (e.g.
+/// `AI/编程`) rather than the nested tree, so a match is identifiable at a glance.
+struct TagFlatRow: View {
+    let node: TagNode
+    @Environment(AppModel.self) var appModel
+    @State private var isHovering = false
+
+    private var isSelected: Bool {
+        if case .tag(let path) = appModel.sidebarSelection {
+            return path == node.id
+        }
+        return false
+    }
+
+    private var rowBg: Color {
+        if isSelected && !appModel.showSettings { return .accentHover }
+        if isHovering { return .cardHover }
+        return .clear
+    }
+
+    var body: some View {
+        Button {
+            appModel.showSettings = false
+            appModel.sidebarSelection = .tag(node.id)
+        } label: {
+            HStack(spacing: 7) {
+                Text("#")
+                    .font(.notely(14, weight: .medium))
+                    .foregroundColor(isSelected ? .accent : .tertiaryText)
+                    .frame(width: 12)
+
+                Text(node.id)
+                    .font(.notely(14, weight: isSelected ? .medium : .regular))
+                    .foregroundColor(isSelected ? .accent : .primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer()
+
+                Text("\(node.totalCount)")
+                    .font(.notely(12))
+                    .foregroundColor(isSelected ? .accent : .tertiaryText)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(rowBg)
             )
             .contentShape(Rectangle())
         }
