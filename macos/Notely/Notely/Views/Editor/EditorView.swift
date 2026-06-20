@@ -106,11 +106,15 @@ struct EditorView: View {
     }
 
     private func scheduleSave(_ content: String) {
+        // Bind the destination to the note this text came from, at schedule time,
+        // so a debounced write can never be redirected to a note switched-to
+        // during the 500ms window.
+        let targetId = note.id
         saveTask?.cancel()
         saveTask = Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            store.saveContent(content, to: note.id)
+            store.saveContent(content, to: targetId)
         }
     }
 

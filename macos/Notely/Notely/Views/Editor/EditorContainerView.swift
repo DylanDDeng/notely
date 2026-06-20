@@ -10,6 +10,7 @@ struct EditorContainerView: View {
             if let noteId = appModel.selectedNoteId,
                let note = store.notes.first(where: { $0.id == noteId }) {
                 EditorView(note: note)
+                    .id(note.id)
             } else {
                 EmptyEditorView()
             }

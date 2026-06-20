@@ -111,6 +111,12 @@ struct WysiwygEditor: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? WysiwygTextView else { return }
 
+        // Re-bind the text-change callback to the CURRENT note's EditorView. The
+        // Coordinator is created once (makeCoordinator), so without this a reused
+        // editor would keep routing saves through the FIRST note's closure —
+        // writing the displayed note's text into the wrong note's file.
+        context.coordinator.onTextChange = onTextChange
+
         // Only sync text when switching notes (external content change),
         // never during typing. We detect this by comparing initialText against
         // the coordinator's lastKnownText. If they match, the change came from
@@ -151,7 +157,7 @@ struct WysiwygEditor: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
-        let onTextChange: (String) -> Void
+        var onTextChange: (String) -> Void
         weak var textView: NSTextView?
         var lastKnownText: String = ""
 
