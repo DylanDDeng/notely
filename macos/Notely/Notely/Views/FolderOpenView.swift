@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Tracks whether this launch has already auto-restored the last workspace, so
+/// only the first window does it (extra windows open empty for a new folder).
+enum WorkspaceRestore {
+    @MainActor static var didRestoreInitial = false
+}
+
 /// Shown when no workspace folder is open.
 struct FolderOpenView: View {
     @Environment(FileNoteStore.self) var store
@@ -53,7 +59,11 @@ struct FolderOpenView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.editorBg)
         .onAppear {
-            // Auto-open last workspace
+            // Auto-open the last workspace, but only for the FIRST window of the
+            // launch. Additional windows (New Window) stay empty so the user can
+            // open a DIFFERENT folder beside the first one.
+            guard !WorkspaceRestore.didRestoreInitial else { return }
+            WorkspaceRestore.didRestoreInitial = true
             let lastPath = AppSettings.workspacePath
             if !lastPath.isEmpty {
                 let url = URL(fileURLWithPath: lastPath)

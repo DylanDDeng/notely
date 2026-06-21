@@ -2,64 +2,107 @@ import SwiftUI
 
 @main
 struct NotelyApp: App {
-    @State private var appModel = AppModel()
-    @State private var store = FileNoteStore()
+    // Theme is global across all windows; the per-window data lives in WindowRoot.
     @State private var themeManager = ThemeManager.shared
-    @State private var settingsTabState = SettingsTabState()
 
     var body: some Scene {
-        WindowGroup {
-            AppShellView()
-                .environment(appModel)
-                .environment(store)
-                .environment(settingsTabState)
+        WindowGroup(id: "main") {
+            WindowRoot()
                 .environment(themeManager)
-                // Rebuild the tree when the active theme/accent changes so the
-                // theme-driven Color tokens are re-read everywhere.
-                .id(themeManager.renderKey)
                 .task { themeManager.applyAppearance() }
         }
         .windowStyle(.hiddenTitleBar)
-        .commands {
-            CommandGroup(after: .newItem) {
-                Button("New Note") {
-                    let note = store.createNote()
-                    appModel.selectedNoteId = note?.id
-                    appModel.sidebarSelection = .allNotes
-                }
-                .keyboardShortcut("n", modifiers: .command)
+        .commands { AppCommands() }
+    }
+}
 
-                Button("Open Folder…") {
-                    openFolderPanel()
-                }
-                .keyboardShortcut("o", modifiers: .command)
+/// One window's root. Each window owns its OWN store / app model, so different
+/// windows can open different folders and be edited in parallel.
+struct WindowRoot: View {
+    @Environment(ThemeManager.self) private var themeManager
+    @State private var store = FileNoteStore()
+    @State private var appModel = AppModel()
+    @State private var settingsTabState = SettingsTabState()
+
+    var body: some View {
+        AppShellView()
+            .environment(store)
+            .environment(appModel)
+            .environment(settingsTabState)
+            // Publish this window's store/model so menu commands act on the
+            // focused window, not a shared global.
+            .focusedSceneValue(\.noteStore, store)
+            .focusedSceneValue(\.appModel, appModel)
+            // Rebuild the shell (not the store) when the theme/accent changes so
+            // theme-driven Color tokens are re-read everywhere. The @State above
+            // lives on WindowRoot, which keeps its identity, so the open folder
+            // and notes survive a theme switch.
+            .id(themeManager.renderKey)
+    }
+}
+
+// MARK: - Focused window values (so commands target the key window)
+
+private struct NoteStoreFocusedKey: FocusedValueKey { typealias Value = FileNoteStore }
+private struct AppModelFocusedKey: FocusedValueKey { typealias Value = AppModel }
+
+extension FocusedValues {
+    var noteStore: FileNoteStore? {
+        get { self[NoteStoreFocusedKey.self] }
+        set { self[NoteStoreFocusedKey.self] = newValue }
+    }
+    var appModel: AppModel? {
+        get { self[AppModelFocusedKey.self] }
+        set { self[AppModelFocusedKey.self] = newValue }
+    }
+}
+
+// MARK: - Menu commands
+
+struct AppCommands: Commands {
+    @FocusedValue(\.noteStore) private var store
+    @FocusedValue(\.appModel) private var appModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("New Note") {
+                guard let store, let appModel else { return }
+                let note = store.createNote()
+                appModel.selectedNoteId = note?.id
+                appModel.sidebarSelection = .allNotes
             }
+            .keyboardShortcut("n", modifiers: .command)
 
-            CommandMenu("Format") {
-                Button("Bold") {
-                    NotificationCenter.default.post(name: .formatBold, object: nil)
-                }
+            Button("New Window") {
+                openWindow(id: "main")
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+
+            Button("Open Folder…") {
+                openFolderInFocusedWindow()
+            }
+            .keyboardShortcut("o", modifiers: .command)
+        }
+
+        CommandMenu("Format") {
+            // Send straight to the first responder (the focused window's text
+            // view) so the action fires exactly once. Broadcasting via
+            // NotificationCenter would hit every open window's editor.
+            Button("Bold") { NSApp.sendAction(#selector(WysiwygTextView.toggleBold(_:)), to: nil, from: nil) }
                 .keyboardShortcut("b", modifiers: .command)
-
-                Button("Italic") {
-                    NotificationCenter.default.post(name: .formatItalic, object: nil)
-                }
+            Button("Italic") { NSApp.sendAction(#selector(WysiwygTextView.toggleItalic(_:)), to: nil, from: nil) }
                 .keyboardShortcut("i", modifiers: .command)
-
-                Button("Insert Link") {
-                    NotificationCenter.default.post(name: .formatLink, object: nil)
-                }
+            Button("Insert Link") { NSApp.sendAction(#selector(WysiwygTextView.insertLink), to: nil, from: nil) }
                 .keyboardShortcut("k", modifiers: .command)
-
-                Button("Toggle Todo") {
-                    NotificationCenter.default.post(name: .toggleTodo, object: nil)
-                }
+            Button("Toggle Todo") { NSApp.sendAction(#selector(WysiwygTextView.toggleTodoOnCurrentLine), to: nil, from: nil) }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
-            }
         }
     }
 
-    private func openFolderPanel() {
+    /// Opens a folder in the currently focused window (replacing its workspace).
+    /// If no window is focused, opens a new window for the chosen folder instead.
+    private func openFolderInFocusedWindow() {
         let panel = NSOpenPanel()
         panel.title = "Open Notes Folder"
         panel.canChooseDirectories = true
@@ -69,9 +112,13 @@ struct NotelyApp: App {
         panel.prompt = "Open"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        store.openWorkspace(at: url)
-        appModel.selectedNoteId = nil
-        appModel.sidebarSelection = .allNotes
+        if let store, let appModel {
+            store.openWorkspace(at: url)
+            appModel.selectedNoteId = nil
+            appModel.sidebarSelection = .allNotes
+        } else {
+            openWindow(id: "main")
+        }
     }
 }
 

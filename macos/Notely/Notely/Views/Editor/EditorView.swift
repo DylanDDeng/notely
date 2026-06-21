@@ -68,18 +68,6 @@ struct EditorView: View {
         .onChange(of: note.id) { _, _ in
             loadNote()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .formatBold)) { _ in
-            notifyEditor(#selector(WysiwygTextView.toggleBold(_:)))
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .formatItalic)) { _ in
-            notifyEditor(#selector(WysiwygTextView.toggleItalic(_:)))
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .formatLink)) { _ in
-            notifyEditor(#selector(WysiwygTextView.insertLink))
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .toggleTodo)) { _ in
-            notifyEditor(#selector(WysiwygTextView.toggleTodoOnCurrentLine))
-        }
     }
 
     private func loadNote() {
@@ -118,9 +106,6 @@ struct EditorView: View {
         }
     }
 
-    private func notifyEditor(_ selector: Selector) {
-        NSApp.sendAction(selector, to: nil, from: nil)
-    }
 }
 
 /// Bottom status bar: word count, character count, last updated time, tags.
