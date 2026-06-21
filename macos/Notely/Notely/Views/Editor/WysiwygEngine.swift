@@ -395,15 +395,20 @@ final class WysiwygEngine {
                     // Parse the type from the opening line ("note 类比" -> "note").
                     let after = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
                     calloutType = after.split(whereSeparator: { $0 == " " }).first.map(String.init) ?? "note"
-                    styleCalloutOpeningLine(storage, line: line, lineRange: lineRange, type: calloutType)
+                    styleCalloutOpeningLine(storage, line: line, lineRange: lineRange, type: calloutType, cursorLocation: cursorLocation)
                 } else {
                     inCallout = false
                     let blockRange = NSRange(location: calloutStart, length: (lineRange.location + lineRange.length) - calloutStart)
                     // Marker for CodeBlockLayoutManager to draw the tinted box + bar.
                     storage.addAttribute(.calloutType, value: calloutType, range: blockRange)
-                    // Closing ::: line: indent + faded.
+                    // Closing ::: line: indent + hidden (shown faded only when
+                    // the cursor is on the line, so it stays editable).
                     storage.addAttribute(.paragraphStyle, value: style.calloutPara, range: lineRange)
-                    applyMarkerStyle(storage, range: lineRange)
+                    if NSLocationInRange(cursorLocation, lineRange) {
+                        applyMarkerStyle(storage, range: lineRange)
+                    } else {
+                        hideRange(storage, range: lineRange)
+                    }
                     addBlockSpacing(storage, blockStart: calloutStart, blockRange: blockRange)
                 }
                 continue
@@ -795,18 +800,23 @@ final class WysiwygEngine {
     // MARK: - Callouts
 
     /// Styles a callout's opening line (`::: note 类比`) as the colored title:
-    /// the `:::` marker is faded, the rest is shown in the type color, semibold.
-    private func styleCalloutOpeningLine(_ storage: NSTextStorage, line: String, lineRange: NSRange, type: String) {
+    /// the `:::` marker is hidden, the rest is shown in the type color, semibold.
+    private func styleCalloutOpeningLine(_ storage: NSTextStorage, line: String, lineRange: NSRange, type: String, cursorLocation: Int) {
         storage.addAttribute(.paragraphStyle, value: style.calloutPara, range: lineRange)
         let color = CalloutKind(type).color
         storage.addAttribute(.foregroundColor, value: color, range: lineRange)
         storage.addAttribute(.font, value: NSFont.systemFont(ofSize: 14, weight: .semibold), range: lineRange)
-        // Fade the leading ::: so the title reads as the label.
+        // Hide the leading ::: so the title reads as the label. Show it faded
+        // only when the cursor is on the line, so it stays editable.
         let nsLine = line as NSString
         if let m = try? NSRegularExpression(pattern: #"^\s*:::\s*"#),
            let match = m.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
             let absRange = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
-            storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.35), range: absRange)
+            if NSLocationInRange(cursorLocation, lineRange) {
+                storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.35), range: absRange)
+            } else {
+                hideRange(storage, range: absRange)
+            }
         }
     }
 
