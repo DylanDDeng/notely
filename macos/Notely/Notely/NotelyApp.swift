@@ -5,6 +5,14 @@ struct NotelyApp: App {
     // Theme is global across all windows; the per-window data lives in WindowRoot.
     @State private var themeManager = ThemeManager.shared
 
+    init() {
+        // Don't have macOS restore every window from the last session on relaunch
+        // (which would resurrect extra/empty windows). Launch opens a single
+        // window restored to the last folder; opening more windows is manual
+        // (⇧⌘N).
+        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+    }
+
     var body: some Scene {
         WindowGroup(id: "main") {
             WindowRoot()
