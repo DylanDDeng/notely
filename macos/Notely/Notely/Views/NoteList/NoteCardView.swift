@@ -6,7 +6,10 @@ struct NoteCardView: View {
     var searchText: String = ""
     let onSelect: () -> Void
     @Environment(FileNoteStore.self) var store
+    @Environment(AppModel.self) var appModel
     @State private var isHovered = false
+    @State private var isRenaming = false
+    @State private var renameText = ""
 
     private var summary: String {
         NoteCardSummary.firstContentLine(of: note.content) ?? "No additional text"
@@ -99,10 +102,28 @@ struct NoteCardView: View {
             Button(note.pinned ? "Unpin" : "Pin") {
                 store.togglePin(note.id)
             }
+            Button("Rename…") {
+                renameText = note.filename
+                isRenaming = true
+            }
             Divider()
             Button("Delete", role: .destructive) {
                 store.deleteNote(note.id)
             }
+        }
+        .alert("Rename Note", isPresented: $isRenaming) {
+            TextField("File name", text: $renameText)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename") { performRename() }
+        } message: {
+            Text("Enter a new file name (without the .md extension).")
+        }
+    }
+
+    private func performRename() {
+        let wasSelected = appModel.selectedNoteId == note.id
+        if let newId = store.renameNote(note.id, to: renameText), wasSelected {
+            appModel.selectedNoteId = newId
         }
     }
 

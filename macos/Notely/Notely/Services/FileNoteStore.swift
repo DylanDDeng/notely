@@ -132,17 +132,28 @@ final class FileNoteStore {
         }
     }
 
-    func renameNote(_ noteId: String, to newTitle: String) {
-        guard let idx = notes.firstIndex(where: { $0.id == noteId }) else { return }
+    /// Renames the note's file to `newTitle` (sanitized). Returns the new note id
+    /// (its new file path) on success, or nil if nothing changed or it failed
+    /// (e.g. empty name, name unchanged, or a file with that name already exists).
+    @discardableResult
+    func renameNote(_ noteId: String, to newTitle: String) -> String? {
+        guard let idx = notes.firstIndex(where: { $0.id == noteId }) else { return nil }
+        let base = newTitle.sanitizeForFilename()
+        guard !base.isEmpty else { return nil }
         let oldURL = notes[idx].url
-        let newFilename = newTitle.sanitizeForFilename() + ".md"
+        let newFilename = base + ".md"
         let newURL = oldURL.deletingLastPathComponent().appendingPathComponent(newFilename)
 
-        guard newURL != oldURL else { return }
-        guard !FileManager.default.fileExists(atPath: newURL.path) else { return }
+        guard newURL != oldURL else { return nil }
+        guard !FileManager.default.fileExists(atPath: newURL.path) else { return nil }
 
         do {
             try FileManager.default.moveItem(at: oldURL, to: newURL)
+            // Migrate pin state, which is keyed by file path.
+            if pinnedFiles.remove(oldURL.path) != nil {
+                pinnedFiles.insert(newURL.path)
+                savePinnedFiles()
+            }
             notes[idx] = FileNote(
                 id: newURL.path,
                 url: newURL,
@@ -154,8 +165,10 @@ final class FileNoteStore {
                 pinned: notes[idx].pinned,
                 relativePath: relativePath(of: newURL)
             )
+            return newURL.path
         } catch {
             print("Rename failed: \(error)")
+            return nil
         }
     }
 
