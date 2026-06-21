@@ -148,6 +148,9 @@ struct WysiwygEditor: NSViewRepresentable {
 
         textView.fontSize = fontSize
         textView.lineHeight = lineHeight
+        // Keep the caret colored by the live theme accent (it can change at
+        // runtime via Settings without the text view being recreated).
+        textView.insertionPointColor = NSColor(Color.accent)
         textView.rebuildEngineAndRestyleIfNeeded()
         textView.fitFrameToContent()
     }
@@ -227,7 +230,7 @@ final class WysiwygTextView: NSTextView {
         font = NSFont.systemFont(ofSize: fontSize)
         textColor = NSColor(named: "PrimaryText")
         backgroundColor = .clear
-        insertionPointColor = NSColor(named: "AccentColor") ?? .controlAccentColor
+        insertionPointColor = NSColor(Color.accent)
         autoresizingMask = [.width]
         textContainerInset = NSSize(width: 0, height: 8)
         textContainer?.widthTracksTextView = true
