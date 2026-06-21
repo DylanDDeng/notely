@@ -23,44 +23,60 @@ final class CodeBlockLayoutManager: NSLayoutManager {
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         drawCodeBlockBoxes(forGlyphRange: glyphsToShow, at: origin)
-        // Draw text backgrounds (inline code, selection) on top of the box so
-        // selection inside a code block stays visible.
+        drawCalloutBoxes(forGlyphRange: glyphsToShow, at: origin)
+        // Draw text backgrounds (inline code, selection) on top of the boxes so
+        // selection inside a block stays visible.
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
     }
 
     private func drawCodeBlockBoxes(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
-        guard let storage = textStorage, let container = textContainers.first else { return }
         let color = boxColor ?? NSColor(named: "CodeBlockBackground") ?? .controlBackgroundColor
+        enumerateBlockBoxes(.codeBlockBackground, forGlyphRange: glyphsToShow, at: origin) { rect, value in
+            guard (value as? Bool) == true else { return }
+            color.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: self.cornerRadius, yRadius: self.cornerRadius).fill()
+        }
+    }
 
-        // The region currently being (re)drawn. A partial redraw — e.g. AppKit
-        // repainting just the caret's line while typing in a block — must still
-        // paint each block's box at its FULL size, or the slice would be a
-        // smaller, mis-aligned box. So enumerate the whole storage and compute
-        // geometry from each complete block range, then skip boxes that don't
-        // intersect the dirty region.
+    private func drawCalloutBoxes(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        enumerateBlockBoxes(.calloutType, forGlyphRange: glyphsToShow, at: origin) { rect, value in
+            guard let raw = value as? String else { return }
+            let color = CalloutKind(raw).color
+            // Soft tinted fill.
+            color.withAlphaComponent(0.08).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: self.cornerRadius, yRadius: self.cornerRadius).fill()
+            // Left accent bar, inset slightly and rounded.
+            let bar = NSRect(x: rect.minX, y: rect.minY + 2, width: 3, height: rect.height - 4)
+            color.withAlphaComponent(0.9).setFill()
+            NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
+        }
+    }
+
+    /// Shared geometry for block backgrounds. Enumerates the WHOLE storage (not
+    /// just `glyphsToShow`) so a partial redraw still paints each block's box at
+    /// its full size; skips boxes outside the dirty region. Calls `draw` with the
+    /// box rect (full column width, side margin + vertical padding applied) in
+    /// view coordinates and the attribute value.
+    private func enumerateBlockBoxes(_ key: NSAttributedString.Key,
+                                     forGlyphRange glyphsToShow: NSRange,
+                                     at origin: NSPoint,
+                                     draw: (NSRect, Any) -> Void) {
+        guard let storage = textStorage, let container = textContainers.first else { return }
         let dirtyRect = boundingRect(forGlyphRange: glyphsToShow, in: container)
             .offsetBy(dx: origin.x, dy: origin.y)
         let fullRange = NSRange(location: 0, length: storage.length)
 
-        storage.enumerateAttribute(.codeBlockBackground, in: fullRange, options: []) { value, range, _ in
-            guard (value as? Bool) == true else { return }
-
+        storage.enumerateAttribute(key, in: fullRange, options: []) { value, range, _ in
+            guard let value else { return }
             let blockGlyphRange = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             var rect = boundingRect(forGlyphRange: blockGlyphRange, in: container)
-
-            // Full text-column width, then inset for a side margin.
             rect.origin.x = 0
             rect.size.width = container.size.width
             rect = rect.insetBy(dx: horizontalMargin, dy: -verticalPadding)
-
-            // Container coordinates → view coordinates.
             rect.origin.x += origin.x
             rect.origin.y += origin.y
-
             guard rect.intersects(dirtyRect) else { return }
-
-            color.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+            draw(rect, value)
         }
     }
 }

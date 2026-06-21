@@ -27,6 +27,7 @@
 		C034C801EBAB47DF6156C0A0 /* ImageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65A3B1ABF107ECCBBF6D9172 /* ImageAttachment.swift */; };
 		7A1B2C3D4E5F60718293A4D6 /* CursorMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4D5 /* CursorMapping.swift */; };
 		7A1B2C3D4E5F60718293A4F6 /* CodeBlockLayoutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4F5 /* CodeBlockLayoutManager.swift */; };
+		7A1B2C3D4E5F60718293A4FA /* Callout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4FB /* Callout.swift */; };
 		7A1B2C3D4E5F60718293A4B6 /* MarkdownTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4B5 /* MarkdownTable.swift */; };
 		7A1B2C3D4E5F60718293A4C6 /* LatexMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A4C5 /* LatexMath.swift */; };
 		C49FAA123F69F37D5D946DD6 /* ColorTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62A4085CE734D06BACDB912F /* ColorTokens.swift */; };
@@ -52,6 +53,7 @@
 		65A3B1ABF107ECCBBF6D9172 /* ImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachment.swift; sourceTree = "<group>"; };
 		7A1B2C3D4E5F60718293A4D5 /* CursorMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorMapping.swift; sourceTree = "<group>"; };
 		7A1B2C3D4E5F60718293A4F5 /* CodeBlockLayoutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockLayoutManager.swift; sourceTree = "<group>"; };
+		7A1B2C3D4E5F60718293A4FB /* Callout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Callout.swift; sourceTree = "<group>"; };
 		7A1B2C3D4E5F60718293A4B5 /* MarkdownTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTable.swift; sourceTree = "<group>"; };
 		7A1B2C3D4E5F60718293A4C5 /* LatexMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatexMath.swift; sourceTree = "<group>"; };
 		68CA4E783C0848DB5608663A /* TagExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagExtractor.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 				65A3B1ABF107ECCBBF6D9172 /* ImageAttachment.swift */,
 				7A1B2C3D4E5F60718293A4D5 /* CursorMapping.swift */,
 				7A1B2C3D4E5F60718293A4F5 /* CodeBlockLayoutManager.swift */,
+				7A1B2C3D4E5F60718293A4FB /* Callout.swift */,
 				7A1B2C3D4E5F60718293A4B5 /* MarkdownTable.swift */,
 				7A1B2C3D4E5F60718293A4C5 /* LatexMath.swift */,
 				12750DB5F5885CC0AF7C06A2 /* WysiwygEngine.swift */,
@@ -285,6 +288,7 @@
 				C034C801EBAB47DF6156C0A0 /* ImageAttachment.swift in Sources */,
 				7A1B2C3D4E5F60718293A4D6 /* CursorMapping.swift in Sources */,
 				7A1B2C3D4E5F60718293A4F6 /* CodeBlockLayoutManager.swift in Sources */,
+				7A1B2C3D4E5F60718293A4FA /* Callout.swift in Sources */,
 				7A1B2C3D4E5F60718293A4B6 /* MarkdownTable.swift in Sources */,
 				7A1B2C3D4E5F60718293A4C6 /* LatexMath.swift in Sources */,
 				A11EC83643B6760EF2A5FEC0 /* NoteCardView.swift in Sources */,

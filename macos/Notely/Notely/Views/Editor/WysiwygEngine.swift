@@ -29,6 +29,7 @@ struct MarkdownStyle {
     let hr: [NSAttributedString.Key: Any]
     let hashtag: [NSAttributedString.Key: Any]
     let baseParagraph: [NSAttributedString.Key: Any]
+    let calloutPara: NSParagraphStyle
 }
 
 /// The WYSIWYG engine that applies Markdown styling and marker hiding.
@@ -99,6 +100,16 @@ final class WysiwygEngine {
         cbPara.paragraphSpacing = 0
         cbPara.paragraphSpacingBefore = 0
 
+        // Callout body: indented past the left accent bar, with right padding so
+        // text wraps inside the box drawn by CodeBlockLayoutManager.
+        let calloutPara = NSMutableParagraphStyle()
+        calloutPara.headIndent = 20
+        calloutPara.firstLineHeadIndent = 20
+        calloutPara.tailIndent = -14
+        calloutPara.lineSpacing = 3
+        calloutPara.paragraphSpacing = 0
+        calloutPara.paragraphSpacingBefore = 0
+
         return MarkdownStyle(
             bold: [
                 .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: fontSize), toHaveTrait: .boldFontMask),
@@ -163,7 +174,8 @@ final class WysiwygEngine {
                 .font: NSFont.systemFont(ofSize: fontSize - 1, weight: .medium),
                 .foregroundColor: accentColor,
             ],
-            baseParagraph: baseParagraph
+            baseParagraph: baseParagraph,
+            calloutPara: calloutPara
         )
     }
 
@@ -309,6 +321,7 @@ final class WysiwygEngine {
         storage.removeAttribute(.paragraphStyle, range: fullRange)
         storage.removeAttribute(.attachment, range: fullRange)
         storage.removeAttribute(.codeBlockBackground, range: fullRange)
+        storage.removeAttribute(.calloutType, range: fullRange)
 
         // Apply base paragraph style to everything
         storage.addAttributes(style.baseParagraph, range: fullRange)
@@ -322,6 +335,10 @@ final class WysiwygEngine {
         var inCodeBlock = false
         var codeBlockStart = 0
         var codeBlockRanges: [NSRange] = []
+
+        var inCallout = false
+        var calloutStart = 0
+        var calloutType = "note"
 
         for (lineRange, line) in lineRanges {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -369,6 +386,35 @@ final class WysiwygEngine {
             }
 
             if inCodeBlock { continue }
+
+            // Callout fence: ::: [type] [title] … :::
+            if trimmed.hasPrefix(":::") {
+                if !inCallout {
+                    inCallout = true
+                    calloutStart = lineRange.location
+                    // Parse the type from the opening line ("note 类比" -> "note").
+                    let after = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                    calloutType = after.split(whereSeparator: { $0 == " " }).first.map(String.init) ?? "note"
+                    styleCalloutOpeningLine(storage, line: line, lineRange: lineRange, type: calloutType)
+                } else {
+                    inCallout = false
+                    let blockRange = NSRange(location: calloutStart, length: (lineRange.location + lineRange.length) - calloutStart)
+                    // Marker for CodeBlockLayoutManager to draw the tinted box + bar.
+                    storage.addAttribute(.calloutType, value: calloutType, range: blockRange)
+                    // Closing ::: line: indent + faded.
+                    storage.addAttribute(.paragraphStyle, value: style.calloutPara, range: lineRange)
+                    applyMarkerStyle(storage, range: lineRange)
+                    addBlockSpacing(storage, blockStart: calloutStart, blockRange: blockRange)
+                }
+                continue
+            }
+
+            if inCallout {
+                // Body line: indent past the bar; keep base color. Inline rules
+                // (bold/italic/links) still run afterwards over this range.
+                storage.addAttribute(.paragraphStyle, value: style.calloutPara, range: lineRange)
+                continue
+            }
 
             // Headings
             if let headingInfo = parseHeading(line: trimmed) {
@@ -744,5 +790,44 @@ final class WysiwygEngine {
 
     private func getMarkerColor() -> NSColor {
         (NSColor(named: "SecondaryText") ?? .tertiaryLabelColor).withAlphaComponent(0.5)
+    }
+
+    // MARK: - Callouts
+
+    /// Styles a callout's opening line (`::: note 类比`) as the colored title:
+    /// the `:::` marker is faded, the rest is shown in the type color, semibold.
+    private func styleCalloutOpeningLine(_ storage: NSTextStorage, line: String, lineRange: NSRange, type: String) {
+        storage.addAttribute(.paragraphStyle, value: style.calloutPara, range: lineRange)
+        let color = CalloutKind(type).color
+        storage.addAttribute(.foregroundColor, value: color, range: lineRange)
+        storage.addAttribute(.font, value: NSFont.systemFont(ofSize: 14, weight: .semibold), range: lineRange)
+        // Fade the leading ::: so the title reads as the label.
+        let nsLine = line as NSString
+        if let m = try? NSRegularExpression(pattern: #"^\s*:::\s*"#),
+           let match = m.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
+            let absRange = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
+            storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(0.35), range: absRange)
+        }
+    }
+
+    /// Adds breathing room above and below a block (code block / callout) by
+    /// bumping paragraph spacing on the adjacent lines.
+    private func addBlockSpacing(_ storage: NSTextStorage, blockStart: Int, blockRange: NSRange) {
+        if blockStart > 0 {
+            let prevLineEnd = blockStart - 1
+            if prevLineEnd >= 0, prevLineEnd < storage.length,
+               let prevPara = storage.attributes(at: prevLineEnd, effectiveRange: nil)[.paragraphStyle] as? NSParagraphStyle {
+                let modified = prevPara.mutableCopy() as! NSMutableParagraphStyle
+                modified.paragraphSpacing = 12
+                storage.addAttribute(.paragraphStyle, value: modified, range: NSRange(location: prevLineEnd, length: 1))
+            }
+        }
+        let blockEnd = blockRange.location + blockRange.length
+        if blockEnd < storage.length,
+           let endPara = storage.attributes(at: blockEnd, effectiveRange: nil)[.paragraphStyle] as? NSParagraphStyle {
+            let modified = endPara.mutableCopy() as! NSMutableParagraphStyle
+            modified.paragraphSpacingBefore = 12
+            storage.addAttribute(.paragraphStyle, value: modified, range: NSRange(location: blockEnd, length: 1))
+        }
     }
 }
