@@ -6,6 +6,12 @@ extension NSAttributedString.Key {
     /// `.backgroundColor`, which TextKit paints per-glyph-run (ragged width, no
     /// padding, no corners) rather than as one uniform box.
     static let codeBlockBackground = NSAttributedString.Key("notely.codeBlockBackground")
+
+    /// Marks the (hidden) marker character of an unordered list item. The value
+    /// is the `NSColor` to paint the bullet with. `CodeBlockLayoutManager` draws
+    /// a real `•` glyph centered on this character, since the raw `-`/`*`/`+` is
+    /// rendered transparent so it doesn't double up with the bullet.
+    static let listBullet = NSAttributedString.Key("notely.listBullet")
 }
 
 /// Layout manager that draws fenced code blocks as one continuous rounded box
@@ -27,6 +33,46 @@ final class CodeBlockLayoutManager: NSLayoutManager {
         // Draw text backgrounds (inline code, selection) on top of the boxes so
         // selection inside a block stays visible.
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
+    }
+
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        drawListBullets(forGlyphRange: glyphsToShow, at: origin)
+    }
+
+    /// Paints a filled dot over each `.listBullet`-tagged (hidden) marker
+    /// character. A drawn oval (rather than a `•` glyph) gives exact control over
+    /// size and centering, so the bullet sits at the optical middle of the line's
+    /// text instead of riding the baseline — which reads as "too low", especially
+    /// next to full-height CJK glyphs.
+    private func drawListBullets(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        guard let storage = textStorage, let container = textContainers.first else { return }
+        let charRange = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        storage.enumerateAttribute(.listBullet, in: charRange, options: []) { value, range, _ in
+            guard let color = value as? NSColor else { return }
+            let gRange = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard gRange.length > 0 else { return }
+
+            let font = (storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont)
+                ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+
+            // Horizontal: center on the (hidden) marker glyph's advance.
+            let markerRect = self.boundingRect(forGlyphRange: gRange, in: container)
+            let centerX = origin.x + markerRect.midX
+
+            // Vertical: half the cap height above the baseline, i.e. the optical
+            // center of capital / CJK glyphs on the line. `location(forGlyphAt:)`
+            // gives the baseline offset within the line fragment.
+            let fragRect = self.lineFragmentRect(forGlyphAt: gRange.location, effectiveRange: nil)
+            let baselineY = origin.y + fragRect.minY + self.location(forGlyphAt: gRange.location).y
+            let centerY = baselineY - font.capHeight / 2
+
+            let diameter = max(4, (font.pointSize * 0.26).rounded())
+            let dot = NSRect(x: centerX - diameter / 2, y: centerY - diameter / 2,
+                             width: diameter, height: diameter)
+            color.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+        }
     }
 
     private func drawCodeBlockBoxes(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {

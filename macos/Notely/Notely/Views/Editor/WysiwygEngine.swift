@@ -322,6 +322,7 @@ final class WysiwygEngine {
         storage.removeAttribute(.attachment, range: fullRange)
         storage.removeAttribute(.codeBlockBackground, range: fullRange)
         storage.removeAttribute(.calloutType, range: fullRange)
+        storage.removeAttribute(.listBullet, range: fullRange)
 
         // Apply base paragraph style to everything
         storage.addAttributes(style.baseParagraph, range: fullRange)
@@ -336,6 +337,11 @@ final class WysiwygEngine {
         var codeBlockStart = 0
         var codeBlockRanges: [NSRange] = []
 
+        // Line-start offsets of fences that belong to a *closed* code block.
+        // A stray or not-yet-closed fence is absent here, so it is processed as
+        // an ordinary line instead of turning the rest of the document into code.
+        let realFenceLocations = scanCodeBlocks(in: nsString).fenceLocations
+
         var inCallout = false
         var calloutStart = 0
         var calloutType = "note"
@@ -343,8 +349,8 @@ final class WysiwygEngine {
         for (lineRange, line) in lineRanges {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            // Code fence detection
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+            // Code fence detection (only fences that pair into a closed block).
+            if realFenceLocations.contains(lineRange.location) {
                 if !inCodeBlock {
                     inCodeBlock = true
                     codeBlockStart = lineRange.location
@@ -451,6 +457,7 @@ final class WysiwygEngine {
                 if let checkboxRange = findCheckboxRange(line: line, lineRange: lineRange) {
                     storage.addAttributes(style.taskList, range: checkboxRange)
                 }
+                applyListHangingIndent(storage: storage, line: line, lineRange: lineRange)
                 // Hide the list marker
                 hideListMarker(storage: storage, line: line, lineRange: lineRange, cursorLocation: cursorLocation)
                 continue
@@ -459,6 +466,7 @@ final class WysiwygEngine {
             // List items
             if isListItem(trimmed) {
                 storage.addAttributes(style.listItem, range: lineRange)
+                applyListHangingIndent(storage: storage, line: line, lineRange: lineRange)
                 hideListMarker(storage: storage, line: line, lineRange: lineRange, cursorLocation: cursorLocation)
                 continue
             }
@@ -713,26 +721,66 @@ final class WysiwygEngine {
     }
 
     private func findCodeBlockRanges(in string: NSString) -> [NSRange] {
+        scanCodeBlocks(in: string).blocks
+    }
+
+    /// A line that looks like a code fence: an optionally indented run of three
+    /// or more backticks or tildes.
+    private struct ScannedFence {
+        let lineRange: NSRange
+        let marker: Character   // "`" or "~"
+        let length: Int         // number of fence characters
+        let hasInfo: Bool       // a trailing info string (e.g. ```swift)
+    }
+
+    private func scanFences(in string: NSString) -> [ScannedFence] {
+        var fences: [ScannedFence] = []
         let fullRange = NSRange(location: 0, length: string.length)
-        var ranges: [NSRange] = []
-        var inCodeBlock = false
-        var codeBlockStart = 0
-
         string.enumerateSubstrings(in: fullRange, options: [.byLines]) { substring, range, _, _ in
-            let line = substring ?? ""
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") else { return }
-
-            if !inCodeBlock {
-                inCodeBlock = true
-                codeBlockStart = range.location
-            } else {
-                inCodeBlock = false
-                ranges.append(NSRange(location: codeBlockStart, length: (range.location + range.length) - codeBlockStart))
-            }
+            guard let line = substring else { return }
+            var body = Substring(line)
+            while let f = body.first, f == " " || f == "\t" { body = body.dropFirst() }
+            guard let marker = body.first, marker == "`" || marker == "~" else { return }
+            var length = 0
+            for ch in body { if ch == marker { length += 1 } else { break } }
+            guard length >= 3 else { return }
+            let info = String(body.dropFirst(length)).trimmingCharacters(in: .whitespaces)
+            fences.append(ScannedFence(lineRange: range, marker: marker, length: length, hasInfo: !info.isEmpty))
         }
+        return fences
+    }
 
-        return ranges
+    /// Pairs fences into closed code blocks, CommonMark-style:
+    ///  - the closing fence uses the same character, is at least as long as the
+    ///    opener, and carries no info string;
+    ///  - an opening fence with no matching closer is left unpaired, so a stray
+    ///    or half-typed fence cannot turn the rest of the document into code.
+    /// Returns each block's character range plus the line-start offsets of the
+    /// fences that bound a closed block.
+    private func scanCodeBlocks(in string: NSString) -> (blocks: [NSRange], fenceLocations: Set<Int>) {
+        let fences = scanFences(in: string)
+        var blocks: [NSRange] = []
+        var fenceLocations = Set<Int>()
+        var i = 0
+        while i < fences.count {
+            let open = fences[i]
+            var closeIndex: Int? = nil
+            var j = i + 1
+            while j < fences.count {
+                let f = fences[j]
+                if f.marker == open.marker, f.length >= open.length, !f.hasInfo { closeIndex = j; break }
+                j += 1
+            }
+            guard let close = closeIndex else { i += 1; continue }
+            let openRange = open.lineRange
+            let closeRange = fences[close].lineRange
+            blocks.append(NSRange(location: openRange.location,
+                                  length: (closeRange.location + closeRange.length) - openRange.location))
+            fenceLocations.insert(openRange.location)
+            fenceLocations.insert(closeRange.location)
+            i = close + 1
+        }
+        return (blocks, fenceLocations)
     }
 
     // MARK: - Marker hiding
@@ -767,18 +815,52 @@ final class WysiwygEngine {
         }
     }
 
+    /// Gives a list item a hanging indent so wrapped lines align under the text
+    /// rather than running back to the margin under the bullet. `headIndent` is
+    /// set to the rendered width of the "<leading whitespace><marker><space>"
+    /// prefix; the first line keeps its natural indent.
+    private func applyListHangingIndent(storage: NSTextStorage, line: String, lineRange: NSRange) {
+        let nsLine = line as NSString
+        let pattern = try! NSRegularExpression(pattern: #"^\s*([-*+]|\d+[.)])\s+"#)
+        guard let match = pattern.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else { return }
+
+        let prefix = nsLine.substring(with: match.range) as NSString
+        let font = (style.listItem[.font] as? NSFont) ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let indent = prefix.size(withAttributes: [.font: font]).width
+
+        let base = (style.baseParagraph[.paragraphStyle] as? NSParagraphStyle) ?? NSParagraphStyle.default
+        let p = (base.mutableCopy() as! NSMutableParagraphStyle)
+        p.headIndent = indent
+        p.firstLineHeadIndent = 0
+        storage.addAttribute(.paragraphStyle, value: p, range: lineRange)
+    }
+
     private func hideListMarker(storage: NSTextStorage, line: String, lineRange: NSRange, cursorLocation: Int) {
         let nsLine = line as NSString
         let pattern = try! NSRegularExpression(pattern: #"^\s*([-*+]|\d+[.)])\s+"#)
         let isActive = NSLocationInRange(cursorLocation, lineRange)
 
-        if let match = pattern.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) {
-            let absRange = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
-            if isActive {
-                storage.addAttribute(.foregroundColor, value: getMarkerColor(), range: absRange)
-            } else {
-                hideRange(storage, range: absRange)
-            }
+        guard let match = pattern.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else { return }
+        let tokenRange = match.range(at: 1) // the "-"/"*"/"+" or "1."/"1)" token
+        let token = nsLine.substring(with: tokenRange)
+        let isUnordered = token.count == 1
+        let absFull = NSRange(location: lineRange.location + match.range.location, length: match.range.length)
+        let absToken = NSRange(location: lineRange.location + tokenRange.location, length: tokenRange.length)
+
+        if isActive {
+            // Reveal the raw marker (faded) while editing this line.
+            storage.addAttribute(.foregroundColor, value: getMarkerColor(), range: absFull)
+        } else if isUnordered {
+            // Hide the raw "-" and draw a real bullet glyph in its place.
+            hideRange(storage, range: absFull)
+            let bulletColor = (style.baseParagraph[.foregroundColor] as? NSColor)
+                ?? NSColor(named: "PrimaryText") ?? .textColor
+            storage.addAttribute(.listBullet, value: bulletColor, range: absToken)
+        } else {
+            // Ordered list: keep the "1." number readable instead of hiding it.
+            let numberColor = (style.baseParagraph[.foregroundColor] as? NSColor)
+                ?? NSColor(named: "PrimaryText") ?? .textColor
+            storage.addAttribute(.foregroundColor, value: numberColor, range: absFull)
         }
     }
 
