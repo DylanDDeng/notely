@@ -1,3 +1,4 @@
+import CoreServices
 import Foundation
 import Observation
 
@@ -7,11 +8,19 @@ final class FileNoteStore {
     var workspaceURL: URL?
     var isOpen: Bool { workspaceURL != nil }
 
-    private var fileWatcher: DispatchSourceFileSystemObject?
+    private var eventStream: FSEventStreamRef?
+    /// Paths this store wrote itself, with the time of the write. Lets us ignore
+    /// the file-system events our own saves generate, so typing does not kick off
+    /// a full rescan on every debounced save.
+    private var recentlySavedPaths: [String: Date] = [:]
     private var pinnedFiles: Set<String> = []
     private let reloadQueue = DispatchQueue(label: "notely.fileNoteStore.reload", qos: .userInitiated)
     private var reloadGeneration = 0
     private var reloadDebounceItem: DispatchWorkItem?
+
+    deinit {
+        stopWatching()
+    }
 
     // MARK: - Open / Close workspace
 
@@ -26,8 +35,7 @@ final class FileNoteStore {
     }
 
     func closeWorkspace() {
-        fileWatcher?.cancel()
-        fileWatcher = nil
+        stopWatching()
         reloadDebounceItem?.cancel()
         reloadDebounceItem = nil
         reloadGeneration += 1
@@ -99,6 +107,9 @@ final class FileNoteStore {
 
     func saveContent(_ content: String, to noteId: String) {
         guard let note = notes.first(where: { $0.id == noteId }) else { return }
+        // Record before writing so the watcher event this triggers is recognized
+        // as our own and does not cause a redundant rescan.
+        recentlySavedPaths[note.url.path] = Date()
         try? content.write(to: note.url, atomically: true, encoding: .utf8)
         // Update in-memory without full reload (avoids cursor jump)
         if let idx = notes.firstIndex(where: { $0.id == noteId }) {
@@ -174,25 +185,64 @@ final class FileNoteStore {
 
     // MARK: - File system watching
 
+    /// Watches the whole workspace subtree with FSEvents. Unlike a directory-level
+    /// `DispatchSource` (which only fires when entries are added/removed/renamed),
+    /// FSEvents reports *content* modifications to existing files and survives the
+    /// atomic rename external editors use to save — so edits made outside the app
+    /// are picked up live.
     private func startWatching() {
         guard let workspaceURL else { return }
-        let fd = open(workspaceURL.path, O_EVTONLY)
-        guard fd >= 0 else { return }
+        stopWatching()
 
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .delete, .rename],
-            queue: .main
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
         )
+        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
+            guard let info else { return }
+            let store = Unmanaged<FileNoteStore>.fromOpaque(info).takeUnretainedValue()
+            let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] ?? []
+            store.handleFileSystemEvents(paths)
+        }
+        let flags = FSEventStreamCreateFlags(
+            kFSEventStreamCreateFlagFileEvents |
+            kFSEventStreamCreateFlagNoDefer |
+            kFSEventStreamCreateFlagUseCFTypes
+        )
+        guard let stream = FSEventStreamCreate(
+            kCFAllocatorDefault,
+            callback,
+            &context,
+            [workspaceURL.path] as CFArray,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            0.2,
+            flags
+        ) else { return }
 
-        source.setEventHandler { [weak self] in
-            self?.scheduleReload()
-        }
-        source.setCancelHandler {
-            close(fd)
-        }
-        source.resume()
-        fileWatcher = source
+        FSEventStreamSetDispatchQueue(stream, .main)
+        FSEventStreamStart(stream)
+        eventStream = stream
+    }
+
+    private func stopWatching() {
+        guard let stream = eventStream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        eventStream = nil
+    }
+
+    /// Runs on the main queue (the stream's dispatch queue). Drops events that are
+    /// only the echo of our own saves, then debounces a reload.
+    private func handleFileSystemEvents(_ paths: [String]) {
+        let now = Date()
+        recentlySavedPaths = recentlySavedPaths.filter { now.timeIntervalSince($0.value) < 1.0 }
+        guard ExternalSync.hasExternalChange(eventPaths: paths,
+                                             selfSaved: Set(recentlySavedPaths.keys)) else { return }
+        scheduleReload()
     }
 
     private func scheduleReload() {
