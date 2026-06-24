@@ -64,6 +64,19 @@ struct NoteListView: View {
                 Spacer()
 
                 Button {
+                    let note = store.createNote()
+                    appModel.selectedNoteId = note?.id
+                    appModel.sidebarSelection = .allNotes
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondaryText)
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .help("New Note")
+
+                Button {
                     NotificationCenter.default.post(name: .focusNoteSearch, object: nil)
                 } label: {
                     Image(systemName: "magnifyingglass")

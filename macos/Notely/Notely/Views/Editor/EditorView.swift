@@ -175,7 +175,7 @@ struct StatusBarView: View {
     }
 }
 
-/// Top toolbar for the editor: sidebar toggle on left, actions on right.
+/// Top toolbar for the editor: actions on the right.
 struct EditorToolbar: View {
     let note: FileNote
     let wordCount: Int

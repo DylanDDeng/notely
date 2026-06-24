@@ -3,9 +3,11 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) var appModel
     @Environment(FileNoteStore.self) var store
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var libraryExpanded = true
     @State private var tagsExpanded = true
     @State private var tagSearch = ""
+    @State private var toggleHovering = false
 
     private var tagTree: [TagNode] {
         let allTags = store.notes.flatMap { $0.tags }
@@ -152,17 +154,50 @@ struct SidebarView: View {
         .background(Color.sidebarBg)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    let note = store.createNote()
-                    appModel.selectedNoteId = note?.id
-                    appModel.sidebarSelection = .allNotes
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                        .font(.system(size: 14))
-                }
-                .help("New Note")
-                .keyboardShortcut("n", modifiers: .command)
+                sidebarToggleButton
             }
+            .hideSharedBackgroundIfAvailable()
+        }
+    }
+
+    /// Custom sidebar toggle (replaces the system `.sidebarToggle` removed in
+    /// `AppShellView`). Lives in the sidebar's own toolbar so it sits inside
+    /// the sidebar when expanded; the detail column shows a fallback toggle
+    /// only while the sidebar is collapsed.
+    private var sidebarToggleButton: some View {
+        let sidebarVisible = columnVisibility == .all
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                columnVisibility = sidebarVisible ? .doubleColumn : .all
+            }
+        } label: {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.secondaryText)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(toggleHovering ? Color.cardHover : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { toggleHovering = $0 }
+        .help(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
+        .keyboardShortcut("\\", modifiers: .command)
+    }
+}
+
+extension ToolbarContent {
+    /// Hides the glass/background chrome that macOS draws around toolbar items
+    /// (visible when the sidebar collapses and the toggle moves into the window
+    /// toolbar). `.buttonStyle(.plain)` alone doesn't remove it because it's
+    /// toolbar-level chrome, not button-style chrome. macOS 26+ only; no-op below.
+    @ToolbarContentBuilder
+    func hideSharedBackgroundIfAvailable() -> some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            self.sharedBackgroundVisibility(.hidden)
+        } else {
+            self
         }
     }
 }
