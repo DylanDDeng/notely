@@ -54,18 +54,52 @@ final class WysiwygEngine {
 
     // MARK: - Style factory
 
-    static func makeStyle(fontSize: CGFloat = 17, lineHeight: CGFloat = 1.7) -> MarkdownStyle {
+    /// Resolve a font for the editor body in the user's chosen family, at the
+    /// given size and weight. "System" and "SF Mono" use the system font APIs
+    /// (which honor weight directly); named families match via font descriptor,
+    /// falling back to the system font if the family is unavailable.
+    static func resolveFont(name: String, size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        switch name {
+        case "System", "":
+            return NSFont.systemFont(ofSize: size, weight: weight)
+        case "SF Mono":
+            return NSFont.monospacedSystemFont(ofSize: size, weight: weight)
+        case "New York":
+            // New York is the system serif font; it is not exposed as a regular
+            // font family by NSFontManager, so resolve it through the system
+            // font descriptor's serif design. Falls back to the default system
+            // font if the serif design is unavailable.
+            let descriptor = NSFont.systemFont(ofSize: size, weight: weight)
+                .fontDescriptor.withDesign(.serif)
+            return descriptor.flatMap { NSFont(descriptor: $0, size: size) }
+                ?? NSFont.systemFont(ofSize: size, weight: weight)
+        default:
+            let descriptor = NSFontDescriptor(fontAttributes: [
+                .family: name,
+                .traits: [NSFontDescriptor.TraitKey.weight: weight.rawValue]
+            ])
+            return NSFont(descriptor: descriptor, size: size) ?? NSFont.systemFont(ofSize: size, weight: weight)
+        }
+    }
+
+    static func makeStyle(fontSize: CGFloat = 17, lineHeight: CGFloat = 1.7, fontName: String = "System") -> MarkdownStyle {
         let baseColor = NSColor(named: "PrimaryText") ?? .textColor
         let secondaryColor = NSColor(named: "SecondaryText") ?? .secondaryLabelColor
         let accentColor = NSColor(named: "AccentColor") ?? .controlAccentColor
         let codeBgColor = NSColor(named: "CodeBlockBackground") ?? NSColor.controlBackgroundColor
         let blockquoteBg = (NSColor(named: "AccentColor") ?? NSColor.systemOrange).withAlphaComponent(0.04)
 
+        // Body typeface follows the user's Editor Font choice. Bold/italic are
+        // derived from the same family via NSFontManager so they stay consistent.
+        let baseFont = Self.resolveFont(name: fontName, size: fontSize)
+        let boldFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
+        let italicFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .italicFontMask)
+
         let para = NSMutableParagraphStyle()
         para.lineSpacing = (fontSize * (lineHeight - 1.0))
 
         let baseParagraph: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: fontSize),
+            .font: baseFont,
             .foregroundColor: baseColor,
             .paragraphStyle: para,
         ]
@@ -79,7 +113,7 @@ final class WysiwygEngine {
             hp.paragraphSpacingBefore = level == 1 ? 10 : 16
             hp.paragraphSpacing = 6
             return [
-                .font: NSFont.systemFont(ofSize: sizes[idx], weight: weights[idx]),
+                .font: Self.resolveFont(name: fontName, size: sizes[idx], weight: weights[idx]),
                 .foregroundColor: baseColor,
                 .paragraphStyle: hp,
             ]
@@ -112,15 +146,15 @@ final class WysiwygEngine {
 
         return MarkdownStyle(
             bold: [
-                .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: fontSize), toHaveTrait: .boldFontMask),
+                .font: boldFont,
                 .foregroundColor: baseColor,
             ],
             italic: [
-                .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: fontSize), toHaveTrait: .italicFontMask),
+                .font: italicFont,
                 .foregroundColor: secondaryColor,
             ],
             strikethrough: [
-                .font: NSFont.systemFont(ofSize: fontSize),
+                .font: baseFont,
                 .foregroundColor: NSColor(named: "TertiaryText") ?? .tertiaryLabelColor,
                 .strikethroughStyle: NSUnderlineStyle.single.rawValue,
                 .strikethroughColor: NSColor(named: "TertiaryText") ?? .tertiaryLabelColor,
@@ -131,7 +165,7 @@ final class WysiwygEngine {
                 .backgroundColor: codeBgColor,
             ],
             link: [
-                .font: NSFont.systemFont(ofSize: fontSize),
+                .font: baseFont,
                 .foregroundColor: accentColor,
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
             ],
@@ -142,7 +176,7 @@ final class WysiwygEngine {
             heading5: headingAttrs(level: 5),
             heading6: headingAttrs(level: 6),
             blockquote: [
-                .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: fontSize), toHaveTrait: .italicFontMask),
+                .font: italicFont,
                 .foregroundColor: secondaryColor,
                 .paragraphStyle: bp,
                 .backgroundColor: blockquoteBg,
@@ -157,7 +191,7 @@ final class WysiwygEngine {
                 .paragraphStyle: cbPara,
             ],
             listItem: [
-                .font: NSFont.systemFont(ofSize: fontSize),
+                .font: baseFont,
                 .foregroundColor: baseColor,
             ],
             taskList: [
@@ -165,13 +199,13 @@ final class WysiwygEngine {
                 .foregroundColor: accentColor,
             ],
             hr: [
-                .font: NSFont.systemFont(ofSize: fontSize),
+                .font: baseFont,
                 .foregroundColor: NSColor(named: "BorderColor") ?? .separatorColor,
                 .strikethroughStyle: NSUnderlineStyle.single.rawValue,
                 .strikethroughColor: NSColor(named: "BorderColor") ?? .separatorColor,
             ],
             hashtag: [
-                .font: NSFont.systemFont(ofSize: fontSize - 1, weight: .medium),
+                .font: Self.resolveFont(name: fontName, size: fontSize - 1, weight: .medium),
                 .foregroundColor: accentColor,
             ],
             baseParagraph: baseParagraph,
@@ -227,7 +261,10 @@ final class WysiwygEngine {
                     return (markers, [content])
                 },
                 contentAttributes: [
-                    .font: NSFontManager.shared.convert(NSFont.systemFont(ofSize: 17), toHaveTrait: [.boldFontMask, .italicFontMask]),
+                    .font: NSFontManager.shared.convert(
+                        (style.bold[.font] as? NSFont) ?? NSFont.systemFont(ofSize: 17),
+                        toHaveTrait: .italicFontMask
+                    ),
                 ]
             ),
 

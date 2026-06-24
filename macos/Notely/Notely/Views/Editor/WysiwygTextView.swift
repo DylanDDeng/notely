@@ -65,6 +65,7 @@ struct WysiwygEditor: NSViewRepresentable {
     let initialText: String
     let fontSize: CGFloat
     let lineHeight: CGFloat
+    let fontName: String
     let onTextChange: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -91,6 +92,7 @@ struct WysiwygEditor: NSViewRepresentable {
         )
         textView.fontSize = fontSize
         textView.lineHeight = lineHeight
+        textView.fontName = fontName
         textView.delegate = context.coordinator
         textView.onTextChange = { newText in
             context.coordinator.lastKnownText = newText
@@ -148,6 +150,7 @@ struct WysiwygEditor: NSViewRepresentable {
 
         textView.fontSize = fontSize
         textView.lineHeight = lineHeight
+        textView.fontName = fontName
         // Keep the caret colored by the live theme accent (it can change at
         // runtime via Settings without the text view being recreated).
         textView.insertionPointColor = NSColor(Color.accent)
@@ -174,6 +177,7 @@ struct WysiwygEditor: NSViewRepresentable {
 final class WysiwygTextView: NSTextView {
     var fontSize: CGFloat = 17
     var lineHeight: CGFloat = 1.7
+    var fontName: String = "System"
     var onTextChange: ((String) -> Void)?
     private var engine: WysiwygEngine?
     private var isRestyling = false
@@ -183,6 +187,7 @@ final class WysiwygTextView: NSTextView {
     /// instead of on every SwiftUI `updateNSView` pass.
     private var engineFontSize: CGFloat = .nan
     private var engineLineHeight: CGFloat = .nan
+    private var engineFontName: String = ""
 
     /// Set when a coalesced restyle is already queued for this runloop turn, so
     /// a burst of async triggers (e.g. many remote images finishing) collapses
@@ -227,7 +232,7 @@ final class WysiwygTextView: NSTextView {
         isRichText = true
         allowsUndo = true
         usesAdaptiveColorMappingForDarkAppearance = true
-        font = NSFont.systemFont(ofSize: fontSize)
+        font = WysiwygEngine.resolveFont(name: fontName, size: fontSize)
         textColor = NSColor(named: "PrimaryText")
         backgroundColor = .clear
         insertionPointColor = NSColor(Color.accent)
@@ -301,6 +306,12 @@ final class WysiwygTextView: NSTextView {
     }
 
     @objc private func handleScrollToHeading(_ notification: Notification) {
+        // Only the key window's editor responds to outline navigation. The
+        // `.scrollToHeading` notification is posted with `object: nil`, so
+        // without this guard every open window's editor would scroll when an
+        // outline row is clicked in any one of them. Clicking the rail makes
+        // the clicked window key, so this filters to exactly that window.
+        guard window?.isKeyWindow == true else { return }
         guard let index = notification.userInfo?["index"] as? Int,
               let storage = textStorage,
               let layoutManager = layoutManager,
@@ -356,10 +367,11 @@ final class WysiwygTextView: NSTextView {
     }
 
     private func rebuildEngine() {
-        let style = WysiwygEngine.makeStyle(fontSize: fontSize, lineHeight: lineHeight)
+        let style = WysiwygEngine.makeStyle(fontSize: fontSize, lineHeight: lineHeight, fontName: fontName)
         engine = WysiwygEngine(style: style)
         engineFontSize = fontSize
         engineLineHeight = lineHeight
+        engineFontName = fontName
         engineBuildCount += 1
         typingAttributes = style.baseParagraph
     }
@@ -373,7 +385,7 @@ final class WysiwygTextView: NSTextView {
     /// height actually changed. Called from `updateNSView`, which SwiftUI may
     /// invoke many times for reasons unrelated to editor styling.
     func rebuildEngineAndRestyleIfNeeded() {
-        if engine == nil || engineFontSize != fontSize || engineLineHeight != lineHeight {
+        if engine == nil || engineFontSize != fontSize || engineLineHeight != lineHeight || engineFontName != fontName {
             rebuildEngineAndRestyle()
         }
     }

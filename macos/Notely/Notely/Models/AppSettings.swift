@@ -88,7 +88,7 @@ enum AppSettings {
     }
 
     static var editorFont: String {
-        get { UserDefaults.standard.string(forKey: editorFontKey) ?? "Inter" }
+        get { UserDefaults.standard.string(forKey: editorFontKey) ?? "System" }
         set { UserDefaults.standard.set(newValue, forKey: editorFontKey) }
     }
 

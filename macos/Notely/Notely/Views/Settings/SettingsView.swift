@@ -504,6 +504,103 @@ struct GeneralSettings: View {
     }
 }
 
+// MARK: - Font picker
+
+/// Searchable picker for the editor body typeface. Lists the system fonts
+/// (System / New York / SF Mono — which NSFontManager does not expose as
+/// regular families) pinned at the top, followed by every font family
+/// installed on the machine. No fonts are bundled with the app, so every
+/// listed option resolves to a real, installed typeface.
+struct FontPicker: View {
+    let selection: String
+    let onSelect: (String) -> Void
+
+    @State private var isPresented = false
+    @State private var searchText = ""
+
+    private let pinnedFonts = ["System", "New York", "SF Mono"]
+
+    private var installedFonts: [String] {
+        NSFontManager.shared.availableFontFamilies
+            .filter { !$0.hasPrefix(".") && !pinnedFonts.contains($0) }
+            .sorted()
+    }
+
+    private var visibleFonts: [String] {
+        let all = pinnedFonts + installedFonts
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return all }
+        return all.filter { $0.lowercased().contains(query) }
+    }
+
+    private func previewFont(for name: String) -> Font {
+        switch name {
+        case "System", "": return .system(size: 14)
+        case "SF Mono": return .system(size: 14, design: .monospaced)
+        case "New York": return .system(size: 14, design: .serif)
+        default: return .custom(name, size: 14)
+        }
+    }
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 8) {
+                Text(selection)
+                    .font(previewFont(for: selection))
+                    .foregroundColor(.primaryText)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.tertiaryText)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
+            )
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.surface))
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .popover(isPresented: $isPresented) {
+            VStack(spacing: 0) {
+                TextField("Search fonts", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .padding(10)
+                Divider()
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(visibleFonts, id: \.self) { name in
+                            HStack {
+                                Text(name)
+                                    .font(previewFont(for: name))
+                                    .foregroundColor(.primaryText)
+                                Spacer()
+                                if name == selection {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundColor(Color.accentColor)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                onSelect(name)
+                                isPresented = false
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: 280, height: 380)
+        }
+    }
+}
+
 // MARK: - Appearance tab
 
 struct AppearanceSettings: View {
@@ -519,8 +616,6 @@ struct AppearanceSettings: View {
         ("Mint", "#98FB98"),
         ("Coral", "#FF385C"),
     ]
-
-    private let fonts = ["Inter", "System", "New York", "SF Mono"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -594,31 +689,10 @@ struct AppearanceSettings: View {
             SettingsDivider()
 
             SettingsRow(title: "Editor Font", subtitle: "Typeface used for note body text.") {
-                Menu {
-                    ForEach(fonts, id: \.self) { f in
-                        Button(f) { editorFont = f; AppSettings.editorFont = f }
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Text(editorFont)
-                            .font(.system(size: 14))
-                            .foregroundColor(.primaryText)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.tertiaryText)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.primaryText.opacity(0.08), lineWidth: 1)
-                    )
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.surface))
+                FontPicker(selection: editorFont) { fontName in
+                    editorFont = fontName
+                    AppSettings.editorFont = fontName
                 }
-                .buttonStyle(.plain)
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
             }
             .padding(.vertical, 12)
 

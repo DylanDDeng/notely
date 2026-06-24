@@ -4,13 +4,19 @@ struct EditorView: View {
     let note: FileNote
     @Environment(FileNoteStore.self) var store
     @State private var displayedText: String
+    /// The content the editor last loaded or saved — its view of what is on disk.
+    /// Used to tell an unsaved local edit apart from an external change.
+    @State private var lastSyncedContent: String
     @State private var liveWordCount: Int
     @State private var liveCharCount: Int
     @State private var saveTask: Task<Void, Never>? = nil
     @State private var showsInspector = false
 
+    @AppStorage("notely.editorFont") private var editorFontName: String = "System"
+
     private var fontSize: CGFloat { CGFloat(AppSettings.editorFontSize) }
     private var lineHeight: CGFloat { CGFloat(AppSettings.editorLineHeight) }
+    private var fontName: String { editorFontName }
 
     /// Outline derived from the live text. Uses the exact same heading detection
     /// as `WysiwygTextView.headingLineRanges`, so a row's `index` always maps to
@@ -29,6 +35,7 @@ struct EditorView: View {
         self.note = note
         let initialText = note.content
         _displayedText = State(initialValue: initialText)
+        _lastSyncedContent = State(initialValue: initialText)
         _liveWordCount = State(initialValue: Self.wordCount(in: initialText))
         _liveCharCount = State(initialValue: initialText.count)
     }
@@ -42,6 +49,7 @@ struct EditorView: View {
                     initialText: displayedText,
                     fontSize: fontSize,
                     lineHeight: lineHeight,
+                    fontName: fontName,
                     onTextChange: handleTextChange
                 )
                 .frame(maxWidth: .infinity)
@@ -68,13 +76,33 @@ struct EditorView: View {
         .onChange(of: note.id) { _, _ in
             loadNote()
         }
+        // The open file changed on disk (external editor → store reload). Pull it
+        // in live, unless the user has unsaved local edits that would be lost.
+        .onChange(of: note.content) { _, newContent in
+            adoptExternalChangeIfClean(newContent)
+        }
     }
 
     private func loadNote() {
         saveTask?.cancel()
         ImageLoader.shared.setBaseURL(note.url.deletingLastPathComponent())
         displayedText = note.content
+        lastSyncedContent = note.content
         updateCounts(from: note.content)
+    }
+
+    /// Reconcile an on-disk change to the currently open note with the editor.
+    private func adoptExternalChangeIfClean(_ newContent: String) {
+        switch ExternalSync.resolve(disk: newContent, displayed: displayedText, lastSynced: lastSyncedContent) {
+        case .ignore:
+            lastSyncedContent = newContent
+        case .adopt:
+            displayedText = newContent
+            lastSyncedContent = newContent
+            updateCounts(from: newContent)
+        case .keepLocal:
+            break
+        }
     }
 
     private func handleTextChange(_ newText: String) {
