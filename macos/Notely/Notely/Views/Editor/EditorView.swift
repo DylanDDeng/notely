@@ -13,6 +13,7 @@ struct EditorView: View {
     @State private var showsInspector = false
 
     @AppStorage("notely.editorFont") private var editorFontName: String = "System"
+    @AppStorage("notely.editorWidth") private var editorWidth: String = "medium"
 
     private var fontSize: CGFloat { CGFloat(AppSettings.editorFontSize) }
     private var lineHeight: CGFloat { CGFloat(AppSettings.editorLineHeight) }
@@ -50,6 +51,7 @@ struct EditorView: View {
                     fontSize: fontSize,
                     lineHeight: lineHeight,
                     fontName: fontName,
+                    editorWidth: editorWidth,
                     onTextChange: handleTextChange
                 )
                 .frame(maxWidth: .infinity)

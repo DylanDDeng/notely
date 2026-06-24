@@ -66,6 +66,7 @@ struct WysiwygEditor: NSViewRepresentable {
     let fontSize: CGFloat
     let lineHeight: CGFloat
     let fontName: String
+    let editorWidth: String
     let onTextChange: (String) -> Void
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -93,6 +94,7 @@ struct WysiwygEditor: NSViewRepresentable {
         textView.fontSize = fontSize
         textView.lineHeight = lineHeight
         textView.fontName = fontName
+        textView.editorWidth = editorWidth
         textView.delegate = context.coordinator
         textView.onTextChange = { newText in
             context.coordinator.lastKnownText = newText
@@ -138,8 +140,9 @@ struct WysiwygEditor: NSViewRepresentable {
         // scroller sits flush against the right edge. The readable text column is
         // centered and capped via textContainerInset rather than by shrinking the
         // scroll view (which is what pushed the scroller inward before).
+        textView.editorWidth = editorWidth
         let available = max(nsView.contentSize.width, 1)
-        let sideInset = WysiwygTextView.sideInset(forAvailableWidth: available)
+        let sideInset = textView.sideInset(forAvailableWidth: available)
         let widthChanged = abs(textView.frame.width - available) > 0.5
         let insetChanged = abs(textView.textContainerInset.width - sideInset) > 0.5
         if widthChanged || insetChanged {
@@ -200,17 +203,36 @@ final class WysiwygTextView: NSTextView {
 
     // MARK: - Layout
 
-    /// Maximum readable text column width in points.
-    static let maxColumnWidth: CGFloat = 720
-    /// Minimum horizontal inset on each side of the text column.
-    static let minSideInset: CGFloat = 90
+    /// The user's "Editor Width" preference ("narrow" / "medium" / "wide"),
+    /// driving `maxColumnWidth` so the readable column width is configurable and
+    /// stays stable across sidebar toggles.
+    var editorWidth: String = "medium"
+
+    /// Maximum readable text column width in points, resolved from the
+    /// `editorWidth` preference. Exposed as a static resolver so the split-view
+    /// detail column can enforce a matching minimum width (see `AppShellView`).
+    static func columnWidth(for setting: String) -> CGFloat {
+        switch setting {
+        case "narrow": return 600
+        case "wide": return 860
+        default: return 720
+        }
+    }
+
+    var maxColumnWidth: CGFloat { Self.columnWidth(for: editorWidth) }
+
+    /// Minimum horizontal inset on each side of the text column. Lowered from
+    /// 90 → 40 so the capped column engages at a smaller pane width
+    /// (cap + 2×inset), keeping the text column stable across sidebar toggles
+    /// on more window sizes.
+    static let minSideInset: CGFloat = 40
 
     /// Horizontal text inset that centers a `maxColumnWidth`-capped column in a
     /// text view of the given available width. The scroll view itself spans the
     /// full width (so its scroller hugs the right edge); this inset reproduces
     /// the centered column purely inside the text view.
-    static func sideInset(forAvailableWidth width: CGFloat) -> CGFloat {
-        max(minSideInset, (width - maxColumnWidth) / 2)
+    func sideInset(forAvailableWidth width: CGFloat) -> CGFloat {
+        max(Self.minSideInset, (width - maxColumnWidth) / 2)
     }
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
@@ -283,6 +305,37 @@ final class WysiwygTextView: NSTextView {
         if abs(frame.height - targetHeight) > 0.5 {
             setFrameSize(NSSize(width: frame.width, height: targetHeight))
         }
+    }
+
+    /// Last frame width we applied the column inset for. The `setFrameSize`
+    /// override uses this to recompute the capping inset only when the width
+    /// actually changes — not on every height tick from `fitFrameToContent`,
+    /// which would otherwise loop.
+    private var lastLayoutWidth: CGFloat = -1
+
+    /// Recomputes the centered/capped side inset whenever the text view's width
+    /// changes. `widthTracksTextView = true` auto-tracks the text container's
+    /// width to the text view bounds, but it does NOT recompute the capping
+    /// inset — so without this, collapsing/expanding the sidebar reflows the
+    /// text against a stale inset (the column width changes even though only
+    /// the pane width did). SwiftUI does not call `updateNSView` on a pure pane
+    /// resize, so this override is the only path that fires on sidebar toggle.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        let width = newSize.width
+        guard abs(width - lastLayoutWidth) > 0.5 else { return }
+        lastLayoutWidth = width
+        recomputeColumnInset()
+    }
+
+    private func recomputeColumnInset() {
+        let width = max(bounds.width, 1)
+        let inset = sideInset(forAvailableWidth: width)
+        guard abs(textContainerInset.width - inset) > 0.5 else { return }
+        textContainerInset = NSSize(width: inset, height: textContainerInset.height)
+        // The container auto-tracks to bounds.width - 2*inset; relayout and grow
+        // the frame height to fit the (possibly re-wrapped) content.
+        fitFrameToContent()
     }
 
     /// Character ranges of every Markdown heading line (`#`…`######`), in
