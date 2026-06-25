@@ -14,9 +14,10 @@ struct EditorView: View {
 
     @AppStorage("notely.editorFont") private var editorFontName: String = "System"
     @AppStorage("notely.editorWidth") private var editorWidth: String = "medium"
+    @AppStorage("notely.editorLineHeight") private var editorLineHeight: Double = 1.7
 
     private var fontSize: CGFloat { CGFloat(AppSettings.editorFontSize) }
-    private var lineHeight: CGFloat { CGFloat(AppSettings.editorLineHeight) }
+    private var lineHeight: CGFloat { CGFloat(editorLineHeight) }
     private var fontName: String { editorFontName }
 
     /// Outline derived from the live text. Uses the exact same heading detection
