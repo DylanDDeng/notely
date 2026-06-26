@@ -3,11 +3,9 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) var appModel
     @Environment(FileNoteStore.self) var store
-    @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var libraryExpanded = true
     @State private var tagsExpanded = true
     @State private var tagSearch = ""
-    @State private var toggleHovering = false
 
     private var tagTree: [TagNode] {
         let allTags = store.notes.flatMap { $0.tags }
@@ -37,19 +35,8 @@ struct SidebarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     // ── Library section ──
-                    SidebarSectionHeader(title: "Library", isExpanded: $libraryExpanded) {
-                        Button {
-                            let note = store.createNote()
-                            appModel.selectedNoteId = note?.id
-                            appModel.sidebarSelection = .allNotes
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.secondaryText)
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                        .help("New Note")
+                    SidebarSectionHeader(title: "Library", systemImage: "books.vertical", isExpanded: $libraryExpanded) {
+                        EmptyView()
                     }
                     .padding(.horizontal, 8)
                     .padding(.top, 14)
@@ -70,7 +57,8 @@ struct SidebarView: View {
                                 appModel.sidebarSelection = .untagged
                             }
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.leading, 22)
+                        .padding(.trailing, 8)
                         .padding(.bottom, 10)
                     }
 
@@ -152,38 +140,6 @@ struct SidebarView: View {
             .padding(.vertical, 8)
         }
         .background(Color.sidebarBg)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                sidebarToggleButton
-            }
-            .hideSharedBackgroundIfAvailable()
-        }
-    }
-
-    /// Custom sidebar toggle (replaces the system `.sidebarToggle` removed in
-    /// `AppShellView`). Lives in the sidebar's own toolbar so it sits inside
-    /// the sidebar when expanded; the detail column shows a fallback toggle
-    /// only while the sidebar is collapsed.
-    private var sidebarToggleButton: some View {
-        let sidebarVisible = columnVisibility == .all
-        return Button {
-            withAnimation(.easeInOut(duration: 0.25)) {
-                columnVisibility = sidebarVisible ? .doubleColumn : .all
-            }
-        } label: {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.secondaryText)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(toggleHovering ? Color.cardHover : Color.clear)
-                )
-        }
-        .buttonStyle(.plain)
-        .onHover { toggleHovering = $0 }
-        .help(sidebarVisible ? "Hide Sidebar" : "Show Sidebar")
-        .keyboardShortcut("\\", modifiers: .command)
     }
 }
 

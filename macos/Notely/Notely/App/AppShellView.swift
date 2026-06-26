@@ -5,12 +5,6 @@ struct AppShellView: View {
     @Environment(FileNoteStore.self) var store
     @AppStorage("notely.editorWidth") private var editorWidth: String = "medium"
 
-    /// Owns sidebar visibility so the toggle is driven by an explicit
-    /// `withAnimation` state change instead of the system sidebarToggle's
-    /// internal animation state machine — which briefly flashes a stray ">"
-    /// button in the top-right corner mid-transition (most visible on expand).
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
-
     /// Minimum width for the editor detail column: the capped text column plus
     /// its side insets. Enforced as the detail column's min and folded into the
     /// window min width so the text column never reflows when the sidebar
@@ -23,10 +17,9 @@ struct AppShellView: View {
         if !store.isOpen {
             FolderOpenView()
         } else {
-            NavigationSplitView(columnVisibility: $columnVisibility) {
-                SidebarView(columnVisibility: $columnVisibility)
+            NavigationSplitView {
+                SidebarView()
                     .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 220)
-                    .toolbar(removing: .sidebarToggle)
             } content: {
                 if appModel.showSettings {
                     SettingsTabBar()
